@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { splitTimeRange, weekdayShortDE } from "../../utils/date";
+import { splitTimeRange } from "../../utils/date";
 import { DualRangeTrackSlider } from "../ui/DualRangeTrackSlider";
 import type { CalendarEvent, WeekPlan } from "../../state/types";
 
@@ -44,6 +44,7 @@ function CalendarEventDraggable({
   onDelete,
   onToggleTravel,
   onToggleWarmup,
+  t,
   isEditing = false,
   isActive = false,
 }: {
@@ -59,6 +60,7 @@ function CalendarEventDraggable({
   onDelete: (sessionId: string) => void;
   onToggleTravel: (sessionId: string) => void;
   onToggleWarmup: (sessionId: string) => void;
+  t: (k: string) => string;
   isEditing?: boolean;
   isActive?: boolean;
 }) {
@@ -124,7 +126,7 @@ function CalendarEventDraggable({
             <>
               <button
                 type="button"
-                title={travelMin > 0 ? "Anreise ausblenden" : "Anreise einblenden"}
+                title={travelMin > 0 ? t("calendarHideTravel") : t("calendarShowTravel")}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -137,7 +139,7 @@ function CalendarEventDraggable({
               </button>
               <button
                 type="button"
-                title={warmupMin > 0 ? "Wurm-up ausblenden" : "Wurm-up einblenden"}
+                title={warmupMin > 0 ? t("calendarHideWarmup") : t("calendarShowWarmup")}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -153,7 +155,7 @@ function CalendarEventDraggable({
 
           <button
             type="button"
-            title="Bearbeiten (zum Event im Wochenplan springen)"
+            title={t("calendarEditJump")}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -166,7 +168,7 @@ function CalendarEventDraggable({
           </button>
           <button
             type="button"
-            title="Löschen"
+            title={t("delete")}
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
@@ -190,7 +192,7 @@ function CalendarEventDraggable({
           {...resizeAttributes}
           {...resizeListeners}
           onMouseDown={(e) => e.stopPropagation()}
-          title="Dauer ändern (ziehen)"
+          title={t("calendarResizeDuration")}
           style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 10, cursor: "ns-resize", background: "rgba(255,255,255,.04)", borderTop: "1px solid rgba(255,255,255,.06)" }}
         />
       ) : null}
@@ -206,6 +208,7 @@ function CalendarPreBlockDraggable({
   col,
   colCount,
   minutes,
+  t,
 }: {
   session: Session;
   kind: "TRAVEL" | "WARMUP";
@@ -214,6 +217,7 @@ function CalendarPreBlockDraggable({
   col: number;
   colCount: number;
   minutes: number;
+  t: (k: string) => string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `cal_pre_${session.id}_${kind}`,
@@ -242,8 +246,8 @@ function CalendarPreBlockDraggable({
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} title="Ziehen um Minuten anzupassen">
-      {kind === "TRAVEL" ? "Anreise" : "Wurm-up"} ({minutes}m)
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} title={t("calendarDragAdjustMinutes")}>
+      {kind === "TRAVEL" ? t("calendarTravel") : t("calendarWarmup")} ({minutes}m)
     </div>
   );
 }
@@ -252,7 +256,6 @@ type Props = {
   weekDates: string[];
   weekPlan: WeekPlan;
   roster: any[];
-  lang: string;
   onUpdateWeekPlan: (next: WeekPlan) => void;
   onOpenEventEditor: (eventId: string) => void;
   dnd: {
@@ -303,7 +306,38 @@ export function CalendarPane({
   const [manualDayStart, setManualDayStart] = useState(0);
   const [manualDayEnd, setManualDayEnd] = useState(6);
 
-  const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+  const DAY_NAMES = useMemo(
+    () => [
+      t("weekdayMonday"),
+      t("weekdayTuesday"),
+      t("weekdayWednesday"),
+      t("weekdayThursday"),
+      t("weekdayFriday"),
+      t("weekdaySaturday"),
+      t("weekdaySunday"),
+    ],
+    [t]
+  );
+
+  const DAY_SHORT = useMemo(
+    () => [
+      t("weekdayMonShort"),
+      t("weekdayTueShort"),
+      t("weekdayWedShort"),
+      t("weekdayThuShort"),
+      t("weekdayFriShort"),
+      t("weekdaySatShort"),
+      t("weekdaySunShort"),
+    ],
+    [t]
+  );
+
+  function weekdayShortLocalized(dateISO: string): string {
+    const d = new Date(`${dateISO}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return dateISO;
+    const dayIdxMon0 = (d.getDay() + 6) % 7;
+    return DAY_SHORT[dayIdxMon0] ?? dateISO;
+  }
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Session[]>();
@@ -564,7 +598,7 @@ export function CalendarPane({
       <div />
       {displayDays.map((d) => (
         <div key={d} style={{ border: `1px solid var(--ui-border)`, borderRadius: 12, padding: "8px 8px", background: "var(--ui-panel)", fontWeight: 900, fontSize: 12, textAlign: "center" }}>
-          {weekdayShortDE(d)}<br />
+          {weekdayShortLocalized(d)}<br />
           <span style={{ color: "var(--ui-muted)", fontWeight: 900 }}>{d.slice(8, 10)}.{d.slice(5, 7)}</span>
         </div>
       ))}
@@ -591,7 +625,7 @@ export function CalendarPane({
           {t("autoZoom")}: {windowMode === "auto" ? t("on") : t("off")}
         </button>
 
-        <button type="button" onClick={() => setWindowMode("auto")} style={btnStyle}>Auto</button>
+        <button type="button" onClick={() => setWindowMode("auto")} style={btnStyle}>{t("calendarAuto")}</button>
 
         <button
           type="button"
@@ -602,22 +636,22 @@ export function CalendarPane({
           }}
           style={btnStyle}
         >
-          Voll (06–23)
+          {t("calendarFullRange")}
         </button>
 
         {windowMode === "auto" && (
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" onClick={() => setAutoScope("week")} style={{ ...btnStyle, borderColor: autoScope === "week" ? "var(--ui-accent)" : "var(--ui-border)", background: autoScope === "week" ? "rgba(59,130,246,.18)" : "transparent" }}>
-              Auto: Week
+              {t("calendarAutoWeek")}
             </button>
 
             <button type="button" onClick={() => setAutoScope("day")} style={{ ...btnStyle, borderColor: autoScope === "day" ? "var(--ui-accent)" : "var(--ui-border)", background: autoScope === "day" ? "rgba(59,130,246,.18)" : "transparent" }}>
-              Auto: Day
+              {t("calendarAutoDay")}
             </button>
 
             {autoScope === "day" && (
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12 }}>Tag:</span>
+                <span style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12 }}>{t("day")}:</span>
                 <select value={activeAutoDay} onChange={(e) => setActiveAutoDay(Number(e.target.value))} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--ui-border)", background: "var(--ui-card)", color: "var(--ui-text)", fontWeight: 900, fontSize: 12 }}>
                   {DAY_NAMES.map((n, i) => (
                     <option key={n} value={i}>{n}</option>
@@ -631,7 +665,7 @@ export function CalendarPane({
         {windowMode === "manual" && (
           <div style={{ display: "grid", gap: 12, minWidth: 260 }}>
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 12 }}>Zeit</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 12 }}>{t("time")}</div>
               <DualRangeTrackSlider
                 min={START_MIN}
                 max={END_MIN}
@@ -646,7 +680,7 @@ export function CalendarPane({
               />
             </div>
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 12 }}>Tage</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 12 }}>{t("calendarDays")}</div>
               <DualRangeTrackSlider
                 min={0}
                 max={6}
@@ -791,6 +825,7 @@ export function CalendarPane({
                       col={b.lay.col}
                       colCount={b.lay.colCount}
                       minutes={b.min}
+                      t={t}
                     />
                   );
                 });
@@ -821,6 +856,7 @@ export function CalendarPane({
                     onDelete={onDelete}
                     onToggleTravel={onToggleTravel}
                     onToggleWarmup={onToggleWarmup}
+                    t={t}
                     isEditing={editingSessionId === s.id}
                     isActive={editingSessionId === s.id}
                   />

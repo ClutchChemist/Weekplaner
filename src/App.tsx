@@ -5000,7 +5000,6 @@ const holOnlyPlayers = useMemo(() => {
                       weekPlan={plan}
                       onOpenEventEditor={handleOpenEventEditor}
                       roster={players as any[]}
-                      lang={lang}
                       onUpdateWeekPlan={setPlan}
                       dnd={dnd}
                       onDelete={(id) => onDeleteSession(id)}
