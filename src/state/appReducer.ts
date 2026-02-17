@@ -1,5 +1,5 @@
 // src/state/appReducer.ts
-import { AppState, ThemeState, WeekPlan, Player, Lang } from "./types";
+import type { AppState, ThemeState, WeekPlan, Player, Lang } from "./types";
 
 export type Action =
   | { type: "SET_LANG"; lang: Lang }

@@ -124,13 +124,6 @@ const DEFAULT_THEME: ThemeSettings = {
 
 
 const THEME_STORAGE_KEY = "ubc_planner_theme_v1";
-function stableStringify(obj: unknown) {
-  try {
-    return JSON.stringify(obj, Object.keys(obj as any).sort());
-  } catch {
-    return JSON.stringify(obj);
-  }
-}
 
 function safeParseTheme(raw: string | null): ThemeSettings | null {
   if (!raw) return null;
@@ -1076,40 +1069,6 @@ function LocationsPanel({
   );
 }
 
-function AddCustomLocationRow({ onAdd }: { onAdd: (name: string, addr: string, placeId: string) => void }) {
-  const [name, setName] = React.useState("");
-  const [address, setAddress] = React.useState("");
-  const [placeId, setPlaceId] = React.useState("");
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 8, alignItems: "start" }}>
-      <Input value={name} onChange={setName} placeholder="Ort-Name (z.B. Artland Arena)" />
-      <AddressAutocomplete
-        value={address}
-        placeId={placeId}
-        onChange={(addr, pId) => {
-          setAddress(addr);
-          setPlaceId(pId);
-        }}
-        placeholder="Adresse suchen"
-      />
-      <button
-        type="button"
-        onClick={() => {
-          const n = name.trim();
-          if (!n) return;
-          onAdd(n, address, placeId);
-          setName("");
-          setAddress("");
-          setPlaceId("");
-        }}
-        style={{ ...segBtn(true), padding: "8px 10px", whiteSpace: "nowrap" }}
-      >
-        Hinzufügen
-      </button>
-    </div>
-  );
-}
 
 /* ============================================================
    SETTINGS MODAL (Theme)
@@ -1963,14 +1922,6 @@ function escapeHtml(str: string | null | undefined): string {
 function isGameSession(s: Session): boolean {
   const info = s.info || "";
   return info.includes("vs") || info.includes("@");
-}
-
-function pageBaseCss(): string {
-  return `
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    .page { page-break-after: always; padding: 20mm; box-sizing: border-box; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
-  `;
 }
 
 function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: string }): string {

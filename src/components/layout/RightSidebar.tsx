@@ -1,5 +1,4 @@
-import React from "react";
-import { WeekPlan, Player } from "../../state/types";
+import type { WeekPlan, Player } from "../../state/types";
 
 type Props = {
   open: boolean;
