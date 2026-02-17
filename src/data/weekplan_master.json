@@ -1,0 +1,125 @@
+{
+  "weekId": "DURCHSCHNITT_UBC",
+  "sessions": [
+    {
+      "id": "mo_u18",
+      "day": "Mo",
+      "team": "U18.1",
+      "time": "17:15-18:45",
+      "location": "SHP",
+      "kaderLabel": "Mo-U18",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "di_1rlh_vid",
+      "day": "Di",
+      "team": "1RLH-A",
+      "time": "19:00-20:00",
+      "location": "Seminarraum",
+      "kaderLabel": "Di-1RLH",
+      "info": "Video",
+      "participants": []
+    },
+    {
+      "id": "di_1rlh_bsh",
+      "day": "Di",
+      "team": "1RLH-A",
+      "time": "20:00-22:00",
+      "location": "BSH",
+      "kaderLabel": "Di-1RLH",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "di_hol_shp",
+      "day": "Di",
+      "team": "HOL",
+      "time": "20:15-22:00",
+      "location": "SHP",
+      "kaderLabel": "Di-HOL",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "mi_nbbl_vid",
+      "day": "Mi",
+      "team": "NBBL",
+      "time": "17:00-18:00",
+      "location": "Seminarraum",
+      "kaderLabel": "Mi-NBBL",
+      "info": "Video",
+      "participants": []
+    },
+    {
+      "id": "mi_nbbl_bsh",
+      "day": "Mi",
+      "team": "NBBL",
+      "time": "18:00-20:00",
+      "location": "BSH",
+      "kaderLabel": "Mi-NBBL",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "do_u18_shp",
+      "day": "Do",
+      "team": "U18.1",
+      "time": "18:45-20:15",
+      "location": "SHP",
+      "kaderLabel": "Do-U18",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "do_1rlh_vid",
+      "day": "Do",
+      "team": "1RLH-A",
+      "time": "19:00-20:00",
+      "location": "Seminarraum",
+      "kaderLabel": "Do-1RLH",
+      "info": "Video",
+      "participants": []
+    },
+    {
+      "id": "do_1rlh_bsh",
+      "day": "Do",
+      "team": "1RLH-A",
+      "time": "20:00-22:00",
+      "location": "BSH",
+      "kaderLabel": "Do-1RLH",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "do_hol_shp",
+      "day": "Do",
+      "team": "HOL",
+      "time": "20:15-22:00",
+      "location": "SHP",
+      "kaderLabel": "Do-HOL",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "fr_nbbl_shp",
+      "day": "Fr",
+      "team": "NBBL",
+      "time": "18:30-20:30",
+      "location": "SHP",
+      "kaderLabel": "Fr-NBBL",
+      "info": "",
+      "participants": []
+    },
+    {
+      "id": "fr_1rlh_shp",
+      "day": "Fr",
+      "team": "1RLH-A",
+      "time": "20:00-21:30",
+      "location": "SHP",
+      "kaderLabel": "Fr-1RLH",
+      "info": "",
+      "participants": []
+    }
+  ]
+}

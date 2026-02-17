@@ -1,0 +1,1848 @@
+{
+  "season": "2025/2026",
+  "ageGroups": {
+    "U20": [
+      2006,
+      2007
+    ],
+    "NBBL": [
+      2007,
+      2008,
+      2009
+    ],
+    "U18": [
+      2008,
+      2009
+    ],
+    "U16": [
+      2010,
+      2011
+    ]
+  },
+  "players": [
+    {
+      "id": "p_aleksandar_milenkovic",
+      "name": "Aleksandar Milenkovic",
+      "birthYear": 2001,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "191201046",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2001-12-19"
+    },
+    {
+      "id": "p_andrej_könig",
+      "name": "Andrej König",
+      "birthYear": 1987,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "210987078",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "1987-09-21"
+    },
+    {
+      "id": "p_timm_brinkschulte",
+      "name": "Anton Brinkschulte",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "201109001",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-11-20"
+    },
+    {
+      "id": "p_bela_turmann",
+      "name": "Bela Turmann",
+      "birthYear": 2006,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "180406017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2006-04-18"
+    },
+    {
+      "id": "p_benno_wehmeyer",
+      "name": "Benno Wehmeyer",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "050808039",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-08-05"
+    },
+    {
+      "id": "p_bjarne_hitzler_spital",
+      "name": "Bjarne Hitzler-Spital",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "090408073",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "090408011",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-04-09"
+    },
+    {
+      "id": "p_brandon_schlicker",
+      "name": "Brandon Schlicker",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "250409017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-04-25"
+    },
+    {
+      "id": "p_carl_backhaus",
+      "name": "Carl Backhaus",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "070309053",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "070309011",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-03-07"
+    },
+    {
+      "id": "p_carl_zuther",
+      "name": "Carl Zuther",
+      "birthYear": 2004,
+      "birthDate": "2004-12-07",
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "071204005",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ]
+    },
+    {
+      "id": "p_david_pankratz",
+      "name": "David Pankratz",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "291009044",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-10-29"
+    },
+    {
+      "id": "p_devin_reinhard",
+      "name": "Devin Reinhard",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "090409052",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-04-09"
+    },
+    {
+      "id": "p_emil_evers",
+      "name": "Emil Evers",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "110408059",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-04-11"
+    },
+    {
+      "id": "p_emil_philipzen",
+      "name": "Emil Philipzen",
+      "birthYear": 2004,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "301204050",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2004-12-30"
+    },
+    {
+      "id": "p_emil_schwarz",
+      "name": "Emil Schwarz",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "020208021",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-02-02"
+    },
+    {
+      "id": "p_erik_niggemann",
+      "name": "Erik Niggemann",
+      "birthYear": 2007,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "031107064",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "031107027",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL"
+      ],
+      "birthDate": "2007-11-03"
+    },
+    {
+      "id": "p_erik_parge",
+      "name": "Erik Parge",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "110710014",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-07-11"
+    },
+    {
+      "id": "p_eris_neziri",
+      "name": "Eris Neziri",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "011208066",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-12-01"
+    },
+    {
+      "id": "p_faruk_stepper",
+      "name": "Faruk Stepper",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "230808071",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "230808051",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-08-23"
+    },
+    {
+      "id": "p_felix_almering",
+      "name": "Felix Almering",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "280209070",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "280209020",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-02-28"
+    },
+    {
+      "id": "p_florian_heusingfeld",
+      "name": "Florian Heusingfeld",
+      "birthYear": 2004,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "040104007",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2004-01-04"
+    },
+    {
+      "id": "p_florian_strietholt",
+      "name": "Florian Strietholt",
+      "birthYear": 2000,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "030100024",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2000-01-03"
+    },
+    {
+      "id": "p_fynn_aumann",
+      "name": "Fynn Aumann",
+      "birthYear": 2001,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "301001006",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2001-10-30"
+    },
+    {
+      "id": "p_fynn_marlin_lucas",
+      "name": "Fynn Marlin Lucas",
+      "birthYear": 2003,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "101003009",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2003-10-10"
+    },
+    {
+      "id": "p_georg_wallgren",
+      "name": "Georg Wallgren",
+      "birthYear": 2005,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "100105008",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2005-01-10"
+    },
+    {
+      "id": "p_george_badra",
+      "name": "George Badra",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "060110017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-01-06"
+    },
+    {
+      "id": "p_hans_ruhwinkel",
+      "name": "Hans Ruhwinkel",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "150509031",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-05-15"
+    },
+    {
+      "id": "p_henri_jansen",
+      "name": "Henri Jansen",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "300408051",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-04-30"
+    },
+    {
+      "id": "p_henri_vaihinger",
+      "name": "Henri Vaihinger",
+      "birthYear": 2001,
+      "birthDate": "2001-05-11",
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "110501002",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ]
+    },
+    {
+      "id": "p_henri_wissing",
+      "name": "Henri Wissing",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "260108048",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-01-26"
+    },
+    {
+      "id": "p_henrik_hitzler_spital",
+      "name": "Henrik Hitzler-Spital",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "221209005",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-12-22"
+    },
+    {
+      "id": "p_henrik_stegger",
+      "name": "Henrik Stegger",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "280410029",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-04-28"
+    },
+    {
+      "id": "p_jacob_hanro_tiada",
+      "name": "Jacob Hanro Tiada",
+      "birthYear": 2006,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "270406052",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2006-04-27"
+    },
+    {
+      "id": "p_jahan_alkozai",
+      "name": "Jahan Alkozai",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "040909102",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-09-04"
+    },
+    {
+      "id": "p_anton_domagk",
+      "name": "Jan Philipp Domagk",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "120209023",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-02-12"
+    },
+    {
+      "id": "p_jan_pilz",
+      "name": "Jan Pilz",
+      "birthYear": 2003,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "161003017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2003-10-16"
+    },
+    {
+      "id": "p_jan_ole_witt",
+      "name": "Jan-Ole Witt",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "190908079",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "190908025",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-09-19"
+    },
+    {
+      "id": "p_jannis_ridder",
+      "name": "Jannis Ridder",
+      "birthYear": 2005,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "270705016",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2005-07-27"
+    },
+    {
+      "id": "p_jasper_hayen",
+      "name": "Jasper Hayen",
+      "birthYear": 2006,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "121006036",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH",
+        "HOL"
+      ],
+      "birthDate": "2006-10-12"
+    },
+    {
+      "id": "p_johann_schulze_blasum",
+      "name": "Johann Schulze Blasum",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "220410024",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-04-22"
+    },
+    {
+      "id": "p_jonas_neirich",
+      "name": "Jonas Neirich",
+      "birthYear": 2002,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "140302046",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2002-03-14"
+    },
+    {
+      "id": "p_julius_kremer",
+      "name": "Julius Kremer",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "100810038",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-08-10"
+    },
+    {
+      "id": "p_justus_reuter",
+      "name": "Justus Reuter",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "010208096",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "010208028",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-02-01"
+    },
+    {
+      "id": "p_konrad_langenbach",
+      "name": "Konrad Langenbach",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "040109071",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "040109017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-01-04"
+    },
+    {
+      "id": "p_lav_mijatovic",
+      "name": "Lav Mijatovic",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "150108055",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-01-15"
+    },
+    {
+      "id": "p_leo_ivankovic",
+      "name": "Leo Ivankovic",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "020708099",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "020708007",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-07-02"
+    },
+    {
+      "id": "p_leo_kirchhoff",
+      "name": "Leo Kirchhoff",
+      "birthYear": 2007,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "020907054",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "020907018",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL"
+      ],
+      "birthDate": "2007-09-02"
+    },
+    {
+      "id": "p_leo_padberg",
+      "name": "Leo Padberg",
+      "birthYear": 1991,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "260591045",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1991-05-26"
+    },
+    {
+      "id": "p_leonard_dertmann",
+      "name": "Leonard Dertmann",
+      "birthYear": 2007,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "170407074",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "170407054",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL"
+      ],
+      "birthDate": "2007-04-17"
+    },
+    {
+      "id": "p_liam_vigo_glusa",
+      "name": "Liam Vigo Glusa",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "090709089",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "090709020",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-07-09"
+    },
+    {
+      "id": "p_lucas_nielsen",
+      "name": "Lucas Nielsen",
+      "birthYear": 2000,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "090400042",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2000-04-09"
+    },
+    {
+      "id": "p_luis_kopp",
+      "name": "Luis Kopp",
+      "birthYear": 2004,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "200304006",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2004-03-20"
+    },
+    {
+      "id": "p_lukas_boronczyk",
+      "name": "Lukas Boronczyk",
+      "birthYear": 1998,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "290998061",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1998-09-29"
+    },
+    {
+      "id": "p_lukas_buckermann",
+      "name": "Lukas Buckermann",
+      "birthYear": 1995,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "030195004",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1995-01-03"
+    },
+    {
+      "id": "p_lukas_freitag",
+      "name": "Lukas Freitag",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "240609074",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "240609002",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-06-24"
+    },
+    {
+      "id": "p_lukas_henry_ehrich",
+      "name": "Lukas Henry Ehrich",
+      "birthYear": 2004,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "311004020",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2004-10-31"
+    },
+    {
+      "id": "p_lukas_humborg",
+      "name": "Lukas Humborg",
+      "birthYear": 2001,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "220901043",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2001-09-22"
+    },
+    {
+      "id": "p_lukas_yavari",
+      "name": "Lukas Yavari",
+      "birthYear": 1991,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "281291048",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1991-12-28"
+    },
+    {
+      "id": "p_maksym_smyrnov",
+      "name": "Maksym Smyrnov",
+      "birthYear": 2007,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "180407070",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL"
+      ]
+    },
+    {
+      "id": "p_marc_steltenkötter",
+      "name": "Marc Steltenkötter",
+      "birthYear": 1987,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "281187053",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1987-11-28"
+    },
+    {
+      "id": "p_mason_wirth_lefler",
+      "name": "Mason Wirth-Lefler",
+      "birthYear": 2000,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "190600070",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2000-06-19"
+    },
+    {
+      "id": "p_matei_bodea",
+      "name": "Matei Bodea",
+      "birthYear": 2002,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "030402062",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2002-04-03"
+    },
+    {
+      "id": "p_mats_niggemann",
+      "name": "Mats Niggemann",
+      "birthYear": 2005,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "241105032",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2005-11-24"
+    },
+    {
+      "id": "p_matteo_went",
+      "name": "Matteo Went",
+      "birthYear": 2003,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "110603031",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2003-06-11"
+    },
+    {
+      "id": "p_max_sonntag",
+      "name": "Max Sonntag",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "110208063",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL"
+      ]
+    },
+    {
+      "id": "p_maximilian_schröder",
+      "name": "Maximilian Schröder",
+      "birthYear": 2002,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "160802021",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2002-08-16"
+    },
+    {
+      "id": "p_mika_rose_borsum",
+      "name": "Mika Rose-Borsum",
+      "birthYear": 2004,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "010804008",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2004-08-01"
+    },
+    {
+      "id": "p_mika_zedler",
+      "name": "Mika Zedler",
+      "birthYear": 2007,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "011107008",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2007-11-01"
+    },
+    {
+      "id": "p_mirko_pigac",
+      "name": "Mirko Pigac",
+      "birthYear": 1989,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "140889069",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1989-08-14"
+    },
+    {
+      "id": "p_nabil_osso",
+      "name": "Nabil Osso",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "100309020",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-03-10"
+    },
+    {
+      "id": "p_niki_rose",
+      "name": "Niki Rose",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "061108025",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-11-06"
+    },
+    {
+      "id": "p_niklas_keilinghaus",
+      "name": "Niklas Keilinghaus",
+      "birthYear": 1996,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "270896043",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1996-08-27"
+    },
+    {
+      "id": "p_niklas_paul",
+      "name": "Niklas Paul",
+      "birthYear": 2006,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "010306062",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2006-03-01"
+    },
+    {
+      "id": "p_ole_schomaker",
+      "name": "Ole Schomaker",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "230409041",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-04-23"
+    },
+    {
+      "id": "p_ole_schwering",
+      "name": "Ole Schwering",
+      "birthYear": 2007,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "230907008",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2007-09-23"
+    },
+    {
+      "id": "p_onno_kloster",
+      "name": "Onno Kloster",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "240508024",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-05-24"
+    },
+    {
+      "id": "p_onno_stein",
+      "name": "Onno Stein",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "100610014",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-06-10"
+    },
+    {
+      "id": "p_jan_philipp_dobrosielski",
+      "name": "Pascal Dobrosielski",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "150108051",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-01-15"
+    },
+    {
+      "id": "p_paul_böttcher",
+      "name": "Paul Böttcher",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "120310017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-03-12"
+    },
+    {
+      "id": "p_paul_diedenhofen",
+      "name": "Paul Diedenhofen",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "071208012",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2008-12-07"
+    },
+    {
+      "id": "p_paul_lammerich",
+      "name": "Paul Lammerich",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "220808084",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "220808015",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "U18"
+      ],
+      "birthDate": "2008-08-22"
+    },
+    {
+      "id": "p_paul_leusmann",
+      "name": "Paul Leusmann",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "130110030",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-01-13"
+    },
+    {
+      "id": "p_paul_dietrich_stüve",
+      "name": "Paul-Dietrich Stüve",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "030809024",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2009-08-03"
+    },
+    {
+      "id": "p_peer_barth",
+      "name": "Peer Barth",
+      "birthYear": 2007,
+      "birthDate": "2007-07-20",
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "200707036",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ]
+    },
+    {
+      "id": "p_phil_schmidt",
+      "name": "Phil Schmidt",
+      "birthYear": 2003,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "210703017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2003-07-21"
+    },
+    {
+      "id": "p_piet_schwering",
+      "name": "Piet Schwering",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "120610017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-06-12"
+    },
+    {
+      "id": "p_rafael_sierra",
+      "name": "Rafael Sierra",
+      "birthYear": 1998,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "220698015",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1998-06-22"
+    },
+    {
+      "id": "p_raphael_schubert",
+      "name": "Raphael Schubert",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "200409017",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-04-20"
+    },
+    {
+      "id": "p_ruben_thies",
+      "name": "Ruben Thies",
+      "birthYear": 2000,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "261000016",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2000-10-26"
+    },
+    {
+      "id": "p_rune_reuter",
+      "name": "Rune Reuter",
+      "birthYear": 2008,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "070908082",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "070908008",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-09-07"
+    },
+    {
+      "id": "p_silas_wortmann",
+      "name": "Silas Wortmann",
+      "birthYear": 1999,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "120199068",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "1999-01-12"
+    },
+    {
+      "id": "p_simon_guht",
+      "name": "Simon Guht",
+      "birthYear": 2006,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "010806025",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2006-08-01"
+    },
+    {
+      "id": "p_simon_ritter",
+      "name": "Simon Ritter",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "NBBL",
+          "tna": "130908064",
+          "verein": "UBC Münster"
+        },
+        {
+          "typ": "DBB",
+          "tna": "130908004",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "NBBL",
+        "1RLH",
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-09-13"
+    },
+    {
+      "id": "p_theo_tegeder",
+      "name": "Theo Tegeder",
+      "birthYear": 2010,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "230410034",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2010-04-23"
+    },
+    {
+      "id": "p_thorben_döding",
+      "name": "Thorben Döding",
+      "birthYear": 1999,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "070399011",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "1999-03-07"
+    },
+    {
+      "id": "p_thore_dilschmann",
+      "name": "Thore Dilschmann",
+      "birthYear": 2006,
+      "isLocalPlayer": true,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "250806016",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "1RLH"
+      ],
+      "birthDate": "2006-08-25"
+    },
+    {
+      "id": "p_tiago_barez",
+      "name": "Tiago Barez",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "080208030",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL",
+        "U18"
+      ],
+      "birthDate": "2008-02-08"
+    },
+    {
+      "id": "p_pascal_broscheit",
+      "name": "Timm Broscheit",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "030108034",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-01-03"
+    },
+    {
+      "id": "p_tom_kaulfuß",
+      "name": "Tom Kaulfuß",
+      "birthYear": 2009,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "200809018",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2009-08-20"
+    },
+    {
+      "id": "p_tristan_toppmöller",
+      "name": "Tristan Toppmöller",
+      "birthYear": 2008,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "240508028",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "U18"
+      ],
+      "birthDate": "2008-05-24"
+    },
+    {
+      "id": "p_tyler_shiflet",
+      "name": "Tyler Shiflet",
+      "birthYear": 2003,
+      "isLocalPlayer": false,
+      "lizenzen": [
+        {
+          "typ": "DBB",
+          "tna": "140803076",
+          "verein": "UBC Münster"
+        }
+      ],
+      "defaultTeams": [
+        "HOL"
+      ],
+      "birthDate": "2003-08-14"
+    }
+  ]
+}

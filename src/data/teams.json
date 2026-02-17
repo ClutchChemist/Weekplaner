@@ -1,0 +1,20 @@
+{
+  "teams": [
+    {
+      "id": "t_1rlh_a",
+      "name": "1RLH-A"
+    },
+    {
+      "id": "t_hol",
+      "name": "HOL"
+    },
+    {
+      "id": "t_nbbl",
+      "name": "NBBL"
+    },
+    {
+      "id": "t_u18_1",
+      "name": "U18.1"
+    }
+  ]
+}
