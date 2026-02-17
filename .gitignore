@@ -26,6 +26,7 @@ dist-ssr
 # Project local artifacts
 BackUp/
 *.zip
+src/export-test/*.png
 
 # Local environment secrets
 .env
