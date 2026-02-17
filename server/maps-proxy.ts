@@ -17,6 +17,11 @@ async function gFetch(url: string, init?: RequestInit) {
   return res.json();
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 /** Places Autocomplete (New) -> predictions */
 app.post("/api/places/autocomplete", async (req, res) => {
   try {
@@ -39,9 +44,10 @@ app.post("/api/places/autocomplete", async (req, res) => {
     });
 
     res.json(data);
-  } catch (err: any) {
-    console.error("Autocomplete error:", err.message);
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
+    console.error("Autocomplete error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -59,9 +65,10 @@ app.post("/api/places/details", async (req, res) => {
       },
     });
     res.json(data);
-  } catch (err: any) {
-    console.error("Place details error:", err.message);
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
+    console.error("Place details error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -75,7 +82,13 @@ app.post("/api/routes/compute", async (req, res) => {
     };
 
     const url = "https://routes.googleapis.com/directions/v2:computeRoutes";
-    const body: any = {
+    const body: {
+      origin: { address: string };
+      destination: { address: string };
+      travelMode: "DRIVE";
+      routingPreference: "TRAFFIC_AWARE";
+      departureTime?: string;
+    } = {
       origin: { address: originAddress },
       destination: { address: destinationAddress },
       travelMode: "DRIVE",
@@ -100,9 +113,10 @@ app.post("/api/routes/compute", async (req, res) => {
     const minutes = seconds != null ? Math.max(0, Math.round(seconds / 60)) : null;
 
     res.json({ minutes, raw: data });
-  } catch (err: any) {
-    console.error("Routes compute error:", err.message);
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
+    console.error("Routes compute error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 

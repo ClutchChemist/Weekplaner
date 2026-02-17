@@ -7,21 +7,22 @@ type Props = {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
+  t: (key: string) => string;
 };
 
-export function ConfirmModal({ open, title, message, onConfirm, onCancel }: Props) {
+export function ConfirmModal({ open, title, message, onConfirm, onCancel, t }: Props) {
   if (!open) return null;
 
   return (
-    <Modal title={title} onClose={onCancel}>
+    <Modal title={title} onClose={onCancel} closeLabel={t("close")}>
       <div style={{ display: "grid", gap: 14 }}>
         <div style={{ color: "var(--ui-text)", fontWeight: 800, lineHeight: 1.4 }}>{message}</div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <Button variant="outline" onClick={onCancel}>
-            Abbrechen
+            {t("cancel")}
           </Button>
           <Button variant="danger" onClick={onConfirm}>
-            Bestätigen
+            {t("confirm")}
           </Button>
         </div>
       </div>

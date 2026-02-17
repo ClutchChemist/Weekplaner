@@ -21,26 +21,55 @@ import type {
   CalendarEvent as Session,
   Coach,
   GroupId,
-  Lizenz,
   Player,
   Position,
-  SeniorTeam,
-  ThemeLocations,
   ThemeSettings,
-  UiTheme,
   WeekPlan,
-  YouthTeam,
 } from "./state/types";
-import { I18N } from "./i18n/dict";
+import { makeT, makeTF } from "./i18n/translate";
 import { Button } from "./components/ui/Button";
 import { Input } from "./components/ui/Input";
 import { Select } from "./components/ui/Select";
 import { Modal } from "./components/ui/Modal";
-import { segBtn } from "./components/ui/Toggle";
+import { segBtn } from "./components/ui/segBtn";
 import { CalendarPane } from "./components/layout/CalendarPane";
 import { ConfirmModal, EventEditorModal, NewWeekModal, ThemeSettingsModal } from "./components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
 import { useDndPlan } from "./hooks/useDndPlan";
+import { useConfirmDialog } from "./hooks/useConfirmDialog";
+import { useRightSidebarPersistence } from "./hooks/useRightSidebarPersistence";
+import { usePersistedState } from "./hooks/usePersistedState";
+import { useAppUiState } from "./state/useAppUiState";
+import { reviveWeekPlan } from "./state/planReviver";
+import {
+  computeHistoryFlagsBySession,
+  computeTrainingCounts,
+  isBirthdayOnAnyPlanDate,
+  planDateSet,
+} from "./state/planDerived";
+import { normalizeMasterWeek, normalizeRoster } from "./state/normalizers";
+import {
+  birthYearOf,
+  getPlayerGroup,
+  GROUPS,
+  isCorePlayer,
+  isHolOnly,
+  isU18Only,
+  makeParticipantSorter,
+  PRINT_GROUP_ORDER,
+} from "./state/playerGrouping";
+import {
+  dbbDobMatchesBirthDate,
+  enrichPlayersWithBirthFromDBBTA,
+  hasAnyTna,
+  primaryTna,
+} from "./state/playerMeta";
+import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
+import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
+import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
+import { DEFAULT_THEME } from "./state/themeDefaults";
+import { applyThemeToCssVars } from "./themes/cssVars";
+import { debounce } from "./utils/async";
 import {
   addDaysISO,
   addMinutesToHHMM,
@@ -51,11 +80,30 @@ import {
   normalizeDash,
   splitTimeRange,
   weekdayOffsetFromDEShort,
+  weekdayShortLocalized,
   weekdayShortDE,
 } from "./utils/date";
+import {
+  computeConflictsBySession,
+  isGameInfo,
+  isGameSession,
+  normalizeOpponentInfo,
+  sessionsOverlap,
+} from "./utils/session";
+import {
+  ensureLocationSaved,
+  getCachedTravelMinutes,
+  getLocationOptions,
+  resolveLocationAddress,
+  resolveLocationPlaceId,
+  setCachedTravelMinutes,
+  splitAddressLines,
+} from "./utils/locations";
+import { fetchPlaceDetails, fetchPlacePredictions, fetchTravelMinutes, generateSessionToken } from "./utils/mapsApi";
+import { buildPreviewPages, buildPrintPages, type PrintPage } from "./utils/printExport";
 import { normalizeYearColor, pickTextColor } from "./utils/color";
 import { downloadJson } from "./utils/json";
-import { randomId, uid } from "./utils/id";
+import { randomId } from "./utils/id";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
 
@@ -64,229 +112,8 @@ import weekMasterRaw from "./data/weekplan_master.json";
    ============================================================ */
 
 /* ============================================================
-   I18N
-   ============================================================ */
-
-function makeT(locale: Lang) {
-  return (key: string) => I18N[locale]?.[key] ?? key;
-}
-
-function makeTF(locale: Lang) {
-  return (key: string, vars: Record<string, string | number> = {}) => {
-    const tpl = I18N[locale]?.[key] ?? key;
-    return tpl.replace(/{(\w+)}/g, (_, k) => String(vars[k] ?? `{${k}}}`));
-  };
-}
-
-/* ============================================================
    CONSTANTS / PRESETS
    ============================================================ */
-
-const DEFAULT_GROUP_COLORS: Record<GroupId, { bg: string }> = {
-  "2007": { bg: "#4b5563" },
-  "2008": { bg: "#6b7280" },
-  "2009": { bg: "#9ca3af" },
-  Herren: { bg: "#ffffff" },
-  TBD: { bg: "#4b5563" },
-};
-
-const DEFAULT_THEME: ThemeSettings = {
-  ui: {
-    bg: "#0d0d0d",
-    panel: "#171717",
-    card: "#212121",
-    border: "#303030",
-    text: "#ececec",
-    muted: "#b4b4b4",
-    soft: "#676767",
-    black: "#000000",
-    white: "#ffffff",
-    primary: "#3d3d3d",
-    primaryText: "#ffffff",
-  },
-  // Gruppen bleiben wie gehabt
-  groups: DEFAULT_GROUP_COLORS,
-  locations: {
-    home: "",
-    bsh: "",
-    shp: "",
-    seminarraum: "",
-    custom: {},
-    definitions: {
-      BSH: { abbr: "BSH", name: "BSH" },
-      SHP: { abbr: "SHP", name: "SHP" },
-      Seminarraum: { abbr: "Seminarraum", name: "Seminarraum" },
-    },
-  },
-  clubName: "UBC Münster",
-  locale: "de",
-};
-
-
-const THEME_STORAGE_KEY = "ubc_planner_theme_v1";
-
-function safeParseTheme(raw: string | null): ThemeSettings | null {
-  if (!raw) return null;
-  try {
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj !== "object") return null;
-
-    const ui = obj.ui;
-    const groups = obj.groups;
-
-    const needUiKeys: Array<keyof UiTheme> = [
-      "bg",
-      "panel",
-      "card",
-      "border",
-      "text",
-      "muted",
-      "soft",
-      "black",
-      "white",
-    ];
-
-    if (!ui || typeof ui !== "object") return null;
-    for (const k of needUiKeys) {
-      if (typeof ui[k] !== "string" || !ui[k]) return null;
-    }
-
-    const gids: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
-    if (!groups || typeof groups !== "object") return null;
-    for (const gid of gids) {
-      if (!groups[gid] || typeof groups[gid].bg !== "string" || !groups[gid].bg)
-        return null;
-    }
-
-    return {
-      ui: {
-        bg: ui.bg,
-        panel: ui.panel,
-        card: ui.card,
-        border: ui.border,
-        text: ui.text,
-        muted: ui.muted,
-        soft: ui.soft,
-        black: ui.black,
-        white: ui.white,
-        primary: typeof ui.primary === "string" && ui.primary ? ui.primary : undefined,
-        primaryText:
-          typeof ui.primaryText === "string" && ui.primaryText ? ui.primaryText : undefined,
-      },
-      groups: {
-        "2007": { bg: groups["2007"].bg },
-        "2008": { bg: groups["2008"].bg },
-        "2009": { bg: groups["2009"].bg },
-        Herren: { bg: groups["Herren"].bg },
-        TBD: { bg: groups["TBD"].bg },
-      },
-      clubName: typeof obj.clubName === "string" ? obj.clubName : DEFAULT_THEME.clubName,
-      locale: (obj.locale === "de" || obj.locale === "en") ? obj.locale : DEFAULT_THEME.locale,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function migrateLegacyBlueTheme(theme: ThemeSettings): ThemeSettings {
-  const legacyMap: Record<string, string> = {
-    "#0b0f19": "#0d0d0d",
-    "#111827": "#171717",
-    "#0f172a": "#212121",
-    "#243041": "#303030",
-    "#e5e7eb": "#ececec",
-    "#9ca3af": "#b4b4b4",
-    "#cbd5e1": "#676767",
-    "#111111": "#000000",
-    "#e7e7e7": "#3d3d3d",
-    "#0f0f10": "#ffffff",
-    "#2563eb": "#4b5563",
-    "#f59e0b": "#6b7280",
-    "#16a34a": "#9ca3af",
-  };
-
-  const hasLegacyBlueBase =
-    [theme.ui.bg, theme.ui.panel, theme.ui.card].map((x) => x.toLowerCase()).some((x) =>
-      ["#0b0f19", "#111827", "#0f172a"].includes(x)
-    );
-
-  const mapColor = (hex: string) => legacyMap[hex.toLowerCase()] ?? hex;
-
-  const migratedUi: UiTheme = {
-    ...theme.ui,
-    bg: mapColor(theme.ui.bg),
-    panel: mapColor(theme.ui.panel),
-    card: mapColor(theme.ui.card),
-    border: mapColor(theme.ui.border),
-    text: mapColor(theme.ui.text),
-    muted: mapColor(theme.ui.muted),
-    soft: mapColor(theme.ui.soft),
-    black: mapColor(theme.ui.black),
-    white: mapColor(theme.ui.white),
-    primary: mapColor(theme.ui.primary ?? DEFAULT_THEME.ui.primary ?? "#3d3d3d"),
-    primaryText: mapColor(theme.ui.primaryText ?? DEFAULT_THEME.ui.primaryText ?? "#ffffff"),
-  };
-
-  if (!hasLegacyBlueBase) {
-    return { ...theme, ui: migratedUi };
-  }
-
-  return {
-    ui: migratedUi,
-    groups: {
-      "2007": { bg: mapColor(theme.groups["2007"].bg) },
-      "2008": { bg: mapColor(theme.groups["2008"].bg) },
-      "2009": { bg: mapColor(theme.groups["2009"].bg) },
-      Herren: { bg: mapColor(theme.groups["Herren"].bg) },
-      TBD: { bg: mapColor(theme.groups["TBD"].bg) },
-    },
-    clubName: theme.clubName ?? DEFAULT_THEME.clubName,
-    locale: theme.locale ?? DEFAULT_THEME.locale,
-  };
-}
-
-function applyThemeToCssVars(theme: ThemeSettings) {
-  const r = document.documentElement;
-  r.style.setProperty("--ui-bg", theme.ui.bg);
-  r.style.setProperty("--ui-panel", theme.ui.panel);
-  r.style.setProperty("--ui-card", theme.ui.card);
-  r.style.setProperty("--ui-border", theme.ui.border);
-  r.style.setProperty("--ui-text", theme.ui.text);
-  r.style.setProperty("--ui-muted", theme.ui.muted);
-  r.style.setProperty("--ui-soft", theme.ui.soft);
-  r.style.setProperty("--ui-black", theme.ui.black);
-  r.style.setProperty("--ui-white", theme.ui.white);
-
-  /* Auch die neuen Standard-Variablen setzen */
-  r.style.setProperty("--bg", theme.ui.bg);
-  r.style.setProperty("--panel", theme.ui.panel);
-  r.style.setProperty("--panel2", theme.ui.card);
-  r.style.setProperty("--border", theme.ui.border);
-  r.style.setProperty("--text", theme.ui.text);
-  r.style.setProperty("--muted", theme.ui.muted);
-  // primary accent
-  if (theme.ui.primary) r.style.setProperty("--primary", theme.ui.primary);
-  if (theme.ui.primaryText) r.style.setProperty("--primaryText", theme.ui.primaryText);
-}
-
-/* ============================================================
-   GROUPS
-   ============================================================ */
-
-const GROUPS: Array<{
-  id: GroupId;
-  label: string;
-  order: number;
-}> = [
-  { id: "2007", label: "2007", order: 0 },
-  { id: "2008", label: "2008", order: 1 },
-  { id: "2009", label: "2009", order: 2 },
-  { id: "Herren", label: "Herren", order: 3 },
-  { id: "TBD", label: "TBD", order: 4 },
-];
-
-const GROUP_ORDER = new Map<GroupId, number>(GROUPS.map((g) => [g.id, g.order]));
-const PRINT_GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
 
 /* ============================================================
   UTILS (date/color/json/...)
@@ -295,21 +122,6 @@ const PRINT_GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
 /* ============================================================
    HELPERS (colors / contrast)
    ============================================================ */
-
-function normalizeOpponentInfo(raw: string) {
-  const s = (raw ?? "").trim();
-  if (!s) return "";
-  const lower = s.toLowerCase();
-  if (lower.startsWith("@")) {
-    const rest = s.slice(1).trim();
-    return rest ? `@ ${rest}` : "@";
-  }
-  if (lower.startsWith("vs")) {
-    const rest = s.slice(2).trim();
-    return rest ? `vs ${rest}` : "vs";
-  }
-  return s;
-}
 
 /* ============================================================
    ISO WEEK
@@ -323,186 +135,6 @@ function normalizeOpponentInfo(raw: string) {
    ROSTER helpers (TA badge + grouping)
    ============================================================ */
 
-function safeNameSplit(full: string): { firstName: string; lastName: string } {
-  const parts = String(full ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return { firstName: parts[0] ?? "", lastName: "" };
-  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
-}
-
-function primaryTna(p: Player): string {
-  const liz = p.lizenzen ?? [];
-  const dbb = liz.find((x) => String(x.typ).toUpperCase() === "DBB")?.tna;
-  const nbbl = liz.find((x) => String(x.typ).toUpperCase() === "NBBL")?.tna;
-  return dbb || nbbl || "";
-}
-
-function hasAnyTna(p: Player): boolean {
-  return (p.lizenzen ?? []).some((l) => String(l.tna ?? "").trim().length > 0);
-}
-/* ============================================================
-   DBB-TA Parsing: DDMMYY Geburtsdatum-Validierung
-   ============================================================ */
-
-function toISODate(y: number, m: number, d: number): string | null {
-  // Validierung via Date-Objekt
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (
-    dt.getUTCFullYear() !== y ||
-    dt.getUTCMonth() !== m - 1 ||
-    dt.getUTCDate() !== d
-  ) return null;
-
-  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; // garantiert YYYY-MM-DD
-}
-
-/**
- * Erwartet DBB-TA/TNA als String, mind. 6 Zeichen.
- * Format: DDMMYYxxxx...
- * Pivot-Year: 00–29 => 2000–2029, sonst 1900–1999
- */
-function birthDateFromDBBTA(taRaw?: string | null): string | null {
-  if (!taRaw) return null;
-
-  const ta = String(taRaw).trim();
-  if (!/^\d{6,}$/.test(ta)) return null;
-
-  const dd = Number(ta.slice(0, 2));
-  const mm = Number(ta.slice(2, 4));
-  const yy = Number(ta.slice(4, 6));
-
-  const yyyy = yy <= 29 ? 2000 + yy : 1900 + yy;
-  return toISODate(yyyy, mm, dd);
-}
-
-function getDbbTna(p: Player): string {
-  const liz = p.lizenzen ?? [];
-  const dbb = liz.find((x) => String(x.typ).toUpperCase() === "DBB")?.tna ?? "";
-  return String(dbb).trim();
-}
-
-function parseDbbDobFromTna(tna: string): { dd: number; mm: number; yy: number } | null {
-  const s = String(tna ?? "").trim();
-  // DBB TA: DDMMYYXXX (mind. 6 Ziffern am Anfang)
-  const m = s.match(/^(\d{2})(\d{2})(\d{2})/);
-  if (!m) return null;
-  const dd = parseInt(m[1], 10);
-  const mm = parseInt(m[2], 10);
-  const yy = parseInt(m[3], 10);
-  if (!(dd >= 1 && dd <= 31)) return null;
-  if (!(mm >= 1 && mm <= 12)) return null;
-  return { dd, mm, yy };
-}
-
-function birthDateParts(p: Player): { dd: number; mm: number; yy: number } | null {
-  const bd = String(p.birthDate ?? "").trim(); // YYYY-MM-DD
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(bd)) return null;
-  const yyyy = parseInt(bd.slice(0, 4), 10);
-  const mm = parseInt(bd.slice(5, 7), 10);
-  const dd = parseInt(bd.slice(8, 10), 10);
-  if (!Number.isFinite(yyyy) || !Number.isFinite(mm) || !Number.isFinite(dd)) return null;
-  return { dd, mm, yy: yyyy % 100 };
-}
-
-function dbbDobMatchesBirthDate(p: Player): { ok: boolean; reason?: string } {
-  const tna = getDbbTna(p);
-  if (!tna) return { ok: true }; // kein DBB -> nichts prüfen
-
-  const taDob = parseDbbDobFromTna(tna);
-  if (!taDob) return { ok: false, reason: "DBB-TA Format unklar (erwartet DDMMYY...)" };
-
-  const bd = birthDateParts(p);
-  if (!bd) return { ok: false, reason: "Geburtsdatum fehlt/ungültig (YYYY-MM-DD)" };
-
-  const ok = taDob.dd === bd.dd && taDob.mm === bd.mm && taDob.yy === bd.yy;
-  if (ok) return { ok: true };
-
-  return {
-    ok: false,
-    reason: `Mismatch: TA startet ${String(taDob.dd).padStart(2,"0")}.${String(taDob.mm).padStart(2,"0")}.${String(taDob.yy).padStart(2,"0")} vs birthDate ${String(bd.dd).padStart(2,"0")}.${String(bd.mm).padStart(2,"0")}.${String(bd.yy).padStart(2,"0")}`,
-  };
-}
-
-function birthYearOf(p: Player): number | null {
-  if (p.birthDate && p.birthDate.length >= 4) {
-    const y = parseInt(p.birthDate.slice(0, 4), 10);
-    if (Number.isFinite(y)) return y;
-  }
-  if (typeof p.birthYear === "number" && Number.isFinite(p.birthYear)) return p.birthYear;
-  return null;
-}
-
-function getPlayerGroup(p: Player): GroupId {
-  if (p.id === "TBD" || (p.name ?? "").toLowerCase() === "tbd") return "TBD";
-
-  const teams = (p.defaultTeams ?? []).map((x) => String(x).toUpperCase());
-  const y = birthYearOf(p);
-
-  // 1) Jahrgang IMMER zuerst, wenn 2007/08/09 bekannt (überschreibt auch p.group)
-  if (y === 2007) return "2007";
-  if (y === 2008) return "2008";
-  if (y === 2009) return "2009";
-
-  // 2) Wenn kein Jahrgang greift, dann explizite group respektieren
-  if (p.group) return p.group;
-
-  // 3) Herren nur, wenn klar Senior-Core (oder HOL-only / 1RLH)
-  if (teams.includes("1RLH") || teams.includes("HOL")) return "Herren";
-
-  return "TBD";
-}
-
-
-function teamSet(p: Player) {
-  return new Set((p.defaultTeams ?? []).map((x) => String(x).toUpperCase()));
-}
-
-function isCorePlayer(p: Player): boolean {
-  if (p.id === "TBD") return true;
-  const t = teamSet(p);
-  return t.has("NBBL") || t.has("1RLH");
-}
-
-function isU18Only(p: Player): boolean {
-  if (p.id === "TBD") return false;
-  const t = teamSet(p);
-  return t.has("U18") && !t.has("NBBL") && !t.has("1RLH") && !t.has("HOL");
-}
-
-function isHolOnly(p: Player): boolean {
-  if (p.id === "TBD") return false;
-  const t = teamSet(p);
-  return t.has("HOL") && !t.has("NBBL") && !t.has("1RLH");
-}
-
-
-function makeParticipantSorter(playerById: Map<string, Player>) {
-  return (aId: string, bId: string) => {
-    const a = playerById.get(aId);
-    const b = playerById.get(bId);
-
-    const ga = a ? getPlayerGroup(a) : "2009";
-    const gb = b ? getPlayerGroup(b) : "2009";
-
-    const oa = GROUP_ORDER.get(ga) ?? 999;
-    const ob = GROUP_ORDER.get(gb) ?? 999;
-    if (oa !== ob) return oa - ob;
-
-    const aName = ((a?.name ?? aId) || "").toLowerCase();
-    const bName = ((b?.name ?? bId) || "").toLowerCase();
-    return aName.localeCompare(bName, "de");
-  };
-}
-
-function computeTrainingCounts(plan: WeekPlan) {
-  const m = new Map<string, number>();
-  for (const s of plan.sessions) {
-    for (const pid of s.participants ?? []) {
-      m.set(pid, (m.get(pid) ?? 0) + 1);
-    }
-  }
-  return m;
-}
-
   /* ============================================================
     COMPONENTS (Modal..., Button..., Row..., Pane...)
     ============================================================ */
@@ -510,6 +142,69 @@ function computeTrainingCounts(plan: WeekPlan) {
 /* ============================================================
    UI PRIMITIVES (CSS vars)
    ============================================================ */
+
+type SidebarModule = "calendar" | "preview" | "maps" | "none";
+
+type ProfilePayload = {
+  rosterMeta: { season: string; ageGroups: unknown };
+  players: Player[];
+  coaches: Coach[];
+  locations: NonNullable<ThemeSettings["locations"]>;
+};
+
+type SavedProfile = {
+  id: string;
+  name: string;
+  payload: ProfilePayload;
+};
+
+const PROFILES_STORAGE_KEY = "ubc_planner_profiles_v1";
+const ACTIVE_PROFILE_STORAGE_KEY = "ubc_planner_active_profile_v1";
+
+function safeParseProfiles(raw: string | null): SavedProfile[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is SavedProfile => {
+      if (!entry || typeof entry !== "object") return false;
+      const e = entry as Record<string, unknown>;
+      return typeof e.id === "string" && typeof e.name === "string" && typeof e.payload === "object";
+    });
+  } catch {
+    return [];
+  }
+}
+
+function RightSidebarModuleSelect({
+  value,
+  onChange,
+  t,
+}: {
+  value: SidebarModule;
+  onChange: (v: SidebarModule) => void;
+  t: (k: string) => string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as SidebarModule)}
+      style={{
+        padding: "6px 10px",
+        borderRadius: 10,
+        border: "1px solid var(--ui-border)",
+        background: "var(--ui-panel)",
+        color: "var(--ui-text)",
+        fontWeight: 900,
+      }}
+    >
+      <option value="calendar">{t("calendar")}</option>
+      <option value="preview">{t("preview")}</option>
+      <option value="maps">{t("maps")}</option>
+      <option value="none">—</option>
+    </select>
+  );
+}
 
 function MinutePicker({
   value,
@@ -581,8 +276,16 @@ function AddressAutocomplete({
   onChange: (address: string, placeId: string) => void;
   placeholder?: string;
 }) {
+  type PlaceSuggestion = {
+    placePrediction?: {
+      placeId?: string;
+      text?: { text?: string };
+      structuredFormat?: { secondaryText?: { text?: string } };
+    };
+  };
+
   const [inputVal, setInputVal] = React.useState(value);
-  const [predictions, setPredictions] = React.useState<any[]>([]);
+  const [predictions, setPredictions] = React.useState<PlaceSuggestion[]>([]);
   const [sessionToken] = React.useState(() => generateSessionToken());
   const [loading, setLoading] = React.useState(false);
   const [showPredictions, setShowPredictions] = React.useState(false);
@@ -618,7 +321,7 @@ function AddressAutocomplete({
     fetchPredictions(v);
   }
 
-  async function handleSelectPrediction(pred: any) {
+  async function handleSelectPrediction(pred: PlaceSuggestion) {
     try {
       setLoading(true);
       const pId = pred.placePrediction?.placeId ?? "";
@@ -639,7 +342,7 @@ function AddressAutocomplete({
       <Input
         value={inputVal}
         onChange={handleInputChange}
-        placeholder={placeholder ?? "Adresse suchen..."}
+        placeholder={placeholder ?? "..."}
       />
       {loading && (
         <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--ui-muted)" }}>
@@ -694,34 +397,16 @@ function AddressAutocomplete({
       )}
       {placeId && (
         <div style={{ fontSize: 10, color: "var(--ui-muted)", marginTop: 4 }}>
-          Place ID: {placeId.slice(0, 20)}...
+          ID: {placeId.slice(0, 20)}...
         </div>
       )}
     </div>
   );
 }
 
-// Debounce helper
-function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  return function (...args: Parameters<T>) {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => fn(...args), delay);
-  };
-}
-
 /* ============================================================
    LEFT LOCATIONS VIEW (with edit mode)
    ============================================================ */
-
-function splitAddressLines(addr: string) {
-  // "formattedAddress" von Google kommt oft als 1 Zeile mit Kommas
-  const cleaned = String(addr ?? "").trim();
-  if (!cleaned) return [];
-  const parts = cleaned.split(",").map((x) => x.trim()).filter(Boolean);
-  // Falls nur eine Zeile: gib sie so zurück
-  return parts.length ? parts : [cleaned];
-}
 
 function LeftLocationsView({
   theme,
@@ -729,16 +414,18 @@ function LeftLocationsView({
   editMode,
   openLocationName,
   setOpenLocationName,
+  t,
 }: {
   theme: ThemeSettings;
   setTheme: (t: ThemeSettings) => void;
   editMode: boolean;
   openLocationName: string | null;
   setOpenLocationName: (v: string | null) => void;
+  t: (k: string) => string;
 }) {
   // Wenn editMode AN: nutze bestehendes LocationsPanel (inkl. Autocomplete)
   if (editMode) {
-    return <LocationsPanel theme={theme} setTheme={setTheme} />;
+    return <LocationsPanel theme={theme} setTheme={setTheme} t={t} />;
   }
 
   const L = theme.locations ?? {};
@@ -749,9 +436,9 @@ function LeftLocationsView({
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div style={{ fontSize: 18, fontWeight: 900 }}>Orte</div>
+      <div style={{ fontSize: 18, fontWeight: 900 }}>{t("locations")}</div>
       <div style={{ color: "var(--ui-muted)", fontSize: 13, fontWeight: 800 }}>
-        Klick auf einen Ort → Details (Adresse) aufklappen. Bearbeiten über „Bearbeiten" oben.
+        {t("locationsHintExpand")}
       </div>
 
       <div style={{ display: "grid", gap: 8 }}>
@@ -809,7 +496,7 @@ function LeftLocationsView({
                       </div>
                     ))
                   ) : (
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "var(--ui-muted)" }}>Keine Adresse hinterlegt</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "var(--ui-muted)" }}>{t("locationsNoAddress")}</div>
                   )}
 
                   {locs[name]?.placeId ? (
@@ -823,7 +510,7 @@ function LeftLocationsView({
           );
         })}
 
-        {names.length === 0 && <div style={{ color: "var(--ui-muted)", fontWeight: 900 }}>Noch keine Orte angelegt.</div>}
+        {names.length === 0 && <div style={{ color: "var(--ui-muted)", fontWeight: 900 }}>{t("locationsEmpty")}</div>}
       </div>
     </div>
   );
@@ -843,6 +530,7 @@ function LocationCard({
   onRemove,
   onDefChange,
   onAddressChange,
+  t,
 }: {
   name: string;
   def: { abbr: string; name: string; hallNo?: string };
@@ -853,6 +541,7 @@ function LocationCard({
   onRemove?: () => void;
   onDefChange: (next: { abbr: string; name: string; hallNo?: string }) => void;
   onAddressChange: (addr: string, placeId: string) => void;
+  t: (k: string) => string;
 }) {
   const hasMaps = Boolean(locData.placeId);
 
@@ -885,9 +574,9 @@ function LocationCard({
             {def.name || name}
           </div>
           <div style={{ fontSize: 12, color: "var(--ui-muted)", fontWeight: 800, marginTop: 2 }}>
-            {def.abbr ? `Abk.: ${def.abbr}` : "Abk.: —"}
-            {def.hallNo ? `  •  Halle ${def.hallNo}` : ""}
-            {hasMaps ? "  •  Maps ✓" : "  •  Maps —"}
+            {def.abbr ? `${t("abbr")}: ${def.abbr}` : `${t("abbr")}: —`}
+            {def.hallNo ? `  •  ${t("hall")} ${def.hallNo}` : ""}
+            {hasMaps ? `  •  ${t("maps")} ✓` : `  •  ${t("maps")} —`}
           </div>
         </div>
 
@@ -899,33 +588,33 @@ function LocationCard({
           <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px", gap: 8 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 950, color: "var(--ui-muted)", marginBottom: 6, textTransform: "uppercase" }}>
-                Bezeichnung
+                {t("label")}
               </div>
-              <Input value={def.name} onChange={(v) => onDefChange({ ...def, name: v })} placeholder="z.B. Sporthalle Berg Fidel" />
+              <Input value={def.name} onChange={(v) => onDefChange({ ...def, name: v })} placeholder={t("locationNameExample")} />
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 950, color: "var(--ui-muted)", marginBottom: 6, textTransform: "uppercase" }}>
-                Abkürzung
+                {t("abbreviation")}
               </div>
-              <Input value={def.abbr} onChange={(v) => onDefChange({ ...def, abbr: v })} placeholder="z.B. BSH" />
+              <Input value={def.abbr} onChange={(v) => onDefChange({ ...def, abbr: v })} placeholder={t("abbrExample")} />
             </div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 950, color: "var(--ui-muted)", marginBottom: 6, textTransform: "uppercase" }}>
-                Hallennr.
+                {t("hallNumber")}
               </div>
-              <Input value={def.hallNo ?? ""} onChange={(v) => onDefChange({ ...def, hallNo: v })} placeholder="optional" />
+              <Input value={def.hallNo ?? ""} onChange={(v) => onDefChange({ ...def, hallNo: v })} placeholder={t("optional")} />
             </div>
           </div>
 
           <div>
             <div style={{ fontSize: 11, fontWeight: 950, color: "var(--ui-muted)", marginBottom: 6, textTransform: "uppercase" }}>
-              Adresse (Google Autocomplete)
+              {t("addressGoogleAutocomplete")}
             </div>
             <AddressAutocomplete
               value={locData.address}
               placeId={locData.placeId}
               onChange={onAddressChange}
-              placeholder="Adresse suchen"
+              placeholder={t("searchAddress")}
             />
           </div>
 
@@ -948,7 +637,7 @@ function LocationCard({
                   cursor: "pointer",
                 }}
               >
-                Entfernen
+                {t("remove")}
               </button>
             </div>
           )}
@@ -965,9 +654,11 @@ function LocationCard({
 function LocationsPanel({
   theme,
   setTheme,
+  t,
 }: {
   theme: ThemeSettings;
   setTheme: (t: ThemeSettings) => void;
+  t: (k: string) => string;
 }) {
   const loc = theme.locations ?? {};
 
@@ -1029,17 +720,17 @@ function LocationsPanel({
   return (
     <div style={{ padding: 12, display: "grid", gap: 14 }}>
       <div>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Home</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("home")}</div>
         <AddressAutocomplete
           value={loc.homeAddress ?? ""}
           placeId={loc.homePlaceId}
           onChange={setHomeAddress}
-          placeholder="Startpunkt (optional)"
+          placeholder={t("startPointOptional")}
         />
       </div>
 
       <div>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Trainings- und Spielorte</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("trainingAndGameLocations")}</div>
 
         {/* Progressive Disclosure: Card-Liste */}
         <div style={{ display: "grid", gap: 10 }}>
@@ -1060,6 +751,7 @@ function LocationsPanel({
                 onRemove={!isPreset ? () => removeLocation(name) : undefined}
                 onDefChange={(next) => setDef(name, next)}
                 onAddressChange={(addr, pId) => setLocationAddress(name, addr, pId)}
+                t={t}
               />
             );
           })}
@@ -1083,11 +775,13 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
   trainingCount,
   groupBg,
   isBirthday,
+  t,
 }: {
   player: Player;
   trainingCount: number;
   groupBg: Record<GroupId, string>;
   isBirthday: boolean;
+  t: (k: string) => string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `player:${player.id}`,
@@ -1129,10 +823,10 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
         }}
         title={
           isTbd
-            ? "Platzhalter"
+            ? t("placeholder")
             : (player.lizenzen ?? [])
                 .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
-                .join(" | ") || "Keine TA/TNA hinterlegt"
+                .join(" | ") || t("noTaTnaSaved")
         }
       >
         <div style={{ minWidth: 0 }}>
@@ -1150,7 +844,7 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
           </div>
           <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
             {isTbd
-              ? "Platzhalter"
+              ? t("placeholder")
               : `${player.primaryYouthTeam || ""}${
                   player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
                 }`}
@@ -1161,7 +855,7 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
           {isTbd ? (
             <>
               <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>TBD</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>To be determined</div>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{t("groupTbdLong")}</div>
             </>
           ) : (
             <>
@@ -1185,12 +879,14 @@ function DroppableSessionShell({
   children,
   hasHistoryFlag = false,
   isEditing = false,
+  isSelected = false,
   onSelect,
 }: {
   session: Session;
   children: ReactNode;
   hasHistoryFlag?: boolean;
   isEditing?: boolean;
+  isSelected?: boolean;
   onSelect?: (session: Session) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
@@ -1198,8 +894,9 @@ function DroppableSessionShell({
     data: { type: "session", sessionId: session.id },
   });
 
-  const baseBorder = isEditing ? "2px solid var(--ui-accent)" : (hasHistoryFlag ? "1px solid #ef4444" : `1px solid var(--ui-border)`);
-  const baseBg = isEditing ? "rgba(59,130,246,0.25)" : (hasHistoryFlag ? "rgba(239,68,68,0.08)" : "var(--ui-card)");
+  const emphasize = isEditing || isSelected;
+  const baseBorder = emphasize ? "2px solid var(--ui-accent)" : (hasHistoryFlag ? "1px solid #ef4444" : `1px solid var(--ui-border)`);
+  const baseBg = emphasize ? "rgba(59,130,246,0.25)" : (hasHistoryFlag ? "rgba(239,68,68,0.08)" : "var(--ui-card)");
 
   return (
     <div
@@ -1230,11 +927,13 @@ function ParticipantCard({
   onRemove,
   groupBg,
   isBirthday,
+  t,
 }: {
   player: Player;
   onRemove: () => void;
   groupBg: Record<GroupId, string>;
   isBirthday: boolean;
+  t: (k: string) => string;
 }) {
   const group = getPlayerGroup(player);
   const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
@@ -1268,7 +967,7 @@ function ParticipantCard({
           fontWeight: 900,
         }}
       >
-        raus
+        {t("remove")}
       </button>
     </div>
   );
@@ -1399,13 +1098,13 @@ function PrintView({
           <img src={logoUrl} alt="UBC" style={{ height: 38 }} />
           <div>
             <div style={{ fontSize: 14, fontWeight: 900 }}>UBC Münster</div>
-            <div style={{ fontSize: 11, fontWeight: 800 }}>Saison - Trainingsübersicht</div>
+            <div style={{ fontSize: 11, fontWeight: 800 }}>{t("seasonTrainingOverview")}</div>
           </div>
         </div>
 
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, fontWeight: 900 }}>{dateToDDMMYYYY_DOTS(mondayDate)}</div>
-          <div style={{ fontSize: 11, fontWeight: 900 }}>Trainingswoche: {kwText}</div>
+          <div style={{ fontSize: 11, fontWeight: 900 }}>{t("trainingWeek")}: {kwText}</div>
           <div style={{ fontSize: 10, color: "#374151", fontWeight: 700 }}>
             BSH = Ballsporthalle; SHP = Sporthalle Pascal; Seminarraum = Seminarraum
           </div>
@@ -1428,10 +1127,9 @@ function PrintView({
           </thead>
           <tbody>
             {(() => {
-              let lastDate = "";
-              return plan.sessions.map((s) => {
-                const sameDayAsPrev = s.date === lastDate;
-                lastDate = s.date;
+              return plan.sessions.map((s, i, arr) => {
+                const prev = arr[i - 1];
+                const sameDayAsPrev = prev ? prev.date === s.date : false;
 
                 const dayLower = (s.day || "").toLowerCase();
                 const isWeekend = dayLower.startsWith("sa") || dayLower.startsWith("so");
@@ -1465,7 +1163,7 @@ function PrintView({
         </table>
       </div>
 
-      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>Kader-Listen</div>
+      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>{t("rosterLists")}</div>
       <div style={{ marginTop: 6 }}>
         <table>
           <thead>
@@ -1508,7 +1206,7 @@ function PrintView({
 
         {hasTbd && (
           <div style={{ marginTop: 6, fontSize: 10, color: "#374151", fontWeight: 700 }}>
-            tbd = to be determined
+            {t("tbdLegend")}
           </div>
         )}
       </div>
@@ -1548,7 +1246,7 @@ function PrintView({
 
         return (
           <div style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900, fontSize: 12 }}>Spiel-Exports</div>
+            <div style={{ fontWeight: 900, fontSize: 12 }}>{t("gameExports")}</div>
 
             <div style={{ marginTop: 8, display: "grid", gap: 12 }}>
               {games.map((g) => {
@@ -1582,9 +1280,9 @@ function PrintView({
                         <thead>
                           <tr>
                             <th style={{ width: 28 }}>#</th>
-                            <th style={{ width: 54 }}>Trikot</th>
-                            <th>Nachname</th>
-                            <th>Vorname</th>
+                            <th style={{ width: 54 }}>{t("jersey")}</th>
+                            <th>{t("lastName")}</th>
+                            <th>{t("firstName")}</th>
                             <th style={{ width: 120 }}>TA</th>
                           </tr>
                         </thead>
@@ -1603,7 +1301,7 @@ function PrintView({
                     </div>
 
                     <div style={{ marginTop: 8, fontSize: 10, color: "#374151", fontWeight: 800 }}>
-                      Coaches: {(coaches ?? []).map((c) => `${c.role}: ${c.name}${c.license ? ` (${c.license})` : ""}`).join(" | ")}
+                      {t("coaches")}: {(coaches ?? []).map((c) => `${c.role}: ${c.name}${c.license ? ` (${c.license})` : ""}`).join(" | ")}
                     </div>
                   </div>
                 );
@@ -1613,12 +1311,12 @@ function PrintView({
         );
       })()}
 
-      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>Coaches</div>
+      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>{t("coaches")}</div>
       <div style={{ marginTop: 6, fontSize: 11 }}>
         {(coaches ?? []).map((c) => (
           <div key={c.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderBottom: "1px solid #eee", padding: "4px 0" }}>
             <div style={{ fontWeight: 800 }}>{c.role}: {c.name}</div>
-            <div style={{ color: "#374151", fontWeight: 800 }}>{c.license ? `Lizenz ${c.license}` : "Lizenz —"}</div>
+            <div style={{ color: "#374151", fontWeight: 800 }}>{c.license ? `${t("license")} ${c.license}` : `${t("license")} —`}</div>
           </div>
         ))}
       </div>
@@ -1627,279 +1325,9 @@ function PrintView({
 }
 
 /* ============================================================
-   DBB-ENRICHMENT: DBB-TNA -> birthDate / birthYear
-   ------------------------------------------------------------
-   Ziel:
-   - birthDate aus DBB-TNA (DDMMYY...) automatisch ableiten
-   - birthYear validieren/korrigieren via DBB als Primärquelle
-   ============================================================ */
-
-function enrichPlayersWithBirthFromDBBTA(
-  players: Player[],
-  opts?: { overrideBirthYear?: boolean }
-): { players: Player[]; warnings: string[] } {
-  const overrideBirthYear = opts?.overrideBirthYear ?? true;
-  const warnings: string[] = [];
-
-  const result = players.map((p) => {
-    const tna = getDbbTna(p);
-    if (!tna) return p; // kein DBB-TA -> keine Änderung
-
-    const derived = birthDateFromDBBTA(tna);
-    if (!derived) {
-      warnings.push(`${p.name}: DBB-TNA nicht parsbar oder ungültiges Datum (${tna})`);
-      return p; // TA war nicht parsebar -> nichts setzen
-    }
-
-    const alreadyOk = p.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(p.birthDate);
-    if (alreadyOk) return p; // birthDate vorhanden und gültig -> nicht überschreiben
-
-    let updated = { ...p, birthDate: derived };
-
-    // birthYear aus dem neuen Datum ableiten
-    const parsedYear = Number(derived.slice(0, 4));
-    const currentBirthYear = typeof p.birthYear === "number" ? p.birthYear : undefined;
-    const yearIsValid = currentBirthYear && currentBirthYear >= 1930 && currentBirthYear <= new Date().getFullYear();
-
-    if (!yearIsValid) {
-      updated.birthYear = parsedYear;
-    } else if (overrideBirthYear && currentBirthYear !== parsedYear) {
-      updated.birthYear = parsedYear;
-    }
-
-    return updated;
-  });
-
-  return { players: result, warnings };
-}
-
-/* ============================================================
-   NORMALIZATION: roster.json -> internal Player[]
-   ------------------------------------------------------------
-   Ziel:
-   - roster.json darf "alt" oder "neu" sein
-   - wir normalisieren in ein stabiles Player-Objekt
-   - primaryYouthTeam / primarySeniorTeam werden aus defaultTeams abgeleitet
-   ============================================================ */
-
-function normalizeRoster(input: any): { season: string; ageGroups: any; players: Player[] } {
-  const season = String(input?.season ?? "");
-  const ageGroups = input?.ageGroups ?? null;
-  const list = Array.isArray(input?.players) ? input.players : [];
-
-  const players: Player[] = list.map((r: any) => {
-    const id = String(r.id ?? randomId("p_"));
-    const name = String(r.name ?? "Spieler");
-    const split = safeNameSplit(name);
-
-    const birthYear = typeof r.birthYear === "number" ? r.birthYear : undefined;
-    const isLocalPlayer = typeof r.isLocalPlayer === "boolean" ? r.isLocalPlayer : undefined;
-
-    const lizenzen: Lizenz[] = Array.isArray(r.lizenzen)
-      ? r.lizenzen
-          .map((x: any) => ({
-            typ: String(x.typ ?? ""),
-            tna: String(x.tna ?? ""),
-            verein: x.verein ? String(x.verein) : undefined,
-          }))
-          .filter((x: Lizenz) => x.typ)
-      : [];
-
-    const defaultTeams = Array.isArray(r.defaultTeams)
-      ? (r.defaultTeams as any[])
-          .map((x: any) => String(x).toUpperCase().replaceAll(".1", "").replaceAll(".2", ""))
-      : [];
-
-    // Derive primary team labels (used in UI chips)
-    const primaryYouthTeam: YouthTeam =
-      defaultTeams.includes("NBBL") ? "NBBL" : defaultTeams.includes("U18") ? "U18" : "";
-
-    const primarySeniorTeam: SeniorTeam =
-      defaultTeams.includes("HOL") ? "HOL" : defaultTeams.includes("1RLH") ? "1RLH" : "";
-
-    const p: Player = {
-      id,
-      name,
-
-      firstName: r.firstName ? String(r.firstName) : split.firstName,
-      lastName: r.lastName ? String(r.lastName) : split.lastName,
-
-      birthYear,
-      birthDate: r.birthDate ? String(r.birthDate) : undefined,
-
-      positions: Array.isArray(r.positions)
-        ? ((r.positions as any[]).map((x) => String(x)) as Position[])
-        : [],
-
-      isLocalPlayer,
-      lpCategory: r.lpCategory ? String(r.lpCategory) : undefined,
-      lizenzen,
-      defaultTeams,
-
-      primaryYouthTeam,
-      primarySeniorTeam,
-
-      group: (r.group ? String(r.group) : undefined) as GroupId | undefined,
-
-      jerseyByTeam: r.jerseyByTeam && typeof r.jerseyByTeam === "object" ? r.jerseyByTeam : undefined,
-
-      historyLast6: Array.isArray(r.historyLast6)
-        ? r.historyLast6
-            .slice(0, 6)
-            .map((x: any) => ({
-              date: String(x?.date ?? ""),
-              opponent: String(x?.opponent ?? ""),
-              note: x?.note ? String(x.note) : undefined,
-            }))
-            .filter((x: any) => x.date || x.opponent)
-        : undefined,
-
-      yearColor: r.yearColor ?? null,
-    };
-
-    return p;
-  });
-
-  // Enrich mit DBB-TNA Geburtsdaten
-  const { players: enrichedPlayers } = enrichPlayersWithBirthFromDBBTA(players);
-
-  return { season, ageGroups, players: enrichedPlayers };
-}
-
-
-function mapMasterTeamToCore(team: string): string[] {
-  const t = String(team ?? "").trim();
-  const u = t.toUpperCase();
-  if (!u) return [];
-  if (u.startsWith("NBBL")) return ["NBBL"];
-  if (u.startsWith("U18")) return ["U18"];
-  if (u.startsWith("HOL")) return ["HOL"];
-  if (u.startsWith("1RLH")) return ["1RLH"];
-  // fallback: keep as-is
-  return [t];
-}
-
-function normalizeMasterWeek(input: any): WeekPlan {
-  const sessionsRaw = Array.isArray(input?.sessions) ? input.sessions : [];
-  const sessions: Session[] = sessionsRaw.map((s: any) => {
-    const id = String(s.id ?? randomId("sess_"));
-    const day = String(s.day ?? "");
-    const date = String(s.date ?? ""); // master might not have date; allow empty
-    const team = s.team ? String(s.team) : "";
-    const teams: string[] = Array.isArray(s.teams) ? s.teams.map((x: any) => String(x)) : mapMasterTeamToCore(team);
-
-    const timeRaw = String(s.time ?? "");
-    const time = timeRaw.includes("–") ? timeRaw : normalizeDash(timeRaw);
-
-    return {
-      id,
-      date: date || "", // will be set when creating a new week from the chosen week
-      day: day || (date ? weekdayShortDE(date) : ""),
-      teams: teams.map((x: string) => x.replaceAll(".1", "").replaceAll(".2", "")),
-      time,
-      location: String(s.location ?? ""),
-      info: (s.info ?? "") ? String(s.info) : null,
-      participants: Array.isArray(s.participants) ? s.participants.map((x: any) => String(x)) : [],
-      kaderLabel: s.kaderLabel ? String(s.kaderLabel) : undefined,
-    };
-  });
-
-  sessions.sort((a, b) => {
-    const ad = a.date.localeCompare(b.date);
-    if (ad !== 0) return ad;
-    return a.time.localeCompare(b.time);
-  });
-
-  return {
-    weekId: String(input?.weekId ?? "MASTER"),
-    sessions: sessions.map((s) => ({ ...s, participants: [] })), // master starts empty
-  };
-}
-
-// ----------------------
-// Plan / birthday helpers
-// ----------------------
-function planDateSet(plan: WeekPlan): Set<string> {
-  return new Set((plan.sessions ?? []).map((s) => String(s.date ?? "")).filter(Boolean));
-}
-
-// (playerAppearsInPlan not needed currently)
-
-function isBirthdayOnAnyPlanDate(p: Player, dateSet: Set<string>): boolean {
-  const bd = String(p.birthDate ?? "").trim(); // YYYY-MM-DD
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(bd)) return false;
-
-  const mmdd = bd.slice(5, 10); // "MM-DD"
-  for (const d of dateSet) {
-    if (String(d).slice(5, 10) === mmdd) return true;
-  }
-  return false;
-}
-
-function hasBlockingHistoryNoteForDate(p: Player, dateISO: string): boolean {
-  const entries = p.historyLast6 ?? [];
-  if (!entries.length) return false;
-
-  const blockRegex = /(verletzt|injur|schule|school|krank|ill|ausfall|absen|fehlt)/i;
-
-  return entries.some((h) => {
-    const d = String(h?.date ?? "").trim();
-    if (!d || d !== dateISO) return false;
-    const note = String(h?.note ?? "").trim();
-    const opp = String(h?.opponent ?? "").trim();
-    return blockRegex.test(`${note} ${opp}`);
-  });
-}
-
-function computeHistoryFlagsBySession(
-  plan: WeekPlan,
-  playerById: Map<string, Player>
-): Map<string, string[]> {
-  const res = new Map<string, string[]>();
-
-  for (const s of plan.sessions ?? []) {
-    const flagged: string[] = [];
-    for (const pid of s.participants ?? []) {
-      const p = playerById.get(pid);
-      if (!p) continue;
-      if (hasBlockingHistoryNoteForDate(p, s.date)) flagged.push(pid);
-    }
-    res.set(s.id, flagged);
-  }
-
-  return res;
-}
-
-/* ============================================================
    COACHES: persistence + defaults
    ============================================================ */
 
-const STAFF_STORAGE_KEY = "ubc_staff_v1";
-
-const DEFAULT_STAFF: Coach[] = [
-  { id: "c_andrej", name: "Andrej König", role: "Headcoach", license: "B-23273" },
-  { id: "c_edgars", name: "Edgars Ikstens", role: "Coach", license: "" },
-  { id: "c_mardin", name: "Mardin Ahmedin", role: "Coach", license: "" },
-];
-
-function safeParseStaff(raw: string | null): Coach[] | null {
-  if (!raw) return null;
-  try {
-    const x = JSON.parse(raw);
-    if (!Array.isArray(x)) return null;
-    const list = x
-      .map((c: any) => ({
-        id: String(c.id ?? randomId("c_")),
-        name: String(c.name ?? ""),
-        role: String(c.role ?? "Coach"),
-        license: c.license !== undefined ? String(c.license ?? "") : "",
-      }))
-      .filter((c: Coach) => c.id && c.name);
-    return list.length ? list : null;
-  } catch {
-    return null;
-  }
-}
 
 /* ============================================================
    NEW WEEK MODAL
@@ -1909,549 +1337,13 @@ function safeParseStaff(raw: string | null): Coach[] | null {
    PRINT PREVIEW & EXPORT HELPERS
    ============================================================ */
 
-function escapeHtml(str: string | null | undefined): string {
-  if (!str) return "";
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function isGameSession(s: Session): boolean {
-  const info = s.info || "";
-  return info.includes("vs") || info.includes("@");
-}
-
-function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: string }): string {
-  const { title, clubName, logoUrl } = opts;
-  const logoHtml = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="width: 80px; height: 80px; object-fit: contain;" />`
-    : `<div style="width: 80px; height: 80px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999;">Logo</div>`;
-  return `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-      <div style="flex: 1;">
-        <h1 style="margin: 0; font-size: 24px; font-weight: bold;">${escapeHtml(title)}</h1>
-        <div style="font-size: 14px; color: #666; margin-top: 4px;">${escapeHtml(clubName)}</div>
-      </div>
-      ${logoHtml}
-    </div>
-  `;
-}
-
-function pageFooterHtml(opts: { clubName: string; locale: Lang }): string {
-  const { clubName, locale } = opts;
-  const trainingLabel = locale === "de" ? "Basketballtraining" : "Basketball Training";
-  const planLabel = locale === "de" ? "Wochenplanung" : "Weekly Plan";
-  return `
-    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-      ${escapeHtml(clubName)} · ${trainingLabel} · ${planLabel}
-    </div>
-  `;
-}
-
-function thCss(): string {
-  return "border: 1px solid #ccc; padding: 8px; background: #f5f5f5; text-align: left; font-weight: bold;";
-}
-
-function tdCss(): string {
-  return "border: 1px solid #ccc; padding: 8px;";
-}
-
-function renderWeekOverviewHtml(opts: {
-  sessions: Session[];
-  players: Player[];
-  coaches: Coach[];
-  clubName: string;
-  locale: Lang;
-  locations: ThemeLocations;
-  logoUrl?: string;
-}): string {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
-
-  const trainingSessions = sessions.filter((s) => !isGameSession(s));
-  const games = sessions.filter((s) => isGameSession(s));
-
-  const t = locale === "de"
-    ? { training: "Training", trainingShort: "Tr", game: "Spiel", gameShort: "Sp", roster: "Kader", legend: "Legende" }
-    : { training: "Training", trainingShort: "Tr", game: "Game", gameShort: "Gm", roster: "Roster", legend: "Legend" };
-
-  // Build locations legend HTML
-  const locationsLegendHtml = (() => {
-    const defs = locations?.definitions || {};
-    const customLocs = locations?.custom || {};
-    const newLocs = locations?.locations || {};
-    const allLocNames = new Set<string>();
-
-    sessions.forEach((s) => {
-      const loc = s.location || "";
-      if (loc && loc !== "TBD") allLocNames.add(loc);
-    });
-
-    if (allLocNames.size === 0) return "";
-
-    const legendItems: string[] = [];
-    for (const name of Array.from(allLocNames).sort()) {
-      const def = defs[name];
-      const customAddr = customLocs[name];
-      const newLoc = newLocs[name];
-      const abbr = def?.abbr || "";
-      const hallNo = def?.hallNo || "";
-      const addr = newLoc?.address || customAddr || "";
-
-      let parts: string[] = [];
-      if (abbr) parts.push(`Abk.: ${escapeHtml(abbr)}`);
-      if (hallNo) parts.push(`Halle: ${escapeHtml(hallNo)}`);
-      if (addr) parts.push(escapeHtml(addr));
-
-      const detail = parts.length > 0 ? ` (${parts.join(" · ")})` : "";
-      legendItems.push(`<li style="margin: 4px 0;"><strong>${escapeHtml(name)}</strong>${detail}</li>`);
-    }
-
-    if (legendItems.length === 0) return "";
-
-    return `
-      <div style="margin-bottom: 24px; padding: 12px; border: 1px solid #ddd; background: #fafafa;">
-        <h3 style="margin: 0 0 8px 0; font-size: 16px;">${t.legend}</h3>
-        <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.5;">
-          ${legendItems.join("")}
-        </ul>
-      </div>
-    `;
-  })();
-
-  // Build rosters HTML (per session)
-  const buildRosterTable = (session: Session): string => {
-    const sessionPlayers = players.filter((p) =>
-      session.teams.some((team) => p.primaryYouthTeam === team || p.primarySeniorTeam === team || p.defaultTeams?.includes(team))
-    );
-    const sessionCoaches = coaches.filter((c) =>
-      session.teams.some((team) => c.name.includes(team)) // Simple heuristic
-    );
-
-    if (sessionPlayers.length === 0 && sessionCoaches.length === 0) {
-      return `<p style="font-size: 13px; color: #666;">Kein Kader</p>`;
-    }
-
-    let rosterRows = "";
-    if (sessionCoaches.length > 0) {
-      sessionCoaches.forEach((c) => {
-        rosterRows += `
-          <tr>
-            <td style="${tdCss()}">${escapeHtml(c.name)}</td>
-            <td style="${tdCss()}">${escapeHtml(c.role)}</td>
-          </tr>
-        `;
-      });
-    }
-    if (sessionPlayers.length > 0) {
-      sessionPlayers.forEach((p) => {
-        const teamLabel = p.primaryYouthTeam || p.primarySeniorTeam || p.defaultTeams?.join(", ") || "";
-        rosterRows += `
-          <tr>
-            <td style="${tdCss()}">${escapeHtml(p.name)}</td>
-            <td style="${tdCss()}">${escapeHtml(teamLabel)}</td>
-          </tr>
-        `;
-      });
-    }
-
-    return `
-      <table style="width: 100%; margin-top: 8px;">
-        <thead>
-          <tr>
-            <th style="${thCss()}">Name</th>
-            <th style="${thCss()}">Team/Rolle</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rosterRows}
-        </tbody>
-      </table>
-    `;
-  };
-
-  // Build sessions table HTML
-  let sessionsTableRows = "";
-  [...trainingSessions, ...games].forEach((s) => {
-    const typeLabel = isGameSession(s) ? t.gameShort : t.trainingShort;
-    sessionsTableRows += `
-      <tr>
-        <td style="${tdCss()}">${escapeHtml(s.date)}</td>
-        <td style="${tdCss()}">${escapeHtml(s.day)}</td>
-        <td style="${tdCss()}">${typeLabel}</td>
-        <td style="${tdCss()}">${escapeHtml(s.teams.join(", "))}</td>
-        <td style="${tdCss()}">${escapeHtml(s.time)}</td>
-        <td style="${tdCss()}">${escapeHtml(s.location)}</td>
-        <td style="${tdCss()}">${escapeHtml(s.info || "")}</td>
-      </tr>
-      <tr>
-        <td colspan="7" style="padding: 12px; border: 1px solid #ccc; background: #fcfcfc;">
-          <strong>${t.roster}:</strong>
-          ${buildRosterTable(s)}
-        </td>
-      </tr>
-    `;
-  });
-
-  return `
-    <div class="page">
-      ${pageHeaderHtml({ title: "Trainingsübersicht", clubName, logoUrl })}
-      ${locationsLegendHtml}
-      <table>
-        <thead>
-          <tr>
-            <th style="${thCss()}">Datum</th>
-            <th style="${thCss()}">Tag</th>
-            <th style="${thCss()}">Typ</th>
-            <th style="${thCss()}">Teams</th>
-            <th style="${thCss()}">Zeit</th>
-            <th style="${thCss()}">Ort</th>
-            <th style="${thCss()}">Info</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${sessionsTableRows}
-        </tbody>
-      </table>
-      ${pageFooterHtml({ clubName, locale })}
-    </div>
-  `;
-}
-
-function renderWeekScheduleOnlyHtml(opts: {
-  sessions: Session[];
-  clubName: string;
-  locale: Lang;
-  locations: ThemeLocations;
-  logoUrl?: string;
-}): string {
-  const { sessions, clubName, locale, locations, logoUrl } = opts;
-
-  const t = locale === "de"
-    ? { title: "Trainingswoche", date: "Datum", day: "Tag", type: "Typ", teams: "Teams", time: "Zeit", loc: "Ort", info: "Info",
-        trainingShort: "Tr", gameShort: "Sp" }
-    : { title: "Training week", date: "Date", day: "Day", type: "Type", teams: "Teams", time: "Time", loc: "Location", info: "Info",
-        trainingShort: "Tr", gameShort: "Gm" };
-
-  // Locations legend
-  const locationsLegendHtml = (() => {
-    const defs = locations?.definitions || {};
-    const customLocs = locations?.custom || {};
-    const newLocs = locations?.locations || {};
-    const allLocNames = new Set<string>();
-
-    sessions.forEach((s) => {
-      const loc = s.location || "";
-      if (loc && loc !== "TBD") allLocNames.add(loc);
-    });
-    if (allLocNames.size === 0) return "";
-
-    const resolveAddr = (name: string) => {
-      if (newLocs?.[name]?.address) return newLocs[name].address;
-      if (name === "BSH") return locations?.bsh || "";
-      if (name === "SHP") return locations?.shp || "";
-      if (name === "Seminarraum") return locations?.seminarraum || "";
-      return customLocs?.[name] || "";
-    };
-
-    const items = Array.from(allLocNames)
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => {
-        const d = defs[name] ?? { abbr: name, name, hallNo: "" };
-        const hall = d.hallNo ? ` · Halle ${d.hallNo}` : "";
-        const addr = resolveAddr(name);
-        const addrShort = addr
-          ? addr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 3).join(", ")
-          : "";
-        return `
-          <div style="border:1px solid #eee; padding:6px 8px; border-radius:8px;">
-            <div style="font-weight:900; font-size:11px;">${escapeHtml(d.abbr || name)} — ${escapeHtml(d.name || name)}${escapeHtml(hall)}</div>
-            ${
-              addrShort
-                ? `<div style="font-size:10px; color:#555; margin-top:2px;">${escapeHtml(addrShort)}</div>`
-                : `<div style="font-size:10px; color:#999; margin-top:2px;">(no address)</div>`
-            }
-          </div>
-        `;
-      })
-      .join("");
-
-    return `
-      <div style="margin: 8px 0 14px 0;">
-        <div style="font-weight:900; font-size:11px; margin-bottom:6px;">Orte (im Plan)</div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          ${items}
-        </div>
-      </div>
-    `;
-  })();
-
-  const rows = sessions
-    .map((s) => {
-      const isGame = isGameSession(s);
-      const typeLabel = isGame ? t.gameShort : t.trainingShort;
-      return `
-        <tr style="${isGame ? "background:#F59E0B; color:#111;" : ""}">
-          <td style="${tdCss()}">${escapeHtml(s.date)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.day)}</td>
-          <td style="${tdCss()}">${escapeHtml(typeLabel)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.teams.join(", "))}</td>
-          <td style="${tdCss()}">${escapeHtml(s.time)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.location)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.info || "")}</td>
-        </tr>
-      `;
-    })
-    .join("");
-
-  return `
-    <div class="page">
-      ${pageHeaderHtml({ title: t.title, clubName, logoUrl })}
-      ${locationsLegendHtml}
-      <table>
-        <thead>
-          <tr>
-            <th style="${thCss()}">${t.date}</th>
-            <th style="${thCss()}">${t.day}</th>
-            <th style="${thCss()}">${t.type}</th>
-            <th style="${thCss()}">${t.teams}</th>
-            <th style="${thCss()}">${t.time}</th>
-            <th style="${thCss()}">${t.loc}</th>
-            <th style="${thCss()}">${t.info}</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      ${pageFooterHtml({ clubName, locale })}
-    </div>
-  `;
-}
-
-function renderRostersOnlyHtml(opts: {
-  sessions: Session[];
-  players: Player[];
-  clubName: string;
-  locale: Lang;
-  logoUrl?: string;
-}): string {
-  const { sessions, players, clubName, locale, logoUrl } = opts;
-
-  const t = locale === "de"
-    ? { title: "Kader pro Event", roster: "Kader", none: "Keine Teilnehmer zugewiesen." }
-    : { title: "Rosters per event", roster: "Roster", none: "No participants assigned." };
-
-  const blocks = sessions
-    .map((s) => {
-      const label = `${s.day} · ${s.date} · ${s.time} · ${s.location} · ${s.teams.join(", ")} ${s.info ? `· ${s.info}` : ""}`;
-      const assigned = players.filter((p) => s.participants?.includes(p.id));
-      if (assigned.length === 0) return `<div style="color:#999; font-size:12px;">${t.none}</div>`;
-
-      const sorted = assigned
-        .slice()
-        .sort((a, b) => (a.name || "").localeCompare((b.name || ""), locale));
-
-      const rows = sorted
-        .map((p, idx) => `
-          <tr>
-            <td style="${tdCss()} width:28px; text-align:center; font-size:10px; color:#555;">${idx + 1}</td>
-            <td style="${tdCss()}">${escapeHtml(p.name)}</td>
-          </tr>
-        `)
-        .join("");
-
-      const rosterTable = `
-        <table style="margin-top:8px;">
-          <thead>
-            <tr>
-              <th style="${thCss()} width:28px; text-align:center; font-size:10px;">#</th>
-              <th style="${thCss()}">${locale === "de" ? "Name" : "Name"}</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-
-      return `
-        <div style="border:1px solid #ddd; border-radius:10px; padding:10px 12px; margin-bottom:12px;">
-          <div style="font-weight:900; font-size:12px;">${escapeHtml(label)}</div>
-          <div style="margin-top:6px;"><strong>${t.roster}:</strong></div>
-          ${rosterTable}
-        </div>
-      `;
-    })
-    .join("");
-
-  return `
-    <div class="page">
-      ${pageHeaderHtml({ title: t.title, clubName, logoUrl })}
-      ${blocks}
-      ${pageFooterHtml({ clubName, locale })}
-    </div>
-  `;
-}
-
-function renderGameSheetHtml(opts: {
-  session: Session;
-  players: Player[];
-  coaches: Coach[];
-  clubName: string;
-  locale: Lang;
-  logoUrl?: string;
-}): string {
-  const { session: game, players, coaches, clubName, locale, logoUrl } = opts;
-  const teamStr = game.teams.join(" · ");
-  const opponent = (game.info || "").replace("vs", "vs.").replace("@", "@");
-
-  // Filter players assigned to this game (participants are string IDs)
-  const assignedPlayers = players.filter((p) =>
-    game.participants?.includes(p.id)
-  );
-
-  // Sort by jersey number (team = first team in game.teams)
-  const firstTeam = game.teams[0] || "";
-  const sorted = assignedPlayers
-    .map((p) => ({
-      player: p,
-      jersey: p.jerseyByTeam?.[firstTeam] ?? 999,
-    }))
-    .sort((a, b) => a.jersey - b.jersey)
-    .map((x) => x.player);
-
-  // Build 15-row roster (no 1-12/Reserve distinction)
-  const lines: (Player | null)[] = [];
-  for (let i = 0; i < 15; i++) {
-    lines.push(sorted[i] || null);
-  }
-
-  const rosterRows = lines
-    .map((p, idx) => {
-      const full = p?.name ?? "";
-      const parts = full.trim().split(/\s+/);
-      const vorname = parts.length > 1 ? parts[0] : "";
-      const nachname = parts.length > 1 ? parts.slice(1).join(" ") : full;
-
-      const ta = p?.taNumber ?? "";
-      const jerseyVal = p?.jerseyByTeam?.[firstTeam] ?? "";
-
-      return `
-        <tr>
-          <td style="${tdCss()} text-align:center; font-size:10px; color:#555; width:22px;">${idx + 1}</td>
-          <td style="${tdCss()} text-align:center; width:44px;">${escapeHtml(String(jerseyVal))}</td>
-          <td style="${tdCss()}">${escapeHtml(nachname)}</td>
-          <td style="${tdCss()}">${escapeHtml(vorname)}</td>
-          <td style="${tdCss()} width:120px;">${escapeHtml(ta)}</td>
-          <td style="${tdCss()} text-align:center; width:54px;"></td>
-          <td style="${tdCss()} width:170px;"></td>
-        </tr>`;
-    })
-    .join("");
-
-  // Coaches (participants are string IDs)
-  const assignedCoaches = coaches.filter((c) =>
-    game.participants?.includes(c.id)
-  );
-  let coachRows = "";
-  for (const c of assignedCoaches) {
-    coachRows += `
-      <tr>
-        <td style="${tdCss()}">${escapeHtml(c.name)}</td>
-        <td style="${tdCss()}">${escapeHtml(c.license || "")}</td>
-      </tr>
-    `;
-  }
-
-  return `
-    <div class="page">
-      ${pageHeaderHtml({ title: `Spielbogen: ${teamStr}`, clubName, logoUrl })}
-      
-      <div style="margin-bottom: 16px;">
-        <strong>Spiel:</strong> ${escapeHtml(game.date)} · ${escapeHtml(game.day)} · ${escapeHtml(game.time)}<br/>
-        <strong>Ort:</strong> ${escapeHtml(game.location)}<br/>
-        <strong>Gegner:</strong> ${escapeHtml(opponent)}
-      </div>
-
-      <h3 style="margin-top: 24px; margin-bottom: 8px;">Spieler (15 Plätze)</h3>
-      <table>
-        <thead>
-          <tr>
-            <th style="${thCss()} width:22px; text-align:center; font-size:10px;">#</th>
-            <th style="${thCss()} width:44px; text-align:center;">Trikot</th>
-            <th style="${thCss()}">Nachname</th>
-            <th style="${thCss()}">Vorname</th>
-            <th style="${thCss()} width:120px;">TA-Nr.</th>
-            <th style="${thCss()} width:54px; text-align:center;">Aktiv</th>
-            <th style="${thCss()} width:170px;">Notizen</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rosterRows}
-        </tbody>
-      </table>
-
-      <div style="font-size:11px; color:#555; margin-top:8px;">
-        Hinweis: Bitte maximal <b>12</b> Spieler als <b>Aktiv</b> markieren. Insgesamt sind <b>15</b> Zeilen für kurzfristige Änderungen vorgesehen.
-      </div>
-
-      <h3 style="margin-top: 24px; margin-bottom: 8px;">Trainer</h3>
-      <table>
-        <thead>
-          <tr>
-            <th style="${thCss()}">Name</th>
-            <th style="${thCss()}">Lizenz</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${coachRows || `<tr><td style="${tdCss()}" colspan="2">Keine Trainer zugewiesen</td></tr>`}
-        </tbody>
-      </table>
-
-      ${pageFooterHtml({ clubName, locale })}
-    </div>
-  `;
-}
-
-interface PrintPage {
-  type: "overview" | "rosters" | "game";
-  html: string;
-  title: string;
-}
-
-function buildPrintPages(opts: {
-  sessions: Session[];
-  players: Player[];
-  coaches: Coach[];
-  clubName: string;
-  locale: Lang;
-  locations: ThemeLocations;
-  logoUrl?: string;
-}): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
-  const pages: PrintPage[] = [];
-
-  // Seite 1: Trainingsübersicht
-  const overviewHtml = renderWeekOverviewHtml({ sessions, players, coaches, clubName, locale, locations, logoUrl });
-  pages.push({ type: "overview", html: overviewHtml, title: "Trainingsübersicht" });
-
-  // Seite 2+: Spielbögen
-  const games = sessions.filter((s) => isGameSession(s));
-  for (const g of games) {
-    const html = renderGameSheetHtml({ session: g, players, coaches, clubName, locale, logoUrl });
-    const title = `Spielbogen: ${g.teams.join(" · ")} – ${g.info || ""}`;
-    pages.push({ type: "game", html, title });
-  }
-
-  return pages;
-}
-
-function ExportPreview({ pages }: { pages: PrintPage[] }) {
+function ExportPreview({ pages, t }: { pages: PrintPage[]; t: (k: string) => string }) {
   const [currentPage, setCurrentPage] = React.useState(0);
 
   if (pages.length === 0) {
     return (
       <div style={{ padding: 16, color: "#999" }}>
-        Keine Seiten verfügbar
+        {t("previewNoPages")}
       </div>
     );
   }
@@ -2488,7 +1380,7 @@ function ExportPreview({ pages }: { pages: PrintPage[] }) {
           ◀
         </button>
         <span style={{ color: "#ddd", fontSize: 14 }}>
-          Seite {currentPage + 1} von {pages.length}
+          {t("previewPageLabel")} {currentPage + 1} {t("previewOfLabel")} {pages.length}
         </span>
         <button
           onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}
@@ -2520,43 +1412,6 @@ function ExportPreview({ pages }: { pages: PrintPage[] }) {
   );
 }
 
-function buildPreviewPages(opts: {
-  sessions: Session[];
-  players: Player[];
-  coaches: Coach[];
-  clubName: string;
-  locale: Lang;
-  locations: ThemeLocations;
-  logoUrl?: string;
-}): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
-
-  const pages: PrintPage[] = [];
-
-  // Preview Seite 1: nur Woche (ohne Rosterblöcke)
-  pages.push({
-    type: "overview",
-    html: renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl }),
-    title: locale === "de" ? "Trainingswoche" : "Training week",
-  });
-
-  // Preview Seite 2: Rosters pro Event (auf einer eigenen Seite)
-  pages.push({
-    type: "rosters",
-    html: renderRostersOnlyHtml({ sessions, players, clubName, locale, logoUrl }),
-    title: locale === "de" ? "Kader pro Event" : "Rosters per event",
-  });
-
-  // Preview Seite 3+: Spielbögen
-  const games = sessions.filter((s) => isGameSession(s));
-  for (const g of games) {
-    const html = renderGameSheetHtml({ session: g, players, coaches, clubName, locale, logoUrl });
-    const title = `${locale === "de" ? "Spielbogen" : "Game sheet"}: ${g.teams.join(" · ")} – ${g.info || ""}`;
-    pages.push({ type: "game", html, title });
-  }
-
-  return pages;
-}
 
 /* ============================================================
    RIGHT SIDEBAR
@@ -2573,20 +1428,22 @@ function RightSidebar({
   onChangeBottom,
   onChangeSplitPct,
   context,
+  t,
 }: {
   open: boolean;
   layout: "single" | "split";
-  topModule: "calendar" | "preview" | "maps" | "none";
-  bottomModule: "calendar" | "preview" | "maps" | "none";
+  topModule: SidebarModule;
+  bottomModule: SidebarModule;
   splitPct: number;
   onChangeLayout: (v: "single" | "split") => void;
-  onChangeTop: (v: "calendar" | "preview" | "maps" | "none") => void;
-  onChangeBottom: (v: "calendar" | "preview" | "maps" | "none") => void;
+  onChangeTop: (v: SidebarModule) => void;
+  onChangeBottom: (v: SidebarModule) => void;
   onChangeSplitPct: (v: number) => void;
   context: {
     renderCalendar?: () => React.ReactNode;
     previewPages: PrintPage[];
   };
+  t: (k: string) => string;
 }) {
   const [dragging, setDragging] = useState(false);
 
@@ -2613,41 +1470,15 @@ function RightSidebar({
 
   if (!open) return null;
 
-  const ModuleSelect = ({
-    value,
-    onChange,
-  }: {
-    value: "calendar" | "preview" | "maps" | "none";
-    onChange: (v: "calendar" | "preview" | "maps" | "none") => void;
-  }) => (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as "calendar" | "preview" | "maps" | "none")}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 10,
-        border: "1px solid var(--ui-border)",
-        background: "var(--ui-panel)",
-        color: "var(--ui-text)",
-        fontWeight: 900,
-      }}
-    >
-      <option value="calendar">Kalender</option>
-      <option value="preview">Preview</option>
-      <option value="maps">Maps</option>
-      <option value="none">—</option>
-    </select>
-  );
-
-  const renderModule = (m: "calendar" | "preview" | "maps" | "none") => {
-    if (m === "none") return <div style={{ color: "var(--ui-muted)", padding: 20 }}>Kein Modul</div>;
+  const renderModule = (m: SidebarModule) => {
+    if (m === "none") return <div style={{ color: "var(--ui-muted)", padding: 20 }}>{t("rightNoModule")}</div>;
     if (m === "calendar") return context.renderCalendar ? context.renderCalendar() : null;
     if (m === "preview")
-      return <ExportPreview pages={context.previewPages} />;
+      return <ExportPreview pages={context.previewPages} t={t} />;
     if (m === "maps")
       return (
         <div style={{ padding: 10, color: "var(--ui-muted)" }}>
-          Maps-Modul (Platzhalter). Später: Route / Auswahl / Embed.
+          {t("rightMapsPlaceholder")}
         </div>
       );
     return null;
@@ -2665,14 +1496,14 @@ function RightSidebar({
     >
       {/* Header */}
       <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 950 }}>Rechter Bereich</div>
+        <div style={{ fontWeight: 950 }}>{t("rightAreaTitle")}</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             type="button"
             onClick={() => onChangeLayout(layout === "split" ? "single" : "split")}
             style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--ui-border)", background: "transparent", color: "var(--ui-text)", fontWeight: 900, cursor: "pointer" }}
           >
-            {layout === "split" ? "Split" : "Single"}
+            {layout === "split" ? t("layoutSplit") : t("layoutSingle")}
           </button>
         </div>
       </div>
@@ -2681,7 +1512,7 @@ function RightSidebar({
       {layout === "single" ? (
         <div style={{ display: "grid", gridTemplateRows: "auto 1fr" }}>
           <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center" }}>
-            <ModuleSelect value={topModule} onChange={onChangeTop} />
+            <RightSidebarModuleSelect value={topModule} onChange={onChangeTop} t={t} />
           </div>
           <div style={{ minHeight: 0, overflow: "auto" }}>{renderModule(topModule)}</div>
         </div>
@@ -2690,7 +1521,7 @@ function RightSidebar({
           {/* Top */}
           <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
             <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center" }}>
-              <ModuleSelect value={topModule} onChange={onChangeTop} />
+              <RightSidebarModuleSelect value={topModule} onChange={onChangeTop} t={t} />
             </div>
             <div style={{ minHeight: 0, overflow: "auto" }}>{renderModule(topModule)}</div>
           </div>
@@ -2704,13 +1535,13 @@ function RightSidebar({
               borderTop: "1px solid var(--ui-border)",
               borderBottom: "1px solid var(--ui-border)",
             }}
-            title="Ziehen zum Resizen"
+            title={t("rightResizeTitle")}
           />
 
           {/* Bottom */}
           <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
             <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center" }}>
-              <ModuleSelect value={bottomModule} onChange={onChangeBottom} />
+              <RightSidebarModuleSelect value={bottomModule} onChange={onChangeBottom} t={t} />
             </div>
             <div style={{ minHeight: 0, overflow: "auto" }}>{renderModule(bottomModule)}</div>
           </div>
@@ -2724,189 +1555,9 @@ function RightSidebar({
    GOOGLE MAPS HELPERS
    ============================================================ */
 
-// Generate session token for Places API (groups requests for billing)
-function generateSessionToken(): string {
-  return uid();
-}
-
-// Places Autocomplete (New)
-async function fetchPlacePredictions(input: string, sessionToken: string) {
-  const r = await fetch("/api/places/autocomplete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input, sessionToken }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-// Place Details (New)
-async function fetchPlaceDetails(placeId: string, sessionToken: string) {
-  const r = await fetch("/api/places/details", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ placeId, sessionToken }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-// Routes API - compute travel time
-async function fetchTravelMinutes(
-  originAddress: string,
-  destinationAddress: string,
-  departureTimeIso?: string
-): Promise<number | null> {
-  const r = await fetch("/api/routes/compute", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ originAddress, destinationAddress, departureTimeIso }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  const j = await r.json();
-  return j.minutes as number | null;
-}
-
-// Helper: resolve location name to address (legacy + new)
-function resolveLocationAddress(location: string, theme: ThemeSettings): string {
-  const loc = (location || "").trim();
-  const L = theme.locations ?? {};
-  if (!loc) return "";
-
-  // Check new locations format first
-  if (L.locations?.[loc]?.address) return L.locations[loc].address;
-
-  // Legacy fallback
-  if (loc === "BSH") return L.bsh ?? "";
-  if (loc === "SHP") return L.shp ?? "";
-  if (loc === "Seminarraum") return L.seminarraum ?? "";
-
-  return L.custom?.[loc] ?? "";
-}
-
-// Helper: resolve location name to Place ID
-function resolveLocationPlaceId(location: string, theme: ThemeSettings): string {
-  const loc = (location || "").trim();
-  const L = theme.locations ?? {};
-  if (!loc) return "";
-  return L.locations?.[loc]?.placeId ?? "";
-}
-
-// Helper: get location options for dropdown (presets + saved + custom)
-type LocationOption = {
-  value: string;   // session.location
-  label: string;   // Anzeige im Dropdown
-  kind: "preset" | "saved" | "custom";
-};
-
-function getLocationOptions(theme: ThemeSettings): LocationOption[] {
-  const L = theme.locations ?? {};
-  const locs = L.locations ?? {}; // { [name]: { address, placeId } }
-  const defs = L.definitions ?? {}; // { [name]: { abbr, name, hallNo } }
-
-  const presetNames = ["BSH", "SHP", "Seminarraum"];
-
-  const presets: LocationOption[] = presetNames.map((name) => {
-    const d = defs[name] ?? { abbr: name, name, hallNo: "" };
-    const hall = d.hallNo ? ` • Halle ${d.hallNo}` : "";
-    const abbr = d.abbr && d.abbr !== name ? ` (${d.abbr})` : "";
-    return { value: name, label: `${d.name || name}${abbr}${hall}`, kind: "preset" };
-  });
-
-  const savedNames = Object.keys(locs)
-    .filter((n) => !presetNames.includes(n))
-    .sort((a, b) => a.localeCompare(b));
-
-  const saved: LocationOption[] = savedNames.map((name) => {
-    const d = defs[name] ?? { abbr: "", name, hallNo: "" };
-    const hall = d.hallNo ? ` • Halle ${d.hallNo}` : "";
-    const abbr = d.abbr ? ` (${d.abbr})` : "";
-    return { value: name, label: `${d.name || name}${abbr}${hall}`, kind: "saved" };
-  });
-
-  return [
-    ...presets,
-    ...saved,
-    { value: "__CUSTOM__", label: "— Custom / Freitext —", kind: "custom" },
-  ];
-}
-
-// Helper: ensure custom location is saved to locations list
-function ensureLocationSaved(
-  theme: ThemeSettings,
-  setTheme: (t: ThemeSettings) => void,
-  rawName: string
-) {
-  const name = String(rawName ?? "").trim().replace(/\s+/g, " "); // normalize whitespace
-  if (!name) return;
-
-  const L = theme.locations ?? {};
-  const locs = { ...(L.locations ?? {}) };
-  const defs = { ...(L.definitions ?? {}) };
-
-  // Wenn schon vorhanden: nichts kaputtmachen
-  if (!locs[name]) {
-    locs[name] = { address: "", placeId: "" }; // bewusst leer => kein Maps-Zwang
-  }
-
-  if (!defs[name]) {
-    defs[name] = { abbr: "", name, hallNo: "" };
-  }
-
-  setTheme({
-    ...theme,
-    locations: {
-      ...L,
-      locations: locs,
-      definitions: defs,
-    },
-  });
-}
-
-// Helper: get cached travel time (TTL 7 days)
-function getCachedTravelMinutes(
-  homePlaceId: string,
-  destPlaceId: string,
-  theme: ThemeSettings
-): number | null {
-  const cache = theme.locations?.travelCache ?? {};
-  const key = `${homePlaceId}|${destPlaceId}|DRIVE`;
-  const entry = cache[key];
-  if (!entry) return null;
-
-  const ttl = 7 * 24 * 60 * 60 * 1000; // 7 days
-  const age = Date.now() - entry.cachedAt;
-  if (age > ttl) return null;
-
-  return entry.minutes;
-}
-
-// Helper: cache travel time
-function setCachedTravelMinutes(
-  homePlaceId: string,
-  destPlaceId: string,
-  minutes: number,
-  theme: ThemeSettings,
-  setTheme: (t: ThemeSettings) => void
-) {
-  const key = `${homePlaceId}|${destPlaceId}|DRIVE`;
-  setTheme({
-    ...theme,
-    locations: {
-      ...(theme.locations ?? {}),
-      travelCache: {
-        ...(theme.locations?.travelCache ?? {}),
-        [key]: { minutes, cachedAt: Date.now() },
-      },
-    },
-  });
-}
-
 /* ============================================================
    APP
    ============================================================ */
-
-const LAST_PLAN_STORAGE_KEY = "ubc_last_weekplan_v1";
 
 export default function App() {
   /* ============================================================
@@ -2917,13 +1568,28 @@ export default function App() {
      Theme
      ---------------------- */
   const [theme, setTheme] = useState<ThemeSettings>(() => {
-    const saved = safeParseTheme(typeof window !== "undefined" ? localStorage.getItem(THEME_STORAGE_KEY) : null);
-    return saved ? migrateLegacyBlueTheme(saved) : DEFAULT_THEME;
+    const saved = safeParseTheme(typeof window !== "undefined" ? localStorage.getItem(THEME_STORAGE_KEY) : null, DEFAULT_THEME);
+    return saved ? migrateLegacyBlueTheme(saved, DEFAULT_THEME) : DEFAULT_THEME;
   });
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("reset") !== "1") return;
+
+    localStorage.removeItem(THEME_STORAGE_KEY);
+    localStorage.removeItem(LAST_PLAN_STORAGE_KEY);
+    localStorage.removeItem(STAFF_STORAGE_KEY);
+    localStorage.removeItem("right_sidebar_v1");
+
+    url.searchParams.delete("reset");
+    window.history.replaceState({}, "", url.toString());
+    window.location.reload();
+  }, []);
+
+  useEffect(() => {
     setTheme((prev) => {
-      const next = migrateLegacyBlueTheme(prev);
+      const next = migrateLegacyBlueTheme(prev, DEFAULT_THEME);
       return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
     });
   }, []);
@@ -2948,136 +1614,73 @@ export default function App() {
   const t = useMemo(() => makeT(lang), [lang]);
   const tf = useMemo(() => makeTF(lang), [lang]);
 
-  type RightModule = "calendar" | "preview" | "maps" | "none";
-  type RightLayout = "single" | "split";
-  type LeftTab = "players" | "coaches" | "locations";
+  const [profiles, setProfiles] = useState<SavedProfile[]>(() =>
+    safeParseProfiles(typeof window !== "undefined" ? localStorage.getItem(PROFILES_STORAGE_KEY) : null)
+  );
+  const [activeProfileId, setActiveProfileId] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY) ?? "" : ""
+  );
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState("");
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const activeProfileName = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId)?.name ?? null,
+    [profiles, activeProfileId]
+  );
 
-  type UiState = {
-    settingsOpen: boolean;
-    eventEditorOpen: boolean;
-    rightOpen: boolean;
-    rightLayout: RightLayout;
-    rightTop: RightModule;
-    rightBottom: RightModule;
-    rightSplitPct: number;
-    openGroup: GroupId | null;
-    openExtra: null | "U18_ONLY" | "HOL_ONLY";
-    leftTab: LeftTab;
-    leftEditMode: boolean;
-    openLocationName: string | null;
-    autoTravelLoading: boolean;
-    rosterOpen: boolean;
-    newWeekOpen: boolean;
-  };
-
-  const [uiState, setUiState] = useState<UiState>({
-    settingsOpen: false,
-    eventEditorOpen: true,
-    rightOpen: true,
-    rightLayout: "split",
-    rightTop: "calendar",
-    rightBottom: "preview",
-    rightSplitPct: 0.55,
-    openGroup: null,
-    openExtra: null,
-    leftTab: "players",
-    leftEditMode: false,
-    openLocationName: null,
-    autoTravelLoading: false,
-    rosterOpen: false,
-    newWeekOpen: false,
-  });
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    function onDocMouseDown(e: MouseEvent) {
+      const node = profileMenuRef.current;
+      if (!node) return;
+      if (!node.contains(e.target as Node)) setProfileMenuOpen(false);
+    }
+    window.addEventListener("mousedown", onDocMouseDown);
+    return () => window.removeEventListener("mousedown", onDocMouseDown);
+  }, [profileMenuOpen]);
 
   const {
-    settingsOpen,
-    eventEditorOpen,
-    rightOpen,
-    rightLayout,
-    rightTop,
-    rightBottom,
-    rightSplitPct,
-    openGroup,
-    openExtra,
-    leftTab,
-    leftEditMode,
-    openLocationName,
-    autoTravelLoading,
-    rosterOpen,
-    newWeekOpen,
-  } = uiState;
+    appUiState,
+    setSettingsOpen,
+    setEventEditorOpen,
+    setRightOpen,
+    setNewWeekOpen,
+    setRightLayout,
+    setRightTop,
+    setRightBottom,
+    setRightSplitPct,
+    setOpenGroup,
+    setOpenExtra,
+    setLeftTab,
+    setLeftEditMode,
+    setOpenLocationName,
+    setRosterOpen,
+    setAutoTravelLoading,
+    setConfirmDialog,
+    setRosterSearch,
+    setSelectedPlayerId,
+  } = useAppUiState();
 
-  function setUiField<K extends keyof UiState>(key: K, value: React.SetStateAction<UiState[K]>) {
-    setUiState((prev) => ({
-      ...prev,
-      [key]: typeof value === "function" ? (value as (p: UiState[K]) => UiState[K])(prev[key]) : value,
-    }));
-  }
-
-  const setSettingsOpen = (value: React.SetStateAction<boolean>) => setUiField("settingsOpen", value);
-  const setEventEditorOpen = (value: React.SetStateAction<boolean>) => setUiField("eventEditorOpen", value);
-  const setRightOpen = (value: React.SetStateAction<boolean>) => setUiField("rightOpen", value);
-  const setRightLayout = (value: React.SetStateAction<RightLayout>) => setUiField("rightLayout", value);
-  const setRightTop = (value: React.SetStateAction<RightModule>) => setUiField("rightTop", value);
-  const setRightBottom = (value: React.SetStateAction<RightModule>) => setUiField("rightBottom", value);
-  const setRightSplitPct = (value: React.SetStateAction<number>) => setUiField("rightSplitPct", value);
-  const setOpenGroup = (value: React.SetStateAction<GroupId | null>) => setUiField("openGroup", value);
-  const setOpenExtra = (value: React.SetStateAction<null | "U18_ONLY" | "HOL_ONLY">) => setUiField("openExtra", value);
-  const setLeftTab = (value: React.SetStateAction<LeftTab>) => setUiField("leftTab", value);
-  const setLeftEditMode = (value: React.SetStateAction<boolean>) => setUiField("leftEditMode", value);
-  const setOpenLocationName = (value: React.SetStateAction<string | null>) => setUiField("openLocationName", value);
-  const setAutoTravelLoading = (value: React.SetStateAction<boolean>) => setUiField("autoTravelLoading", value);
-  const setRosterOpen = (value: React.SetStateAction<boolean>) => setUiField("rosterOpen", value);
-  const setNewWeekOpen = (value: React.SetStateAction<boolean>) => setUiField("newWeekOpen", value);
-
-  type SettingsState = {
-    confirmDialog: { open: boolean; title: string; message: string };
-    selectedPlayerId: string | null;
-    rosterSearch: string;
-  };
-
-  const [settingsState, setSettingsState] = useState<SettingsState>({
-    confirmDialog: {
-      open: false,
-      title: "Bestätigung",
-      message: "",
-    },
-    selectedPlayerId: null,
-    rosterSearch: "",
-  });
-
-  const { confirmDialog, selectedPlayerId, rosterSearch } = settingsState;
-
-  function setSettingsField<K extends keyof SettingsState>(
-    key: K,
-    value: React.SetStateAction<SettingsState[K]>
-  ) {
-    setSettingsState((prev) => ({
-      ...prev,
-      [key]: typeof value === "function" ? (value as (p: SettingsState[K]) => SettingsState[K])(prev[key]) : value,
-    }));
-  }
-
-  const setConfirmDialog = (value: React.SetStateAction<SettingsState["confirmDialog"]>) =>
-    setSettingsField("confirmDialog", value);
-  const setSelectedPlayerId = (value: React.SetStateAction<string | null>) =>
-    setSettingsField("selectedPlayerId", value);
-  const setRosterSearch = (value: React.SetStateAction<string>) => setSettingsField("rosterSearch", value);
-
-  const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
-
-  function askConfirm(title: string, message: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      confirmResolverRef.current = resolve;
-      setConfirmDialog({ open: true, title, message });
-    });
-  }
-
-  function resolveConfirm(value: boolean) {
-    setConfirmDialog((prev) => ({ ...prev, open: false }));
-    const resolver = confirmResolverRef.current;
-    confirmResolverRef.current = null;
-    resolver?.(value);
-  }
+  const settingsOpen = appUiState.settingsOpen;
+  const eventEditorOpen = appUiState.eventEditorOpen;
+  const rightOpen = appUiState.rightSidebarOpen;
+  const newWeekOpen = appUiState.newWeekOpen;
+  const rightLayout = appUiState.rightLayout;
+  const rightTop = appUiState.rightTop;
+  const rightBottom = appUiState.rightBottom;
+  const rightSplitPct = appUiState.rightSplitPct;
+  const openGroup = appUiState.openGroup;
+  const openExtra = appUiState.openExtra;
+  const leftTab = appUiState.leftTab;
+  const leftEditMode = appUiState.leftEditMode;
+  const openLocationName = appUiState.openLocationName;
+  const rosterOpen = appUiState.rosterOpen;
+  const autoTravelLoading = appUiState.autoTravelLoading;
+  const confirmDialog = appUiState.confirmDialog;
+  const rosterSearch = appUiState.rosterSearch;
+  const selectedPlayerId = appUiState.selectedPlayerId;
+  const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
 
     /* ============================================================
       EFFECTS (useEffect...)
@@ -3087,37 +1690,27 @@ export default function App() {
       Right Sidebar
       ---------------------- */
 
-  useEffect(() => {
-    const raw = localStorage.getItem("right_sidebar_v1");
-    if (!raw) return;
-    try {
-      const s = JSON.parse(raw);
-      if (typeof s.rightOpen === "boolean") setRightOpen(s.rightOpen);
-      if (s.rightLayout === "single" || s.rightLayout === "split") setRightLayout(s.rightLayout);
-      if (["calendar","preview","maps","none"].includes(s.rightTop)) setRightTop(s.rightTop);
-      if (["calendar","preview","maps","none"].includes(s.rightBottom)) setRightBottom(s.rightBottom);
-      if (typeof s.rightSplitPct === "number") setRightSplitPct(Math.max(0.2, Math.min(0.8, s.rightSplitPct)));
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "right_sidebar_v1",
-      JSON.stringify({ rightOpen, rightLayout, rightTop, rightBottom, rightSplitPct })
-    );
-  }, [rightOpen, rightLayout, rightTop, rightBottom, rightSplitPct]);
+  useRightSidebarPersistence({
+    rightOpen,
+    rightLayout,
+    rightTop,
+    rightBottom,
+    rightSplitPct,
+    setRightOpen,
+    setRightLayout,
+    setRightTop,
+    setRightBottom,
+    setRightSplitPct,
+  });
 
   /* ----------------------
      Staff / Coaches
      ---------------------- */
-  const [coaches, setCoaches] = useState<Coach[]>(() => {
-    const saved = safeParseStaff(typeof window !== "undefined" ? localStorage.getItem(STAFF_STORAGE_KEY) : null);
-    return saved ?? DEFAULT_STAFF;
-  });
-
-  useEffect(() => {
-    localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(coaches));
-  }, [coaches]);
+  const [coaches, setCoaches] = usePersistedState<Coach[]>(
+    STAFF_STORAGE_KEY,
+    DEFAULT_STAFF,
+    (savedRaw) => safeParseStaff(savedRaw) ?? DEFAULT_STAFF
+  );
 
   const staffFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -3131,12 +1724,15 @@ export default function App() {
     const list = Array.isArray(json) ? json : json?.coaches;
     if (!Array.isArray(list)) return;
     const normalized: Coach[] = list
-      .map((c: any) => ({
-        id: String(c.id ?? randomId("c_")),
-        name: String(c.name ?? ""),
-        role: String(c.role ?? "Coach"),
-        license: c.license !== undefined ? String(c.license ?? "") : "",
-      }))
+      .map((rawCoach) => {
+        const c = (rawCoach && typeof rawCoach === "object") ? (rawCoach as Record<string, unknown>) : {};
+        return {
+          id: String(c.id ?? randomId("c_")),
+          name: String(c.name ?? ""),
+          role: String(c.role ?? "Coach"),
+          license: c.license !== undefined ? String(c.license ?? "") : "",
+        };
+      })
       .filter((c: Coach) => c.id && c.name);
     if (normalized.length) setCoaches(normalized);
   }
@@ -3161,13 +1757,25 @@ export default function App() {
   /* ----------------------
      Load roster.json
      ---------------------- */
-  const normalizedRoster = useMemo(() => normalizeRoster(rosterRaw as any), []);
-  const [rosterMeta, setRosterMeta] = useState<{ season: string; ageGroups: any }>({
+  const normalizedRoster = useMemo(() => normalizeRoster(rosterRaw as unknown), []);
+  const [rosterMeta, setRosterMeta] = useState<{ season: string; ageGroups: unknown }>({
     season: normalizedRoster.season,
     ageGroups: normalizedRoster.ageGroups,
   });
 
   const [players, setPlayers] = useState<Player[]>(() => normalizedRoster.players);
+
+  useEffect(() => {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+  }, [profiles]);
+
+  useEffect(() => {
+    if (!activeProfileId) {
+      localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(ACTIVE_PROFILE_STORAGE_KEY, activeProfileId);
+  }, [activeProfileId]);
 
   /* ----------------------
      Ensure TBD placeholder exists
@@ -3195,44 +1803,13 @@ export default function App() {
   /* ----------------------
      Plan: use last plan if exists, else master
      ---------------------- */
-  const masterPlan = useMemo(() => normalizeMasterWeek(weekMasterRaw as any), []);
+  const masterPlan = useMemo(() => normalizeMasterWeek(weekMasterRaw as unknown), []);
 
-  const [plan, setPlan] = useState<WeekPlan>(() => {
-    const savedRaw = typeof window !== "undefined" ? localStorage.getItem(LAST_PLAN_STORAGE_KEY) : null;
-    if (savedRaw) {
-      try {
-        const obj = JSON.parse(savedRaw);
-        if (obj && typeof obj === "object" && Array.isArray(obj.sessions)) {
-          const sessions: Session[] = obj.sessions.map((s: any) => ({
-            id: String(s.id),
-            date: String(s.date ?? ""),
-            day: String(s.day ?? ""),
-            teams: Array.isArray(s.teams) ? s.teams.map((x: any) => String(x)) : [],
-            time: normalizeDash(String(s.time ?? "")),
-            location: String(s.location ?? ""),
-            info: s.info !== undefined && s.info !== null ? String(s.info) : null,
-            warmupMin: s.warmupMin !== undefined && s.warmupMin !== null ? Number(s.warmupMin) : null,
-            travelMin: s.travelMin !== undefined && s.travelMin !== null ? Number(s.travelMin) : null,
-            participants: Array.isArray(s.participants) ? s.participants.map((x: any) => String(x)) : [],
-            kaderLabel: s.kaderLabel ? String(s.kaderLabel) : undefined,
-          }));
-          sessions.sort((a, b) => {
-            const ad = a.date.localeCompare(b.date);
-            if (ad !== 0) return ad;
-            return a.time.localeCompare(b.time);
-          });
-          return { weekId: String(obj.weekId ?? "LAST"), sessions };
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return masterPlan;
-  });
-
-  useEffect(() => {
-    localStorage.setItem(LAST_PLAN_STORAGE_KEY, JSON.stringify(plan));
-  }, [plan]);
+  const [plan, setPlan] = usePersistedState<WeekPlan>(
+    LAST_PLAN_STORAGE_KEY,
+    masterPlan,
+    reviveWeekPlan
+  );
 
   /* ----------------------
      Export HTML (Source of Truth)
@@ -3267,6 +1844,8 @@ export default function App() {
   const conflictsBySession = useMemo(() => computeConflictsBySession(plan), [plan]);
 
   const [lastDropError, setLastDropError] = useState<string | null>(null);
+  const [collapsedParticipantsBySession, setCollapsedParticipantsBySession] = useState<Record<string, boolean>>({});
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   const playerById = useMemo(() => {
     const m = new Map<string, Player>();
@@ -3330,63 +1909,7 @@ const holOnlyPlayers = useMemo(() => {
   /* ============================================================
      DnD: add/remove participants
      ============================================================ */
-  type SessionConflict = {
-    sessionId: string; // where conflict exists
-    playerId: string;
-    otherSessionId: string;
-  };
-
-  function sessionsOverlap(a: Session, b: Session): boolean {
-    if (!a.date || !b.date) return false;
-    if (a.date !== b.date) return false;
-
-    const ra = splitTimeRange(a.time ?? "");
-    const rb = splitTimeRange(b.time ?? "");
-    if (!ra || !rb) return false;
-
-    const [aStart, aEnd] = ra;
-    const [bStart, bEnd] = rb;
-
-    // start-only (game): do not treat as overlap participant conflict
-    if (aStart === aEnd || bStart === bEnd) return false;
-
-    const aS = parseInt(aStart.slice(0, 2), 10) * 60 + parseInt(aStart.slice(3, 5), 10);
-    const aE = parseInt(aEnd.slice(0, 2), 10) * 60 + parseInt(aEnd.slice(3, 5), 10);
-    const bS = parseInt(bStart.slice(0, 2), 10) * 60 + parseInt(bStart.slice(3, 5), 10);
-    const bE = parseInt(bEnd.slice(0, 2), 10) * 60 + parseInt(bEnd.slice(3, 5), 10);
-
-    // overlap if intervals intersect (strict)
-    return aS < bE && bS < aE;
-  }
-
-  function computeConflictsBySession(plan: WeekPlan): Map<string, SessionConflict[]> {
-    const res = new Map<string, SessionConflict[]>();
-    for (const s of plan.sessions) res.set(s.id, []);
-
-    // For each player, find overlapping sessions they are assigned to
-    const sessions = plan.sessions.slice();
-    for (let i = 0; i < sessions.length; i++) {
-      for (let j = i + 1; j < sessions.length; j++) {
-        const a = sessions[i];
-        const b = sessions[j];
-        if (!sessionsOverlap(a, b)) continue;
-
-        const aSet = new Set(a.participants ?? []);
-        const bSet = new Set(b.participants ?? []);
-
-        for (const pid of aSet) {
-          if (!bSet.has(pid)) continue;
-          // same player in overlapping sessions => conflict on both sessions
-          res.get(a.id)!.push({ sessionId: a.id, playerId: pid, otherSessionId: b.id });
-          res.get(b.id)!.push({ sessionId: b.id, playerId: pid, otherSessionId: a.id });
-        }
-      }
-    }
-
-    return res;
-  }
-
-  const removePlayerFromSession = useCallback((sessionId: string, playerId: string) => {
+  function removePlayerFromSession(sessionId: string, playerId: string) {
     setPlan((prev) => ({
       ...prev,
       sessions: prev.sessions.map((s) => {
@@ -3395,7 +1918,7 @@ const holOnlyPlayers = useMemo(() => {
         return { ...s, participants: next };
       }),
     }));
-  }, [sortParticipants]);
+  }
 
 
   /* ============================================================
@@ -3476,35 +1999,45 @@ const holOnlyPlayers = useMemo(() => {
     const game = isGameInfo(info);
     const away = info.startsWith("@");
 
-    if (game) {
-      if (formWarmupMin <= 0) setFormWarmupMin(90);
+    setEditorState((prev) => {
+      let nextWarmupMin = prev.formWarmupMin;
+      let nextTravelMin = prev.formTravelMin;
 
-      if (away) {
-        if (formTravelMin <= 0) setFormTravelMin(90);
+      if (game) {
+        if (nextWarmupMin <= 0) nextWarmupMin = 90;
+
+        if (away) {
+          if (nextTravelMin <= 0) nextTravelMin = 90;
+        } else if (nextTravelMin !== 0) {
+          nextTravelMin = 0;
+        }
       } else {
-        if (formTravelMin !== 0) setFormTravelMin(0);
+        if (nextWarmupMin !== 0) nextWarmupMin = 0;
+        if (nextTravelMin !== 0) nextTravelMin = 0;
       }
-    } else {
-      if (formWarmupMin !== 0) setFormWarmupMin(0);
-      if (formTravelMin !== 0) setFormTravelMin(0);
-    }
-  }, [formOpponent, formWarmupMin, formTravelMin]);
 
-  function isGameInfo(info: string | null | undefined): boolean {
-    const t = String(info ?? "").trim().toLowerCase();
-    return t.startsWith("vs") || t.startsWith("@") || t.includes(" vs ") || t.includes(" @ ");
-  }
+      if (nextWarmupMin === prev.formWarmupMin && nextTravelMin === prev.formTravelMin) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        formWarmupMin: nextWarmupMin,
+        formTravelMin: nextTravelMin,
+      };
+    });
+  }, [formOpponent]);
 
   function currentLocationValue(): string {
     if (locationMode === "__CUSTOM__") return (customLocation || "").trim() || "—";
     return locationMode;
   }
 
-  const onToggleTeam = useCallback((t: string) => {
+  function onToggleTeam(t: string) {
     setFormTeams((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  }, [setFormTeams]);
+  }
 
-  const resetForm = useCallback(() => {
+  function resetForm() {
     setEditingSessionId(null);
     setFormDate(new Date().toISOString().slice(0, 10));
     setFormTeams(["NBBL"]);
@@ -3515,7 +2048,7 @@ const holOnlyPlayers = useMemo(() => {
     setFormOpponent("");
     setFormWarmupMin(30);
     setFormTravelMin(0);
-  }, [setCustomLocation, setEditingSessionId, setFormDate, setFormDuration, setFormOpponent, setFormStart, setFormTeams, setFormTravelMin, setFormWarmupMin, setLocationMode]);
+  }
 
   function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
     const info = normalizeOpponentInfo(formOpponent);
@@ -3568,7 +2101,7 @@ const holOnlyPlayers = useMemo(() => {
     resetForm();
   }
 
-  const onEditSession = useCallback((s: Session) => {
+  function onEditSession(s: Session) {
     setEventEditorOpen(true);
     setEditingSessionId(s.id);
     setFormDate(s.date);
@@ -3587,7 +2120,7 @@ const holOnlyPlayers = useMemo(() => {
     const loc = (s.location ?? "").trim();
     // Check if location is a preset or saved location
     const savedLocations = Object.keys(theme.locations?.locations ?? {});
-    const isKnownLocation = LOCATION_PRESETS.includes(loc as any) || savedLocations.includes(loc);
+    const isKnownLocation = LOCATION_PRESETS.includes(loc as (typeof LOCATION_PRESETS)[number]) || savedLocations.includes(loc);
     
     if (isKnownLocation) {
       setLocationMode(loc);
@@ -3616,18 +2149,18 @@ const holOnlyPlayers = useMemo(() => {
     const game = isGameInfo(s.info ?? "");
     setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
     setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
-  }, [theme.locations?.locations]);
+  }
 
-  const onDeleteSession = useCallback(async (sessionId: string) => {
+  async function onDeleteSession(sessionId: string) {
     const s = plan.sessions.find((x) => x.id === sessionId);
     const label = s ? `${s.day} ${s.date} | ${(s.teams ?? []).join("/")} | ${s.time}` : sessionId;
     if (!(await askConfirm(t("delete"), tf("confirmDeleteEvent", { label })))) return;
 
     setPlan((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== sessionId) }));
     if (editingSessionId === sessionId) resetForm();
-  }, [askConfirm, editingSessionId, plan.sessions, resetForm, t, tf]);
+  }
 
-  const toggleSessionTravel = useCallback((sessionId: string) => {
+  function toggleSessionTravel(sessionId: string) {
     setPlan((prev) => ({
       ...prev,
       sessions: prev.sessions.map((s) => {
@@ -3637,9 +2170,9 @@ const holOnlyPlayers = useMemo(() => {
         return { ...s, travelMin: next };
       }),
     }));
-  }, []);
+  }
 
-  const toggleSessionWarmup = useCallback((sessionId: string) => {
+  function toggleSessionWarmup(sessionId: string) {
     setPlan((prev) => ({
       ...prev,
       sessions: prev.sessions.map((s) => {
@@ -3649,9 +2182,9 @@ const holOnlyPlayers = useMemo(() => {
         return { ...s, warmupMin: next };
       }),
     }));
-  }, []);
+  }
 
-  const handleOpenEventEditor = useCallback((eventId: string) => {
+  function handleOpenEventEditor(eventId: string) {
     const target = plan.sessions.find((x) => x.id === eventId);
     if (!target) return;
     onEditSession(target);
@@ -3662,7 +2195,7 @@ const holOnlyPlayers = useMemo(() => {
         if (dateEl) dateEl.focus();
       }, 500);
     });
-  }, [onEditSession, plan.sessions]);
+  }
 
   const dnd = useDndPlan({
     weekPlan: plan,
@@ -3678,6 +2211,83 @@ const holOnlyPlayers = useMemo(() => {
     tf,
     confirm: askConfirm,
   });
+
+  const currentProfilePayload = useCallback((): ProfilePayload => {
+    return {
+      rosterMeta,
+      players,
+      coaches,
+      locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
+    };
+  }, [rosterMeta, players, coaches, theme.locations]);
+
+  function applyProfile(profile: SavedProfile) {
+    setRosterMeta(profile.payload.rosterMeta);
+    setPlayers(profile.payload.players);
+    setCoaches(profile.payload.coaches);
+    setTheme((prev) => ({
+      ...prev,
+      locations: profile.payload.locations,
+    }));
+  }
+
+  function createProfile() {
+    const name = profileNameInput.trim();
+    if (!name) return;
+    const id = randomId("profile_");
+    const entry: SavedProfile = {
+      id,
+      name,
+      payload: currentProfilePayload(),
+    };
+    setProfiles((prev) => [...prev, entry]);
+    setActiveProfileId(id);
+    setProfileNameInput("");
+  }
+
+  function updateActiveProfile() {
+    if (!activeProfileId) return;
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === activeProfileId
+          ? {
+              ...p,
+              name: profileNameInput.trim() || p.name,
+              payload: currentProfilePayload(),
+            }
+          : p
+      )
+    );
+  }
+
+  function deleteActiveProfile() {
+    if (!activeProfileId) return;
+    setProfiles((prev) => prev.filter((p) => p.id !== activeProfileId));
+    setActiveProfileId("");
+  }
+
+  function selectProfile(id: string) {
+    setActiveProfileId(id);
+    const hit = profiles.find((p) => p.id === id);
+    if (hit) {
+      applyProfile(hit);
+      setProfileNameInput(hit.name);
+    }
+  }
+
+  useEffect(() => {
+    if (!activeProfileId) return;
+    setProfiles((prev) => {
+      const idx = prev.findIndex((p) => p.id === activeProfileId);
+      if (idx < 0) return prev;
+      const nextPayload = currentProfilePayload();
+      const cur = prev[idx];
+      if (JSON.stringify(cur.payload) === JSON.stringify(nextPayload)) return prev;
+      const copy = [...prev];
+      copy[idx] = { ...cur, payload: nextPayload };
+      return copy;
+    });
+  }, [activeProfileId, currentProfilePayload]);
 
   /* ============================================================
      Roster editor: import/export roster.json
@@ -3713,9 +2323,9 @@ const holOnlyPlayers = useMemo(() => {
     const id = randomId("p_");
     const p: Player = {
       id,
-      firstName: "Vorname",
-      lastName: "Name",
-      name: "Vorname Name",
+      firstName: t("firstName"),
+      lastName: t("name"),
+      name: `${t("firstName")} ${t("name")}`,
       birthYear: 2009,
       birthDate: "",
       positions: [],
@@ -3751,7 +2361,7 @@ const holOnlyPlayers = useMemo(() => {
     const json = JSON.parse(text);
 
     // accept either new schema {season,ageGroups,players} or old {players:[...]} or raw array
-    let normalized = { season: "", ageGroups: null as any, players: [] as Player[] };
+    let normalized = { season: "", ageGroups: null as unknown, players: [] as Player[] };
 
     if (Array.isArray(json)) {
       // Raw array -> enrich direkt
@@ -3917,7 +2527,7 @@ const holOnlyPlayers = useMemo(() => {
      New Week
      ============================================================ */
 
-  const closeNewWeek = useMemo(() => () => setNewWeekOpen(false), []);
+  const closeNewWeek = useCallback(() => setNewWeekOpen(false), [setNewWeekOpen]);
 
   function applyWeekDatesToSessions(sessions: Session[], weekStartMondayISO: string): Session[] {
     return sessions
@@ -4025,6 +2635,49 @@ const holOnlyPlayers = useMemo(() => {
     }
     .flexRow > * { min-width: 0; }
 
+    .touchBtn {
+      min-height: 42px;
+    }
+
+    .topBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .topBarLeft,
+    .topBarRight {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .topBarRight {
+      margin-left: auto;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .profileQuickMenu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 240px;
+      max-width: min(320px, 92vw);
+      border: 1px solid var(--ui-border);
+      border-radius: 12px;
+      background: var(--ui-card);
+      box-shadow: 0 8px 24px rgba(0,0,0,.25);
+      padding: 8px;
+      z-index: 200;
+      display: grid;
+      gap: 6px;
+    }
+
     .modalBody { container-type: inline-size; }
 
     /* Layout */
@@ -4058,6 +2711,33 @@ const holOnlyPlayers = useMemo(() => {
       }
       .grid2, .grid2equal, .rosterGrid {
         grid-template-columns: 1fr;
+      }
+
+      .topBar {
+        align-items: stretch;
+      }
+
+      .topBarLeft,
+      .topBarRight {
+        width: 100%;
+      }
+
+      .topBarRight {
+        margin-left: 0;
+        justify-content: flex-start;
+      }
+
+      .profileQuickMenu {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        top: auto;
+        bottom: 12px;
+        max-width: none;
+        min-width: 0;
+        max-height: 55vh;
+        overflow: auto;
+        z-index: 1000;
       }
     }
 
@@ -4195,7 +2875,7 @@ const holOnlyPlayers = useMemo(() => {
                       fontSize: 12,
                       fontWeight: 950,
                     }}
-                    title="Bearbeitungsmodus für die aktuelle Liste"
+                    title={t("editModeCurrentListTitle")}
                   >
                     {leftEditMode ? t("editModeOn") : t("editModeOff")}
                   </button>
@@ -4212,7 +2892,7 @@ const holOnlyPlayers = useMemo(() => {
                   </div>
 
                   <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 13, fontWeight: 700 }}>
-                    Gruppe klicken → aufklappen. Spieler ziehen → rechts droppen.
+                    {t("playersPanelHint")}
                   </div>
 
                   <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
@@ -4236,9 +2916,9 @@ const holOnlyPlayers = useMemo(() => {
         fontWeight: 900,
       }}
     >
-      <span>U18 (nur)</span>
+      <span>{t("groupU18Only")}</span>
       <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-        {u18OnlyPlayers.length} Player
+        {u18OnlyPlayers.length} {t("players")}
       </span>
     </button>
 
@@ -4251,6 +2931,7 @@ const holOnlyPlayers = useMemo(() => {
             trainingCount={trainingCounts.get(p.id) ?? 0}
             groupBg={groupBg}
             isBirthday={birthdayPlayerIds.has(p.id)}
+            t={t}
           />
         ))}
       </div>
@@ -4277,9 +2958,9 @@ const holOnlyPlayers = useMemo(() => {
         fontWeight: 900,
       }}
     >
-      <span>HOL (nur)</span>
+      <span>{t("groupHolOnly")}</span>
       <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-        {holOnlyPlayers.length} Player
+        {holOnlyPlayers.length} {t("players")}
       </span>
     </button>
 
@@ -4292,6 +2973,7 @@ const holOnlyPlayers = useMemo(() => {
             trainingCount={trainingCounts.get(p.id) ?? 0}
             groupBg={groupBg}
             isBirthday={birthdayPlayerIds.has(p.id)}
+            t={t}
           />
         ))}
       </div>
@@ -4302,7 +2984,7 @@ const holOnlyPlayers = useMemo(() => {
                     {GROUPS.map((g) => {
                       const arr = playersByGroup.get(g.id) ?? [];
                       const isOpen = openGroup === g.id;
-                      const groupRightLabel = g.id === "TBD" ? "To be determined" : `${arr.length} Player`;
+                      const groupRightLabel = g.id === "TBD" ? t("groupTbdLong") : `${arr.length} ${t("players")}`;
 
                       return (
                         <div key={g.id} style={{ borderRadius: 14 }}>
@@ -4339,6 +3021,7 @@ const holOnlyPlayers = useMemo(() => {
                                   trainingCount={trainingCounts.get(p.id) ?? 0}
                                   groupBg={groupBg}
                                   isBirthday={birthdayPlayerIds.has(p.id)}
+                                  t={t}
                                 />
                               ))}
                             </div>
@@ -4353,24 +3036,24 @@ const holOnlyPlayers = useMemo(() => {
               {leftTab === "coaches" && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-                    <div style={{ fontSize: 18, fontWeight: 900 }}>Coaches</div>
+                    <div style={{ fontSize: 18, fontWeight: 900 }}>{t("coaches")}</div>
                     {leftEditMode && (
                       <Button variant="outline" onClick={addCoach} style={{ padding: "8px 10px" }}>
-                        + Coach
+                        + {t("coach")}
                       </Button>
                     )}
                   </div>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Button variant="outline" onClick={exportStaff} style={{ padding: "8px 10px" }}>
-                      Export staff.json
+                      {t("export")} staff.json
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => staffFileRef.current?.click()}
                       style={{ padding: "8px 10px" }}
                     >
-                      Import staff.json
+                      {t("import")} staff.json
                     </Button>
                     <input
                       ref={staffFileRef}
@@ -4404,7 +3087,7 @@ const holOnlyPlayers = useMemo(() => {
                               onClick={() => deleteCoach(c.id)}
                               style={{ padding: "6px 10px", borderColor: "#ef4444", color: "#ef4444" }}
                             >
-                              löschen
+                              {t("delete").toLowerCase()}
                             </Button>
                           )}
                         </div>
@@ -4416,19 +3099,19 @@ const holOnlyPlayers = useMemo(() => {
                         ) : (
                           <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                             <div>
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>Name</div>
+                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("name")}</div>
                               <Input value={c.name} onChange={(v) => updateCoach(c.id, { name: v })} />
                             </div>
                             <div>
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>Rolle</div>
+                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("role")}</div>
                               <Input value={c.role} onChange={(v) => updateCoach(c.id, { role: v })} />
                             </div>
                             <div style={{ gridColumn: "1 / span 2" }}>
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>Lizenznummer</div>
+                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("licenseNumber")}</div>
                               <Input
                                 value={c.license ?? ""}
                                 onChange={(v) => updateCoach(c.id, { license: v })}
-                                placeholder="z.B. B-23273"
+                                placeholder={t("licenseNumberExample")}
                               />
                             </div>
                           </div>
@@ -4446,6 +3129,7 @@ const holOnlyPlayers = useMemo(() => {
                   editMode={leftEditMode}
                   openLocationName={openLocationName}
                   setOpenLocationName={setOpenLocationName}
+                  t={t}
                 />
               )}
             </div>
@@ -4453,10 +3137,11 @@ const holOnlyPlayers = useMemo(() => {
             {/* RIGHT */}
             <div className="rightPane" style={{ padding: 16, overflow: "auto", background: "var(--ui-bg)" }}>
               {/* Top bar */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div className="topBar">
                 {/* Left: Flag Button */}
-                <div>
+                <div className="topBarLeft">
                   <Button
+                    className="touchBtn"
                     variant="outline"
                     onClick={() => setTheme((p) => ({ ...p, locale: (p.locale === "de" ? "en" : "de") as Lang }))}
                     title={t("language")}
@@ -4467,40 +3152,110 @@ const holOnlyPlayers = useMemo(() => {
                       display: "grid",
                       placeItems: "center",
                       borderRadius: 10,
-                      fontSize: 18,
-                      lineHeight: "18px",
-                      fontFamily: `"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",system-ui, -apple-system, "Segoe UI", Roboto, Arial`,
-                      fontVariantEmoji: "emoji" as any,
-                      textTransform: "none",
+                      overflow: "hidden",
                     }}
                   >
-                    <span role="img" aria-label={theme.locale === "de" ? "Deutsch" : "English"}>
-                      {theme.locale === "de" ? "🇩🇪" : "🇬🇧"}
-                    </span>
+                    <img
+                      src={theme.locale === "de" ? "/flags/de.svg" : "/flags/gb.svg"}
+                      alt={theme.locale === "de" ? "Deutsch" : "English"}
+                      style={{ width: 24, height: 16, borderRadius: 2, display: "block" }}
+                    />
                   </Button>
+
+                  <div ref={profileMenuRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Button
+                      className="touchBtn"
+                      variant="outline"
+                      onClick={() => setProfilesOpen(true)}
+                      title={activeProfileName ?? t("profileNone")}
+                      style={{
+                        padding: "8px 10px",
+                        maxWidth: 230,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      👤 {activeProfileName ?? t("profiles")}
+                    </Button>
+
+                    <Button
+                      className="touchBtn"
+                      variant="outline"
+                      onClick={() => setProfileMenuOpen((v) => !v)}
+                      title={t("profiles")}
+                      style={{ width: 32, height: 34, padding: 0, display: "grid", placeItems: "center" }}
+                    >
+                      ▾
+                    </Button>
+
+                    {profileMenuOpen && (
+                      <div className="profileQuickMenu">
+                        {profiles.length === 0 && (
+                          <div style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12, padding: "6px 8px" }}>
+                            {t("profileNone")}
+                          </div>
+                        )}
+
+                        {profiles.map((p) => {
+                          const active = p.id === activeProfileId;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                selectProfile(p.id);
+                                setProfileMenuOpen(false);
+                              }}
+                              style={{
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                borderRadius: 10,
+                                border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
+                                background: active ? "rgba(59,130,246,.18)" : "transparent",
+                                color: "var(--ui-text)",
+                                fontWeight: 900,
+                                cursor: "pointer",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                              title={p.name}
+                            >
+                              {p.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Right: Other Buttons */}
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <div className="topBarRight">
                   <Button
+                    className="touchBtn"
                     variant={eventEditorOpen ? "solid" : "outline"}
                     onClick={() => setEventEditorOpen((v) => !v)}
                     style={{ padding: "8px 10px" }}
                   >
-                    📝 Event
+                    📝 {t("event")}
                   </Button>
-                  <Button variant="outline" onClick={() => setNewWeekOpen(true)} style={{ padding: "8px 10px" }}>
+                  <Button className="touchBtn" variant="outline" onClick={() => setNewWeekOpen(true)} style={{ padding: "8px 10px" }}>
                     {t("newWeek")}
                   </Button>
                   <Button
+                    className="touchBtn"
                     variant={rightOpen ? "solid" : "outline"}
                     onClick={() => setRightOpen((v) => !v)}
-                    title="Rechte Leiste ein-/ausblenden"
+                    title={t("toggleRightSidebar")}
                     style={{ padding: "8px 10px" }}
                   >
-                    📌 Right
+                    📌 {t("right")}
                   </Button>
                   <Button
+                    className="touchBtn"
                     variant="outline"
                     onClick={() => setSettingsOpen(true)}
                     title={t("settings")}
@@ -4519,6 +3274,7 @@ const holOnlyPlayers = useMemo(() => {
                 open={eventEditorOpen}
                 onClose={() => setEventEditorOpen(false)}
                 title={editingSessionId ? t("eventEdit") : t("eventPlan")}
+                closeLabel={t("close")}
               >
               <div ref={editorRef} style={{ border: `1px solid var(--ui-border)`, borderRadius: 16, background: "var(--ui-panel)", overflow: "hidden" }}>
                 <div
@@ -4559,7 +3315,36 @@ const holOnlyPlayers = useMemo(() => {
 
                 <div className="grid2">
                   <div style={{ fontWeight: 900 }}>{t("date")}</div>
-                  <Input id="event_form_date" type="date" value={formDate} onChange={setFormDate} />
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {weekDates.map((d) => {
+                        const active = d === formDate;
+                        const wd = weekdayShortLocalized(d, lang);
+                        const dd = d.slice(8, 10);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setFormDate(d)}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 999,
+                              border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
+                              background: active ? "rgba(59,130,246,.18)" : "transparent",
+                              color: "var(--ui-text)",
+                              fontWeight: 900,
+                              cursor: "pointer",
+                              fontSize: 12,
+                              minHeight: 36,
+                            }}
+                          >
+                            {wd} {dd}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Input id="event_form_date" type="date" value={formDate} onChange={setFormDate} />
+                  </div>
 
                   <div style={{ fontWeight: 900 }}>{t("teams")}</div>
                   <div className="flexRow">
@@ -4581,7 +3366,7 @@ const holOnlyPlayers = useMemo(() => {
                   <div style={{ fontWeight: 900 }}>{t("location")}</div>
                   <div style={{ display: "grid", gap: 8 }}>
                     {(() => {
-                      const locationOptions = getLocationOptions(theme);
+                      const locationOptions = getLocationOptions(theme, t);
                       return (
                         <select
                           value={locationMode === "__CUSTOM__" ? "__CUSTOM__" : locationMode}
@@ -4605,7 +3390,7 @@ const holOnlyPlayers = useMemo(() => {
                             width: "100%",
                           }}
                         >
-                          <option value="">— auswählen —</option>
+                          <option value="">{t("selectPlaceholder")}</option>
                           {locationOptions.map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
@@ -4619,17 +3404,17 @@ const holOnlyPlayers = useMemo(() => {
                         <Input
                           value={customLocation}
                           onChange={(v) => setCustomLocation(v)}
-                          placeholder="Custom Ort (z.B. 'Parkplatz Halle', 'Fitness Studio XY', ...)"
+                          placeholder={t("customLocationPlaceholder")}
                         />
 
                         <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
                           <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
-                            Custom Orte sind ohne Maps/Adresse nutzbar. Optional kannst du sie als Ort speichern.
+                            {t("customLocationHint")}
                           </div>
 
                           {(() => {
                             const name = customLocation.trim().replace(/\s+/g, " ");
-                            const locationOptions = getLocationOptions(theme);
+                            const locationOptions = getLocationOptions(theme, t);
                             const alreadyExists = locationOptions.some(
                               (o) => o.value.toLowerCase() === name.toLowerCase() && o.kind !== "custom"
                             );
@@ -4637,7 +3422,7 @@ const holOnlyPlayers = useMemo(() => {
                             if (alreadyExists && name) {
                               return (
                                 <div style={{ fontSize: 11, color: "var(--ui-accent)", fontWeight: 900, whiteSpace: "nowrap" }}>
-                                  ✓ Ort existiert bereits
+                                  ✓ {t("locationAlreadyExists")}
                                 </div>
                               );
                             }
@@ -4650,7 +3435,7 @@ const holOnlyPlayers = useMemo(() => {
 
                                   ensureLocationSaved(theme, setTheme, name);
 
-                                  // Optional: direkt auf „Orte" springen und aufklappen
+                                  // Optional: direkt auf Orte springen und aufklappen
                                   setLeftTab("locations");
                                   setLeftEditMode(true);
                                   setOpenLocationName(name);
@@ -4667,9 +3452,9 @@ const holOnlyPlayers = useMemo(() => {
                                   opacity: name ? 1 : 0.5,
                                   whiteSpace: "nowrap",
                                 }}
-                                title="Speichert den Custom-Ort in deiner Orte-Liste (ohne Google/PlaceId)."
+                                title={t("saveCustomLocationTitle")}
                               >
-                                Als Ort speichern
+                                {t("saveAsLocation")}
                               </button>
                             );
                           })()}
@@ -4678,7 +3463,7 @@ const holOnlyPlayers = useMemo(() => {
                     )}
                   </div>
 
-                  <div style={{ fontWeight: 900 }}>Start</div>
+                  <div style={{ fontWeight: 900 }}>{t("start")}</div>
                   <Input type="time" value={formStart} onChange={setFormStart} />
 
                   <div style={{ fontWeight: 900 }}>{t("duration")} (Min)</div>
@@ -4687,11 +3472,11 @@ const holOnlyPlayers = useMemo(() => {
                     onChange={setFormDuration}
                     presets={[60, 90, 120]}
                     allowZero={false}
-                    placeholder="z. B. 90"
+                    placeholder={t("minutesExample")}
                   />
 
-                  <div style={{ fontWeight: 900 }}>Event/Gegner</div>
-                  <Input ref={opponentInputRef} value={formOpponent} onChange={setFormOpponent} placeholder='z.B. "vs Vechta" oder "@ Paderborn"' />
+                  <div style={{ fontWeight: 900 }}>{t("eventOpponent")}</div>
+                  <Input ref={opponentInputRef} value={formOpponent} onChange={setFormOpponent} placeholder={t("eventOpponentExample")} />
 
                   {(() => {
                     const info = normalizeOpponentInfo(formOpponent);
@@ -4701,25 +3486,25 @@ const holOnlyPlayers = useMemo(() => {
 
                     return (
                       <>
-                        <div style={{ fontWeight: 900 }}>Treffen + Warm-up (Min)</div>
+                        <div style={{ fontWeight: 900 }}>{t("meetingWarmupMin")}</div>
                         <MinutePicker
                           value={formWarmupMin}
                           onChange={setFormWarmupMin}
                           presets={[45, 60, 75, 90, 105, 120]}
                           allowZero={false}
-                          placeholder="z. B. 90"
+                          placeholder={t("minutesExample")}
                         />
 
                         {away && (
                           <>
-                            <div style={{ fontWeight: 900 }}>Reisezeit (Min)</div>
+                            <div style={{ fontWeight: 900 }}>{t("travelMin")}</div>
                             <div style={{ display: "grid", gap: 8 }}>
                               <MinutePicker
                                 value={formTravelMin}
                                 onChange={setFormTravelMin}
                                 presets={[30, 45, 60, 75, 90, 105, 120, 150]}
                                 allowZero={true}
-                                placeholder="z. B. 90"
+                                placeholder={t("minutesExample")}
                               />
                               {(() => {
                                 const homeAddr = theme.locations?.homeAddress ?? "";
@@ -4766,8 +3551,8 @@ const holOnlyPlayers = useMemo(() => {
                                     disabled={!canAutoTravel || autoTravelLoading}
                                     title={
                                       canAutoTravel
-                                        ? "Reisezeit automatisch berechnen (Google Routes API via Proxy)"
-                                        : "Adresse im Orte-Panel hinterlegen"
+                                        ? t("autoTravelTitle")
+                                        : t("autoTravelDisabledTitle")
                                     }
                                     style={{
                                       ...segBtn(false),
@@ -4777,7 +3562,7 @@ const holOnlyPlayers = useMemo(() => {
                                       cursor: canAutoTravel && !autoTravelLoading ? "pointer" : "not-allowed",
                                     }}
                                   >
-                                    {autoTravelLoading ? "⏳ Berechne..." : "🚗 Auto-Reisezeit"}
+                                    {autoTravelLoading ? `⏳ ${t("calculating")}` : `🚗 ${t("autoTravel")}`}
                                   </button>
                                 );
                               })()}
@@ -4792,16 +3577,16 @@ const holOnlyPlayers = useMemo(() => {
 
                 <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>
                   <Button onClick={upsertSession}>
-                    {editingSessionId ? "Änderungen speichern" : "Event hinzufügen"}
+                    {editingSessionId ? t("saveChanges") : t("addEvent")}
                   </Button>
-                  <Button variant="outline" onClick={resetForm}>Reset</Button>
+                  <Button variant="outline" onClick={resetForm}>{t("reset")}</Button>
 
                   <div style={{ marginLeft: "auto", color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
                     {(() => {
                       const info = normalizeOpponentInfo(formOpponent);
                       const dur = isGameInfo(info) ? 120 : formDuration;
                       return (
-                        <>Vorschau: {formStart}–{addMinutesToHHMM(formStart, dur)} | {currentLocationValue()}</>
+                        <>{t("preview")}: {formStart}–{addMinutesToHHMM(formStart, dur)} | {currentLocationValue()}</>
                       );
                     })()}
                     {normalizeOpponentInfo(formOpponent) ? ` | ${normalizeOpponentInfo(formOpponent)}` : ""}
@@ -4812,7 +3597,7 @@ const holOnlyPlayers = useMemo(() => {
 
               {/* Week plan board */}
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>Wochenplan</div>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>{t("weekPlan")}</div>
                 {lastDropError && (
                   <div
                     style={{
@@ -4836,12 +3621,18 @@ const holOnlyPlayers = useMemo(() => {
                       session={s}
                       hasHistoryFlag={(historyFlagsBySession.get(s.id) ?? []).length > 0}
                       isEditing={editingSessionId === s.id}
-                      onSelect={onEditSession}
+                      isSelected={selectedSessionId === s.id}
+                      onSelect={(session) => setSelectedSessionId(session.id)}
                     >
+                      {(() => {
+                        const dayLabel = weekdayShortLocalized(s.date, lang) || s.day;
+                        const participantsCollapsed = collapsedParticipantsBySession[s.id] === true;
+                        return (
+                      <>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                         <div>
                           <div style={{ fontWeight: 900, color: "var(--ui-text)" }}>
-                            {s.day} • {s.date}
+                            {dayLabel} • {s.date}
                           </div>
                           <div style={{ fontWeight: 800, color: "var(--ui-soft)" }}>
                             {(s.teams ?? []).join(" / ")} — {s.time} — {s.location}
@@ -4881,7 +3672,7 @@ const holOnlyPlayers = useMemo(() => {
                                 fontSize: 12,
                               }}
                             >
-                              Konflikt: {uniquePlayers.length}
+                              {t("conflict")}: {uniquePlayers.length}
                             </div>
                           );
                         })()}
@@ -4910,7 +3701,7 @@ const holOnlyPlayers = useMemo(() => {
                                 fontSize: 12,
                               }}
                             >
-                              Hinweis: {flaggedIds.length} (History)
+                              {t("hint")}: {flaggedIds.length} ({t("history")})
                             </div>
                           );
                         })()}
@@ -4919,45 +3710,70 @@ const holOnlyPlayers = useMemo(() => {
 
                         <div style={{ textAlign: "right" }}>
                           <div style={{ fontSize: 12, color: "var(--ui-text)", fontWeight: 900 }}>
-                            {(s.participants ?? []).length} Spieler
+                            {(s.participants ?? []).length} {t("players")}
                           </div>
                           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8, flexWrap: "wrap" }}>
-                            <Button variant="outline" onClick={() => onEditSession(s)} style={{ padding: "8px 10px" }}>
-                              edit
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                setCollapsedParticipantsBySession((prev) => ({
+                                  ...prev,
+                                  [s.id]: !participantsCollapsed,
+                                }))
+                              }
+                              style={{ padding: "8px 10px" }}
+                            >
+                              {participantsCollapsed ? t("expandPlayers") : t("collapsePlayers")}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => onEditSession(s)}
+                              title={t("eventEdit")}
+                              style={{ padding: "8px 10px" }}
+                            >
+                              ⚙︎
                             </Button>
                             <Button
                               variant="outline"
                               onClick={() => onDeleteSession(s.id)}
                               style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
                             >
-                              löschen
+                              {t("delete").toLowerCase()}
                             </Button>
                           </div>
                         </div>
                       </div>
 
-                      <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
+                      {!participantsCollapsed && (
+                        <>
+                          <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
 
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {(s.participants ?? []).map((pid) => {
-                          const p = playerById.get(pid);
-                          if (!p) return null;
-                          return (
-                            <ParticipantCard
-                              key={pid}
-                              player={p}
-                              onRemove={() => removePlayerFromSession(s.id, pid)}
-                              groupBg={groupBg}
-                              isBirthday={birthdayPlayerIds.has(pid)}
-                            />
-                          );
-                        })}
-                        {(s.participants ?? []).length === 0 && (
-                          <div style={{ color: "var(--ui-muted)", fontSize: 13, fontWeight: 800 }}>
-                            Spieler hier ablegen
+                          <div style={{ display: "grid", gap: 6 }}>
+                            {(s.participants ?? []).map((pid) => {
+                              const p = playerById.get(pid);
+                              if (!p) return null;
+                              return (
+                                <ParticipantCard
+                                  key={pid}
+                                  player={p}
+                                  onRemove={() => removePlayerFromSession(s.id, pid)}
+                                  groupBg={groupBg}
+                                  isBirthday={birthdayPlayerIds.has(pid)}
+                                  t={t}
+                                />
+                              );
+                            })}
+                            {(s.participants ?? []).length === 0 && (
+                              <div style={{ color: "var(--ui-muted)", fontSize: 13, fontWeight: 800 }}>
+                                {t("dropPlayersHere")}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        </>
+                      )}
+                      </>
+                    );
+                      })()}
                     </DroppableSessionShell>
                   ))}
                 </div>
@@ -4985,6 +3801,7 @@ const holOnlyPlayers = useMemo(() => {
               onChangeTop={setRightTop}
               onChangeBottom={setRightBottom}
               onChangeSplitPct={setRightSplitPct}
+              t={t}
               context={{
                 previewPages,
                 renderCalendar: () => (
@@ -4999,7 +3816,7 @@ const holOnlyPlayers = useMemo(() => {
                       weekDates={weekDates}
                       weekPlan={plan}
                       onOpenEventEditor={handleOpenEventEditor}
-                      roster={players as any[]}
+                      roster={players}
                       onUpdateWeekPlan={setPlan}
                       dnd={dnd}
                       onDelete={(id) => onDeleteSession(id)}
@@ -5043,25 +3860,79 @@ const holOnlyPlayers = useMemo(() => {
         message={confirmDialog.message}
         onConfirm={() => resolveConfirm(true)}
         onCancel={() => resolveConfirm(false)}
+        t={t}
       />
+
+      {profilesOpen && (
+        <Modal title={t("profiles")} onClose={() => setProfilesOpen(false)} closeLabel={t("close")}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 900 }}>{t("profileActive")}</div>
+              <select
+                value={activeProfileId}
+                onChange={(e) => selectProfile(e.target.value)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--ui-border)",
+                  background: "var(--ui-card)",
+                  color: "var(--ui-text)",
+                }}
+              >
+                <option value="">— {t("profileNone")} —</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 900 }}>{t("name")}</div>
+              <Input
+                value={profileNameInput}
+                onChange={setProfileNameInput}
+                placeholder={t("profileNamePlaceholder")}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Button variant="outline" onClick={createProfile}>
+                {t("profileSaveNew")}
+              </Button>
+              <Button variant="outline" onClick={updateActiveProfile} disabled={!activeProfileId}>
+                {t("profileUpdate")}
+              </Button>
+              <Button variant="danger" onClick={deleteActiveProfile} disabled={!activeProfileId}>
+                {t("profileDelete")}
+              </Button>
+            </div>
+
+            <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+              {t("profileHint")}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Roster Editor Modal */}
       {rosterOpen && (
-        <Modal title="Roster editieren (roster.json)" onClose={() => setRosterOpen(false)}>
+        <Modal title={`${t("rosterEdit")} (roster.json)`} onClose={() => setRosterOpen(false)} closeLabel={t("close")}>
           <div className="rosterGrid">
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
                 <div className="flexRow">
-                  <Button onClick={addNewPlayer} style={{ padding: "8px 10px" }}>+ Spieler</Button>
+                  <Button onClick={addNewPlayer} style={{ padding: "8px 10px" }}>+ {t("playersSingle")}</Button>
                   <Button variant="outline" onClick={exportRoster} style={{ padding: "8px 10px" }}>
-                    Export roster.json
+                    {t("export")} roster.json
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => rosterFileRef.current?.click()}
                     style={{ padding: "8px 10px" }}
                   >
-                    Import roster.json
+                    {t("import")} roster.json
                   </Button>
                   <input
                     ref={rosterFileRef}
@@ -5077,20 +3948,20 @@ const holOnlyPlayers = useMemo(() => {
                 </div>
 
                 <div style={{ marginTop: 10, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-                  Hinweis: TBD wird automatisch geführt und nicht exportiert/importiert.
+                  {t("rosterHintTbd")}
                 </div>
               </div>
 
               <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 10 }}>
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>Spieler</div>
+                <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("players")}</div>
                 <Input
                   value={rosterSearch}
                   onChange={setRosterSearch}
-                  placeholder="Suchen: Name, TA, Jahrgang, Geburtsdatum…"
+                  placeholder={t("rosterSearchPlaceholder")}
                   style={{ marginBottom: 8 }}
                 />
                 <div style={{ fontSize: 12, color: "var(--ui-muted)", fontWeight: 800, marginBottom: 8 }}>
-                  Filter: {rosterSearch.trim() ? `"${rosterSearch.trim()}"` : "—"}
+                  {t("filter")}: {rosterSearch.trim() ? `"${rosterSearch.trim()}"` : "—"}
                 </div>
                 <div style={{ display: "grid", gap: 6, maxHeight: "60vh", overflow: "auto" }}>
                   {(() => {
@@ -5136,7 +4007,7 @@ const holOnlyPlayers = useMemo(() => {
                             justifyContent: "space-between",
                             gap: 10,
                           }}
-                          title={tna ? `Primary TA/TNA: ${tna}` : "Keine TA/TNA"}
+                          title={tna ? `${t("primaryTaTna")}: ${tna}` : t("noTaTna")}
                         >
                           <span style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {p.name}
@@ -5153,7 +4024,7 @@ const holOnlyPlayers = useMemo(() => {
             <div style={{ display: "grid", gap: 10 }}>
               {!selectedPlayer ? (
                 <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12, color: "var(--ui-muted)", fontWeight: 900 }}>
-                  Wähle links einen Spieler.
+                  {t("selectPlayerLeft")}
                 </div>
               ) : (
                 <>
@@ -5165,22 +4036,22 @@ const holOnlyPlayers = useMemo(() => {
                         onClick={() => deletePlayer(selectedPlayer.id)}
                         style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
                       >
-                        löschen
+                        {t("delete").toLowerCase()}
                       </Button>
                     </div>
 
                     <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>Vorname</div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("firstName")}</div>
                         <Input value={selectedPlayer.firstName ?? ""} onChange={(v) => updatePlayer(selectedPlayer.id, { firstName: v })} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>Name</div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("name")}</div>
                         <Input value={selectedPlayer.lastName ?? ""} onChange={(v) => updatePlayer(selectedPlayer.id, { lastName: v })} />
                       </div>
 
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>Geburtsjahr (für Jahrgang)</div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("birthYearForGroup")}</div>
                         <Input
                           type="number"
                           value={String(selectedPlayer.birthYear ?? "")}
@@ -5188,12 +4059,12 @@ const holOnlyPlayers = useMemo(() => {
                         />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>Geburtsdatum (optional)</div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("birthDateOptional")}</div>
                         <Input type="date" value={selectedPlayer.birthDate ?? ""} onChange={(v) => updatePlayer(selectedPlayer.id, { birthDate: v })} />
                       </div>
 
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>Gruppe</div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("group")}</div>
                         {(() => {
                           const y = birthYearOf(selectedPlayer);
                           const yearLocked = y === 2007 || y === 2008 || y === 2009;
@@ -5218,20 +4089,20 @@ const holOnlyPlayers = useMemo(() => {
                       </div>
 
                       <div>
-                        <div style={{ fontWeight: 900, marginBottom: 6 }}>LP (Local Player)</div>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("localPlayer")}</div>
                         <Select
                           value={selectedPlayer.isLocalPlayer ? "true" : "false"}
                           onChange={(v) => updatePlayer(selectedPlayer.id, { isLocalPlayer: v === "true" })}
                           options={[
-                            { value: "true", label: "LP: Ja" },
-                            { value: "false", label: "LP: Nein" },
+                            { value: "true", label: t("lpYes") },
+                            { value: "false", label: t("lpNo") },
                           ]}
                         />
                       </div>
                     </div>
 
                     <div style={{ marginTop: 12, borderTop: `1px solid var(--ui-border)`, paddingTop: 12 }}>
-                      <div style={{ fontWeight: 900, marginBottom: 8 }}>Lizenzen / TA (DBB & NBBL)</div>
+                      <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("licensesTa")}</div>
 
                       {(() => {
                         const check = dbbDobMatchesBirthDate(selectedPlayer);
@@ -5250,14 +4121,14 @@ const holOnlyPlayers = useMemo(() => {
                               color: "var(--ui-text)",
                             }}
                           >
-                            ⚠️ DBB-TA ↔ Geburtsdatum stimmt nicht: {check?.reason}
+                            ⚠️ {t("dbbTaBirthMismatch")}: {check?.reason}
                           </div>
                         );
                       })()}
 
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         <div>
-                          <div style={{ fontWeight: 900, marginBottom: 6 }}>DBB TNA</div>
+                          <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("dbbTna")}</div>
                           <Input
                             value={(selectedPlayer.lizenzen ?? []).find((x) => String(x.typ).toUpperCase() === "DBB")?.tna ?? ""}
                             onChange={(v) => {
@@ -5265,11 +4136,11 @@ const holOnlyPlayers = useMemo(() => {
                               if (v.trim()) list.push({ typ: "DBB", tna: v.trim(), verein: "UBC Münster" });
                               updatePlayer(selectedPlayer.id, { lizenzen: list });
                             }}
-                            placeholder="z.B. 280209020"
+                            placeholder={t("dbbTnaExample")}
                           />
                         </div>
                         <div>
-                          <div style={{ fontWeight: 900, marginBottom: 6 }}>NBBL TNA</div>
+                          <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("nbblTna")}</div>
                           <Input
                             value={(selectedPlayer.lizenzen ?? []).find((x) => String(x.typ).toUpperCase() === "NBBL")?.tna ?? ""}
                             onChange={(v) => {
@@ -5277,19 +4148,19 @@ const holOnlyPlayers = useMemo(() => {
                               if (v.trim()) list.push({ typ: "NBBL", tna: v.trim(), verein: "UBC Münster" });
                               updatePlayer(selectedPlayer.id, { lizenzen: list });
                             }}
-                            placeholder="z.B. 280209070"
+                            placeholder={t("nbblTnaExample")}
                           />
                         </div>
                       </div>
 
                       <div style={{ marginTop: 10, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-                        Info: Spieler-ID bleibt stabil (roster.id). TA/TNA kann fehlen (Probetraining) und wird später nachgetragen.
+                        {t("rosterPlayerIdHint")}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Positionen (Multi-Auswahl)</div>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("positionsMultiSelect")}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {(["PG", "SG", "SF", "PF", "C"] as Position[]).map((pos) => {
                         const current = selectedPlayer.positions ?? [];
@@ -5325,7 +4196,7 @@ const holOnlyPlayers = useMemo(() => {
     padding: 12,
   }}
 >
-  <div style={{ fontWeight: 900, marginBottom: 8 }}>Default Teams</div>
+  <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("defaultTeams")}</div>
 
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
     {TEAM_OPTIONS.map((t) => {
@@ -5349,7 +4220,7 @@ const holOnlyPlayers = useMemo(() => {
   </div>
 
   <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-    Wird für Gruppenlogik (Herren) + zukünftige Spiel-Exports genutzt.
+    {t("defaultTeamsHint")}
   </div>
 </div>
 
@@ -5367,7 +4238,7 @@ const holOnlyPlayers = useMemo(() => {
     padding: 12,
   }}
 >
-  <div style={{ fontWeight: 900, marginBottom: 8 }}>Trikotnummern (pro Team)</div>
+  <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("jerseyNumbersByTeam")}</div>
 
   <div
     style={{
@@ -5377,23 +4248,23 @@ const holOnlyPlayers = useMemo(() => {
       alignItems: "center",
     }}
   >
-    {TEAM_OPTIONS.map((t) => {
+    {TEAM_OPTIONS.map((teamCode) => {
       const current = selectedPlayer.jerseyByTeam ?? {};
-      const value = current[t];
+      const value = current[teamCode];
 
       return (
-        <div key={t} style={{ display: "contents" }}>
-          <div style={{ fontWeight: 900 }}>{t}</div>
+        <div key={teamCode} style={{ display: "contents" }}>
+          <div style={{ fontWeight: 900 }}>{teamCode}</div>
           <Input
             type="number"
             value={value === null || value === undefined ? "" : String(value)}
             onChange={(v) => {
               const next = { ...(selectedPlayer.jerseyByTeam ?? {}) } as Record<string, number | null>;
               const trimmed = (v ?? "").trim();
-              next[t] = trimmed ? parseInt(trimmed, 10) : null;
+              next[teamCode] = trimmed ? parseInt(trimmed, 10) : null;
               updatePlayer(selectedPlayer.id, { jerseyByTeam: next });
             }}
-            placeholder="z.B. 12"
+            placeholder={t("jerseyExample")}
           />
         </div>
       );
@@ -5401,7 +4272,7 @@ const holOnlyPlayers = useMemo(() => {
   </div>
 
   <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-    Wird im Spiel-Export genutzt. Leer = keine Nummer hinterlegt.
+    {t("jerseyHint")}
   </div>
 </div>
 
@@ -5427,7 +4298,7 @@ const holOnlyPlayers = useMemo(() => {
       gap: 10,
     }}
   >
-    <div style={{ fontWeight: 900 }}>History (letzte 6 Spiele)</div>
+    <div style={{ fontWeight: 900 }}>{t("historyLast6")}</div>
 
     <Button
       variant="outline"
@@ -5439,7 +4310,7 @@ const holOnlyPlayers = useMemo(() => {
       }}
       style={{ padding: "8px 10px" }}
     >
-      + Eintrag
+      + {t("entry")}
     </Button>
   </div>
 
@@ -5471,7 +4342,7 @@ const holOnlyPlayers = useMemo(() => {
             cur[idx] = { ...cur[idx], opponent: v };
             updatePlayer(selectedPlayer.id, { historyLast6: cur });
           }}
-          placeholder='z.B. "vs Vechta" / "@ Paderborn"'
+          placeholder={t("opponentExample")}
         />
 
         <Button
@@ -5483,14 +4354,14 @@ const holOnlyPlayers = useMemo(() => {
           }}
           style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
         >
-          löschen
+          {t("delete").toLowerCase()}
         </Button>
       </div>
     ))}
   </div>
 
   <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-    Optional – dient als „letzte 6“ Referenz im Kader-Editor (später auch als Tooltip/Export erweiterbar).
+    {t("historyLast6Hint")}
   </div>
 </div>
 

@@ -2,8 +2,16 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+function parseISODateLocal(dateISO: string): Date | null {
+  const v = String(dateISO ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function dateToDDMMYYYY_DOTS(dateISO: string) {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = parseISODateLocal(dateISO);
+  if (!d) return "";
   const dd = pad2(d.getDate());
   const mm = pad2(d.getMonth() + 1);
   const yyyy = d.getFullYear();
@@ -11,7 +19,8 @@ export function dateToDDMMYYYY_DOTS(dateISO: string) {
 }
 
 export function dateToShortDE(dateISO: string) {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = parseISODateLocal(dateISO);
+  if (!d) return "";
   const day = d.getDate();
   const monthShort = new Intl.DateTimeFormat("de-DE", { month: "short" })
     .format(d)
@@ -20,8 +29,17 @@ export function dateToShortDE(dateISO: string) {
 }
 
 export function weekdayShortDE(dateISO: string) {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = parseISODateLocal(dateISO);
+  if (!d) return "";
   const wd = new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(d);
+  return wd.replace(".", "");
+}
+
+export function weekdayShortLocalized(dateISO: string, locale: "de" | "en" = "de") {
+  const d = parseISODateLocal(dateISO);
+  if (!d) return "";
+  const localeTag = locale === "en" ? "en-GB" : "de-DE";
+  const wd = new Intl.DateTimeFormat(localeTag, { weekday: "short" }).format(d);
   return wd.replace(".", "");
 }
 
@@ -66,13 +84,13 @@ export function isoToday(): string {
 }
 
 export function addDaysISO(dateISO: string, days: number): string {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = parseISODateLocal(dateISO) ?? new Date();
   d.setDate(d.getDate() + days);
   return toISODateLocal(d);
 }
 
 export function isoWeekMonday(dateISO: string): string {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = parseISODateLocal(dateISO) ?? new Date();
   const day = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - day);
   return toISODateLocal(d);
@@ -91,7 +109,8 @@ export function weekdayOffsetFromDEShort(day: string): number | null {
 }
 
 export function isoWeekNumber(dateISO: string): number {
-  const d = new Date(dateISO + "T00:00:00");
+  const d = parseISODateLocal(dateISO);
+  if (!d) return -1;
   const day = (d.getDay() + 6) % 7;
   d.setDate(d.getDate() - day + 3);
   const firstThursday = new Date(d.getFullYear(), 0, 4);
@@ -102,7 +121,9 @@ export function isoWeekNumber(dateISO: string): number {
 }
 
 export function kwLabelFromPlan(plan: { sessions: Array<{ date: string }> }): string {
-  const weeks = Array.from(new Set(plan.sessions.map((s) => isoWeekNumber(s.date)))).sort(
+  const weeks = Array.from(
+    new Set(plan.sessions.map((s) => isoWeekNumber(s.date)).filter((w) => Number.isFinite(w) && w > 0))
+  ).sort(
     (a, b) => a - b
   );
   if (weeks.length === 0) return "KW ?";
@@ -114,7 +135,9 @@ export function getISOWeek(dateISO: string): number {
 }
 
 export function kwFromRange(dates: string[]): string {
-  const weeks = Array.from(new Set(dates.map((d) => isoWeekNumber(d)))).sort((a, b) => a - b);
+  const weeks = Array.from(
+    new Set(dates.map((d) => isoWeekNumber(d)).filter((w) => Number.isFinite(w) && w > 0))
+  ).sort((a, b) => a - b);
   if (weeks.length === 0) return "KW ?";
   return `KW ${weeks.join("+")}`;
 }

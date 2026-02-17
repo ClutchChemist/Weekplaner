@@ -5,9 +5,10 @@ type ModalProps = {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  closeLabel?: string;
 };
 
-export function Modal({ title, children, onClose }: ModalProps) {
+export function Modal({ title, children, onClose, closeLabel = "Close" }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -52,7 +53,7 @@ export function Modal({ title, children, onClose }: ModalProps) {
         >
           <div style={{ fontSize: 18, fontWeight: 900 }}>{title}</div>
           <Button variant="outline" onClick={onClose}>
-            schließen
+            {closeLabel}
           </Button>
         </div>
         <div style={{ marginTop: 12 }}>{children}</div>

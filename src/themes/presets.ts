@@ -1,4 +1,4 @@
-import type { ThemeState } from "./types";
+import type { ThemeState } from "../state/types";
 
 export const THEME_PRESETS: Record<string, ThemeState> = {
   "default-dark": {

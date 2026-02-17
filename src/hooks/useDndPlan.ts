@@ -1,7 +1,13 @@
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import type { Dispatch, SetStateAction } from "react";
 import { addMinutesToHHMM, splitTimeRange, weekdayShortDE } from "../utils/date";
 import type { CalendarEvent as Session, Player, WeekPlan } from "../state/types";
+
+export type DndPlanHandlers = {
+	onDragStart: (event: DragStartEvent) => void;
+	onDragOver: (event: DragOverEvent) => void;
+	onDragEnd: (event: DragEndEvent) => Promise<void>;
+};
 
 export function useDndPlan(params: {
 	weekPlan: WeekPlan;
@@ -54,11 +60,13 @@ export function useDndPlan(params: {
 		}));
 	}
 
-	function onDragStart(_event: unknown) {
+	function onDragStart(event: DragStartEvent) {
+		void event;
 		// reserved for future hover/preview behavior; kept for parity hook contract
 	}
 
-	function onDragOver(_event: unknown) {
+	function onDragOver(event: DragOverEvent) {
+		void event;
 		// reserved for future hover/preview behavior; kept for parity hook contract
 	}
 
@@ -99,7 +107,7 @@ export function useDndPlan(params: {
 					);
 					if (input === null) return;
 					if (input.trim() === "") {
-						const remove = await confirm("Spieler entfernen?", t("confirmRemovePlayerFromGame"));
+						const remove = await confirm(t("confirmRemovePlayerTitle"), t("confirmRemovePlayerFromGame"));
 						if (!remove) return;
 						removePlayerFromSession(sessionId, playerId);
 						return;

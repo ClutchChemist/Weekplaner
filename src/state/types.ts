@@ -120,11 +120,29 @@ export type ThemeSettings = {
 export type ThemePreset = { id: string; label: string; theme: ThemeSettings };
 export type ThemeState = ThemeSettings;
 
+export type RightModule = "calendar" | "preview" | "maps" | "none";
+export type RightLayout = "single" | "split";
+export type LeftTab = "players" | "coaches" | "locations";
+export type ExtraPanel = null | "U18_ONLY" | "HOL_ONLY";
+export type ConfirmDialogState = { open: boolean; title: string; message: string };
+
 export type AppState = {
-  lang: Lang;
-  theme: ThemeState;
-  roster: Player[];
-  weekPlan: WeekPlan;
+  settingsOpen: boolean;
+  eventEditorOpen: boolean;
+  newWeekOpen: boolean;
   rightSidebarOpen: boolean;
-  activeModal: null | "theme" | "newWeek" | "eventEditor" | "confirm";
+  rightLayout: RightLayout;
+  rightTop: RightModule;
+  rightBottom: RightModule;
+  rightSplitPct: number;
+  openGroup: GroupId | null;
+  openExtra: ExtraPanel;
+  leftTab: LeftTab;
+  leftEditMode: boolean;
+  openLocationName: string | null;
+  rosterOpen: boolean;
+  autoTravelLoading: boolean;
+  confirmDialog: ConfirmDialogState;
+  rosterSearch: string;
+  selectedPlayerId: string | null;
 };

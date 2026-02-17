@@ -1,16 +1,25 @@
 import {
-  useEffect,
+  useCallback,
   useMemo,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
+import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { splitTimeRange } from "../../utils/date";
 import { DualRangeTrackSlider } from "../ui/DualRangeTrackSlider";
-import type { CalendarEvent, WeekPlan } from "../../state/types";
+import type { CalendarEvent, Player, WeekPlan } from "../../state/types";
 
 type Session = CalendarEvent;
+
+function clampNumber(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function snapToStep(v: number, step: number) {
+  return Math.round(v / step) * step;
+}
 
 function CalendarSlotDroppable({
   id,
@@ -80,8 +89,8 @@ function CalendarEventDraggable({
 
   const style: CSSProperties = {
     position: "absolute",
-    left: `calc(6px + ${(col / Math.max(1, colCount)) * 100}%)` as any,
-    width: `calc((100% - 12px) / ${Math.max(1, colCount)})` as any,
+    left: `calc(6px + ${(col / Math.max(1, colCount)) * 100}%)` as CSSProperties["left"],
+    width: `calc((100% - 12px) / ${Math.max(1, colCount)})` as CSSProperties["width"],
     top,
     height: Math.max(18, height),
     borderRadius: 12,
@@ -133,7 +142,7 @@ function CalendarEventDraggable({
                   e.stopPropagation();
                   onToggleTravel(session.id);
                 }}
-                style={{ border: `1px solid var(--ui-border)`, background: travelMin > 0 ? 'rgba(255,255,255,.08)' : 'var(--ui-panel)', color: 'var(--ui-text)', borderRadius: 10, padding: '2px 8px', cursor: 'pointer', fontWeight: 900 } as any}
+                style={{ border: `1px solid var(--ui-border)`, background: travelMin > 0 ? 'rgba(255,255,255,.08)' : 'var(--ui-panel)', color: 'var(--ui-text)', borderRadius: 10, padding: '2px 8px', cursor: 'pointer', fontWeight: 900 } as CSSProperties}
               >
                 🚗
               </button>
@@ -146,7 +155,7 @@ function CalendarEventDraggable({
                   e.stopPropagation();
                   onToggleWarmup(session.id);
                 }}
-                style={{ border: `1px solid var(--ui-border)`, background: warmupMin > 0 ? 'rgba(255,255,255,.08)' : 'var(--ui-panel)', color: 'var(--ui-text)', borderRadius: 10, padding: '2px 8px', cursor: 'pointer', fontWeight: 900 } as any}
+                style={{ border: `1px solid var(--ui-border)`, background: warmupMin > 0 ? 'rgba(255,255,255,.08)' : 'var(--ui-panel)', color: 'var(--ui-text)', borderRadius: 10, padding: '2px 8px', cursor: 'pointer', fontWeight: 900 } as CSSProperties}
               >
                 🔥
               </button>
@@ -226,8 +235,8 @@ function CalendarPreBlockDraggable({
 
   const style: CSSProperties = {
     position: "absolute",
-    left: `calc(6px + ${(col / Math.max(1, colCount)) * 100}%)` as any,
-    width: `calc((100% - 12px) / ${Math.max(1, colCount)})` as any,
+    left: `calc(6px + ${(col / Math.max(1, colCount)) * 100}%)` as CSSProperties["left"],
+    width: `calc((100% - 12px) / ${Math.max(1, colCount)})` as CSSProperties["width"],
     top,
     height: Math.max(10, height),
     borderRadius: 12,
@@ -255,13 +264,13 @@ function CalendarPreBlockDraggable({
 type Props = {
   weekDates: string[];
   weekPlan: WeekPlan;
-  roster: any[];
+  roster: Player[];
   onUpdateWeekPlan: (next: WeekPlan) => void;
   onOpenEventEditor: (eventId: string) => void;
   dnd: {
-    onDragStart: (args: any) => void;
-    onDragOver: (args: any) => void;
-    onDragEnd: (args: any) => void;
+    onDragStart: (event: DragStartEvent) => void;
+    onDragOver: (event: DragOverEvent) => void;
+    onDragEnd: (event: DragEndEvent) => void;
   };
   onDelete: (sessionId: string) => void;
   onToggleTravel: (sessionId: string) => void;
@@ -292,14 +301,13 @@ export function CalendarPane({
     const mm = m % 60;
     return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
   };
-  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-  const snap = (v: number) => Math.round(v / TIME_SNAP) * TIME_SNAP;
+  const snap = useCallback((v: number) => snapToStep(v, TIME_SNAP), [TIME_SNAP]);
 
   type WindowMode = "auto" | "manual";
   type AutoScope = "week" | "day";
   const [windowMode, setWindowMode] = useState<WindowMode>("auto");
   const [autoScope, setAutoScope] = useState<AutoScope>("week");
-  const [activeAutoDay, setActiveAutoDay] = useState<number>(0);
+  const [selectedAutoDay, setSelectedAutoDay] = useState<number | null>(null);
   const [dayScrollOffset, setDayScrollOffset] = useState<number>(0);
   const [manualStart, setManualStart] = useState(START_MIN);
   const [manualEnd, setManualEnd] = useState(END_MIN);
@@ -355,15 +363,15 @@ export function CalendarPane({
 
   const sessionsByDay = useMemo(() => weekDates.map((d) => eventsByDay.get(d) ?? []), [weekDates, eventsByDay]);
 
-  function parseStartMin(time: string): number {
+  const parseStartMin = useCallback((time: string): number => {
     const tr = splitTimeRange(time);
     const start = tr ? tr[0] : (time ?? "00:00").slice(0, 5);
     const hh = parseInt(start.slice(0, 2), 10);
     const mm = parseInt(start.slice(3, 5), 10);
     return hh * 60 + mm;
-  }
+  }, []);
 
-  function sessionDurationMin(s: Session): number {
+  const sessionDurationMin = useCallback((s: Session): number => {
     const game = String(s.info ?? "").trim().toLowerCase().startsWith("vs") || String(s.info ?? "").trim().startsWith("@");
     if (game) return 120;
     const tr = splitTimeRange(s.time ?? "");
@@ -372,9 +380,9 @@ export function CalendarPane({
     const sM = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
     const eM = parseInt(en.slice(0, 2), 10) * 60 + parseInt(en.slice(3, 5), 10);
     return Math.max(0, eM - sM) || 90;
-  }
+  }, []);
 
-  function computeAutoWindow(allDays: Session[][]) {
+  const computeAutoWindow = useCallback((allDays: Session[][]) => {
     let minStart = Infinity;
     let maxEnd = -Infinity;
 
@@ -405,20 +413,20 @@ export function CalendarPane({
     }
 
     const pad = 30;
-    const start = clamp(snap(minStart - pad), START_MIN, END_MIN - 30);
-    const end = clamp(snap(maxEnd + pad), START_MIN + 30, END_MIN);
+    const start = clampNumber(snap(minStart - pad), START_MIN, END_MIN - 30);
+    const end = clampNumber(snap(maxEnd + pad), START_MIN + 30, END_MIN);
 
     const minSpan = 180;
     if (end - start < minSpan) {
       const mid = (start + end) / 2;
-      const s2 = clamp(snap(mid - minSpan / 2), START_MIN, END_MIN - minSpan);
+      const s2 = clampNumber(snap(mid - minSpan / 2), START_MIN, END_MIN - minSpan);
       return { start: s2, end: s2 + minSpan };
     }
 
     return { start, end };
-  }
+  }, [END_MIN, START_MIN, parseStartMin, sessionDurationMin, snap]);
 
-  function computeAutoWindowForDay(daySessions: Session[], START_MIN: number, END_MIN: number) {
+  const computeAutoWindowForDay = useCallback((daySessions: Session[], windowStart: number, windowEnd: number) => {
     let minStart = Infinity;
     let maxEnd = -Infinity;
 
@@ -443,37 +451,24 @@ export function CalendarPane({
     }
 
     if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd)) {
-      return { start: START_MIN, end: END_MIN };
+      return { start: windowStart, end: windowEnd };
     }
 
     const pad = 30;
-    const start = clamp(snap(minStart - pad), START_MIN, END_MIN - 30);
-    const end = clamp(snap(maxEnd + pad), START_MIN + 30, END_MIN);
+    const start = clampNumber(snap(minStart - pad), windowStart, windowEnd - 30);
+    const end = clampNumber(snap(maxEnd + pad), windowStart + 30, windowEnd);
 
     const minSpan = 180;
     if (end - start < minSpan) {
       const mid = (start + end) / 2;
-      const s2 = clamp(snap(mid - minSpan / 2), START_MIN, END_MIN - minSpan);
+      const s2 = clampNumber(snap(mid - minSpan / 2), windowStart, windowEnd - minSpan);
       return { start: s2, end: s2 + minSpan };
     }
     return { start, end };
-  }
+  }, [snap, parseStartMin, sessionDurationMin]);
 
-  const autoWeekWindow = useMemo(() => computeAutoWindow(sessionsByDay), [sessionsByDay]);
-  const autoDayWindow = useMemo(() => {
-    const day = sessionsByDay[activeAutoDay] ?? [];
-    return computeAutoWindowForDay(day, START_MIN, END_MIN);
-  }, [sessionsByDay, activeAutoDay]);
-
-  const autoWindow = autoScope === "week" ? autoWeekWindow : autoDayWindow;
-
-  const viewStartMin = windowMode === "auto" ? autoWindow.start : manualStart;
-  const viewEndMin = windowMode === "auto" ? autoWindow.end : manualEnd;
-  const viewSpan = Math.max(30, viewEndMin - viewStartMin);
-
-  useEffect(() => {
-    if (windowMode !== "auto" || autoScope !== "day") return;
-
+  const autoWeekWindow = useMemo(() => computeAutoWindow(sessionsByDay), [sessionsByDay, computeAutoWindow]);
+  const bestAutoDay = useMemo(() => {
     let bestDay = 0;
     let bestStart = Infinity;
     let bestCount = -1;
@@ -498,8 +493,21 @@ export function CalendarPane({
       }
     }
 
-    setActiveAutoDay(bestDay);
-  }, [windowMode, autoScope, sessionsByDay]);
+    return bestDay;
+  }, [sessionsByDay, START_MIN, END_MIN, computeAutoWindowForDay, parseStartMin, sessionDurationMin]);
+
+  const activeAutoDay = selectedAutoDay ?? bestAutoDay;
+
+  const autoDayWindow = useMemo(() => {
+    const day = sessionsByDay[activeAutoDay] ?? [];
+    return computeAutoWindowForDay(day, START_MIN, END_MIN);
+  }, [sessionsByDay, activeAutoDay, START_MIN, END_MIN, computeAutoWindowForDay]);
+
+  const autoWindow = autoScope === "week" ? autoWeekWindow : autoDayWindow;
+
+  const viewStartMin = windowMode === "auto" ? autoWindow.start : manualStart;
+  const viewEndMin = windowMode === "auto" ? autoWindow.end : manualEnd;
+  const viewSpan = Math.max(30, viewEndMin - viewStartMin);
 
   const slots = useMemo(() => {
     const arr: number[] = [];
@@ -652,7 +660,7 @@ export function CalendarPane({
             {autoScope === "day" && (
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <span style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12 }}>{t("day")}:</span>
-                <select value={activeAutoDay} onChange={(e) => setActiveAutoDay(Number(e.target.value))} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--ui-border)", background: "var(--ui-card)", color: "var(--ui-text)", fontWeight: 900, fontSize: 12 }}>
+                <select value={activeAutoDay} onChange={(e) => setSelectedAutoDay(Number(e.target.value))} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--ui-border)", background: "var(--ui-card)", color: "var(--ui-text)", fontWeight: 900, fontSize: 12 }}>
                   {DAY_NAMES.map((n, i) => (
                     <option key={n} value={i}>{n}</option>
                   ))}

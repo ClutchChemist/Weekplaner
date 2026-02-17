@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { addDaysISO, dateToDDMMYYYY_DOTS, isoWeekMonday } from "../../utils/date";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -21,26 +21,32 @@ export function NewWeekModal({
   defaultMode = "MASTER",
   t,
 }: Props) {
-  const [mode, setMode] = useState<NewWeekMode>(defaultMode);
-  const [keepParticipants, setKeepParticipants] = useState<boolean>(false);
+  const [modeDraft, setModeDraft] = useState<NewWeekMode | null>(null);
+  const [keepParticipantsDraft, setKeepParticipantsDraft] = useState<boolean | null>(null);
   type WeekPick = "THIS" | "NEXT" | "CUSTOM";
+
+  const mode = modeDraft ?? defaultMode;
+  const keepParticipants = keepParticipantsDraft ?? (mode === "COPY_CURRENT");
 
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [weekPick, setWeekPick] = useState<WeekPick>("THIS");
   const [customStart, setCustomStart] = useState<string>(isoWeekMonday(todayISO));
 
-  useEffect(() => {
-    if (mode !== "COPY_CURRENT" && keepParticipants) {
-      setKeepParticipants(false);
+  function selectMode(nextMode: NewWeekMode) {
+    setModeDraft(nextMode);
+    if (nextMode !== "COPY_CURRENT") {
+      setKeepParticipantsDraft(false);
+    } else {
+      setKeepParticipantsDraft((prev) => (prev === null ? true : prev));
     }
-  }, [mode, keepParticipants]);
+  }
 
-  useEffect(() => {
-    if (open) {
-      setMode(defaultMode);
-    }
-  }, [defaultMode, open]);
+  function closeAndReset() {
+    setModeDraft(null);
+    setKeepParticipantsDraft(null);
+    onClose();
+  }
 
   const weekStartMondayISO = useMemo(() => {
     const base = isoWeekMonday(todayISO);
@@ -85,43 +91,43 @@ export function NewWeekModal({
   if (!open) return null;
 
   return (
-    <Modal title="Neue Woche planen" onClose={onClose}>
+    <Modal title={t("newWeekTitle")} onClose={closeAndReset} closeLabel={t("close")}>
       <div className="grid grid-cols-1 gap-8">
         <section className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--panel)" }}>
           <div className="mb-4">
-            <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>Start-Optionen</div>
+            <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>{t("newWeekStartOptions")}</div>
             <div className="text-sm" style={{ color: "var(--muted)", marginTop: 6 }}>
-              Wähle, wie die neue Woche erstellt wird. Details siehst du per Hover auf den Buttons.
+              {t("newWeekStartHelp")}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => setMode("MASTER")}
+              onClick={() => selectMode("MASTER")}
               style={optionBtnStyle(mode === "MASTER")}
-              title="Standard-Struktur (Events/Slots) – ohne Teilnehmer"
+              title={t("newWeekModeMasterHint")}
             >
-              Wochenplan_master verwenden
+              {t("newWeekModeMaster")}
             </button>
 
             <button
               type="button"
-              onClick={() => setMode("EMPTY")}
+              onClick={() => selectMode("EMPTY")}
               style={optionBtnStyle(mode === "EMPTY")}
-              title="Keine Sessions – du baust alles neu"
+              title={t("newWeekModeEmptyHint")}
             >
-              Leere Woche starten
+              {t("newWeekModeEmpty")}
             </button>
 
             <button
               type="button"
-              onClick={() => setMode("COPY_CURRENT")}
+              onClick={() => selectMode("COPY_CURRENT")}
               className="md:col-span-2"
               style={optionBtnStyle(mode === "COPY_CURRENT")}
-              title="Kopiert Sessions aus deiner zuletzt bearbeiteten Woche"
+              title={t("newWeekModeCopyCurrentHint")}
             >
-              Aktuelle Woche übernehmen
+              {t("newWeekModeCopyCurrent")}
             </button>
 
             <button
@@ -129,53 +135,53 @@ export function NewWeekModal({
               aria-disabled={participantToggleDisabled}
               onClick={() => {
                 if (!participantToggleDisabled) {
-                  setKeepParticipants((v) => !v);
+                  setKeepParticipantsDraft((v) => !(v ?? true));
                 }
               }}
               style={optionBtnStyle(keepParticipants, participantToggleDisabled)}
               title={
                 participantToggleDisabled
-                  ? "Nur verfügbar bei: Aktuelle Woche übernehmen"
-                  : "Übernimmt Teilnehmer aus der zuletzt bearbeiteten Woche"
+                  ? t("newWeekKeepParticipantsDisabledHint")
+                  : t("newWeekKeepParticipantsHint")
               }
             >
-              Teilnehmer übernehmen
+              {t("newWeekKeepParticipants")}
             </button>
           </div>
         </section>
 
         <section className="rounded-xl border p-5" style={{ borderColor: "var(--border)", backgroundColor: "var(--panel)" }}>
           <div className="mb-4">
-            <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>Woche / Zeitraum</div>
+            <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>{t("newWeekPeriod")}</div>
             <div className="text-sm" style={{ color: "var(--muted)", marginTop: 6 }}>
-              Ausgewählter Zeitraum: {weekRangeLabel}
+              {t("newWeekSelectedRange")}: {weekRangeLabel}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button type="button" onClick={() => setWeekPick("THIS")} style={optionBtnStyle(weekPick === "THIS")} title="Setzt den Zeitraum auf die aktuelle Kalenderwoche">
-              Diese Woche
+            <button type="button" onClick={() => setWeekPick("THIS")} style={optionBtnStyle(weekPick === "THIS")} title={t("newWeekThisWeekHint")}>
+              {t("newWeekThisWeek")}
             </button>
 
-            <button type="button" onClick={() => setWeekPick("NEXT")} style={optionBtnStyle(weekPick === "NEXT")} title="Setzt den Zeitraum auf die nächste Kalenderwoche">
+            <button type="button" onClick={() => setWeekPick("NEXT")} style={optionBtnStyle(weekPick === "NEXT")} title={t("newWeekNextWeekHint")}>
               {t("nextWeek")}
             </button>
 
-            <button type="button" onClick={() => setWeekPick("CUSTOM")} style={optionBtnStyle(weekPick === "CUSTOM")} title={`Freie Wahl des Startdatums (aktuell: ${weekRangeLabel})`}>
-              Custom
+            <button type="button" onClick={() => setWeekPick("CUSTOM")} style={optionBtnStyle(weekPick === "CUSTOM")} title={`${t("newWeekCustomHint")}: ${weekRangeLabel}`}>
+              {t("newWeekCustom")}
             </button>
           </div>
 
           {weekPick === "CUSTOM" && (
             <div className="mt-4 rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--panel2)" }}>
-              <div className="font-semibold" style={{ color: "var(--text)" }}>Startdatum</div>
+              <div className="font-semibold" style={{ color: "var(--text)" }}>{t("newWeekStartDate")}</div>
               <Input type="date" value={customStart} onChange={setCustomStart} />
             </div>
           )}
         </section>
 
         <div className="flex justify-end gap-4">
-          <Button variant="outline" onClick={onClose} style={{ height: 44, padding: "0 16px" }}>
+          <Button variant="outline" onClick={closeAndReset} style={{ height: 44, padding: "0 16px" }}>
             {t("cancel")}
           </Button>
           <Button onClick={() => onCreate(mode, keepParticipants, weekStartMondayISO)} style={{ height: 44, padding: "0 16px" }}>

@@ -78,7 +78,9 @@ export function DualRangeTrackSlider({
     setActiveThumb(null);
     try {
       (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
-    } catch {}
+    } catch {
+      // noop: pointer may already be released by browser
+    }
   };
 
   return (

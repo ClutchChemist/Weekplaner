@@ -6,12 +6,13 @@ type Props = {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  closeLabel?: string;
 };
 
-export function EventEditorModal({ open, onClose, title, children }: Props) {
+export function EventEditorModal({ open, onClose, title, children, closeLabel }: Props) {
   if (!open) return null;
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={title} onClose={onClose} closeLabel={closeLabel}>
       {children}
     </Modal>
   );
