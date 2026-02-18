@@ -86,7 +86,7 @@ function AddressAutocomplete({
   }
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", minWidth: 0 }}>
       <Input value={inputVal} onChange={handleInputChange} placeholder={placeholder ?? "..."} />
       {loading && (
         <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--ui-muted)" }}>
@@ -140,11 +140,19 @@ function AddressAutocomplete({
         </div>
       )}
       {placeId && (
-        <div style={{ fontSize: 10, color: "var(--ui-muted)", marginTop: 4 }}>
+        <div
+          style={{
+            fontSize: 10,
+            color: "var(--ui-muted)",
+            marginTop: 4,
+            wordBreak: "break-all",
+            overflowWrap: "anywhere",
+          }}
+        >
           ID: {placeId.slice(0, 20)}...
         </div>
       )}
-      <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-start", flexWrap: "wrap", minWidth: 0 }}>
         <button
           type="button"
           onClick={() => {
@@ -161,6 +169,11 @@ function AddressAutocomplete({
             fontWeight: 900,
             fontSize: 11,
             cursor: "pointer",
+            maxWidth: "100%",
+            minWidth: 0,
+            whiteSpace: "normal",
+            textAlign: "left",
+            lineHeight: 1.2,
           }}
           title={openMapsLabel ?? "Google Maps"}
         >
@@ -452,13 +465,24 @@ function LocationsPanel({
           placeholder={t("startPointOptional")}
           openMapsLabel={t("openInGoogleMaps")}
         />
-        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
           <Input
             value={homeLocationName}
             onChange={setHomeLocationName}
             placeholder={t("homeLocationNamePlaceholder")}
+            style={{ flex: "1 1 220px", minWidth: 0 }}
           />
-          <Button variant="outline" onClick={saveHomeAsLocation} style={{ flexShrink: 0 }}>
+          <Button
+            variant="outline"
+            onClick={saveHomeAsLocation}
+            style={{
+              flex: "1 1 220px",
+              minWidth: 0,
+              whiteSpace: "normal",
+              lineHeight: 1.2,
+              textAlign: "center",
+            }}
+          >
             {t("saveHomeAsLocation")}
           </Button>
         </div>
@@ -593,7 +617,16 @@ export function LeftLocationsView({
                   )}
 
                   {locs[name]?.placeId ? (
-                    <div style={{ marginTop: 6, fontSize: 11, color: "var(--ui-muted)", fontWeight: 900 }}>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 11,
+                        color: "var(--ui-muted)",
+                        fontWeight: 900,
+                        wordBreak: "break-all",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
                       PlaceId: {locs[name].placeId}
                     </div>
                   ) : null}

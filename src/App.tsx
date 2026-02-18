@@ -2052,43 +2052,88 @@ const holOnlyPlayers = useMemo(() => {
       return;
     }
 
-    // Temporary container for rendering (offscreen)
-    const host = document.createElement("div");
-    host.style.position = "fixed";
-    host.style.left = "-10000px";
-    host.style.top = "0";
-    host.style.width = "900px";
-    host.style.background = "#ffffff";
-    host.style.padding = "0";
-    host.style.zIndex = "999999";
-    document.body.appendChild(host);
-
-    try {
-      // Render all pages into host
-      for (let i = 0; i < exportPages.length; i++) {
-        const p = exportPages[i];
-        const pageEl = document.createElement("div");
-        pageEl.className = "page";
-        pageEl.style.width = "820px";
-        pageEl.style.minHeight = "1060px";
-        pageEl.style.background = "#ffffff";
-        pageEl.style.color = "#111";
-        pageEl.style.fontFamily = "system-ui, -apple-system, Segoe UI, Roboto, Arial";
-        pageEl.style.boxSizing = "border-box";
-        pageEl.style.padding = "20mm";
-        pageEl.style.pageBreakAfter = i < exportPages.length - 1 ? "always" : "auto";
-        pageEl.innerHTML = p.html;
-        host.appendChild(pageEl);
-      }
-
-      // Wait for rendering
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Trigger browser print dialog
-      window.print();
-    } finally {
-      document.body.removeChild(host);
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
+    if (!printWindow) {
+      console.warn("Could not open print window for PDF export.");
+      return;
     }
+
+    const pagesHtml = exportPages
+      .map(
+        (p, i) => `
+          <section class="print-page" data-page-index="${i + 1}">
+            ${p.html}
+          </section>
+        `
+      )
+      .join("\n");
+
+    const html = `
+      <!doctype html>
+      <html lang="de">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>UBC Weekplan PDF</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 10mm;
+            }
+
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #fff;
+              color: #111;
+              font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            }
+
+            .print-root {
+              width: 100%;
+            }
+
+            .print-page {
+              break-after: page;
+              page-break-after: always;
+              box-sizing: border-box;
+            }
+
+            .print-page:last-child {
+              break-after: auto;
+              page-break-after: auto;
+            }
+          </style>
+        </head>
+        <body>
+          <main class="print-root">${pagesHtml}</main>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    await new Promise<void>((resolve) => {
+      const done = () => resolve();
+      if (printWindow.document.readyState === "complete") {
+        setTimeout(done, 250);
+      } else {
+        printWindow.addEventListener("load", () => setTimeout(done, 250), { once: true });
+      }
+    });
+
+    printWindow.focus();
+    printWindow.print();
+
+    setTimeout(() => {
+      try {
+        printWindow.close();
+      } catch {
+        // ignore
+      }
+    }, 400);
   }
 
   async function createPlanPngPages() {
