@@ -79,6 +79,24 @@ This repo includes `render.yaml` for deploying the Node proxy in `server/maps-pr
 5. Set frontend env variable:
 	- `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`
 
+### Configure `VITE_API_BASE_URL` in GitHub
+
+Use one of these options in your GitHub repository:
+
+- **Settings → Secrets and variables → Actions → Variables**
+	- Name: `VITE_API_BASE_URL`
+	- Value: `https://<your-render-service>.onrender.com`
+- or **Secrets** with the same name (supported as fallback in workflow).
+
+Then trigger a new Pages deployment:
+
+- Push to `main` **or**
+- open **Actions → Deploy Vite App to GitHub Pages → Run workflow**.
+
+Tip: open browser devtools on the deployed site and verify API calls go to:
+
+- `https://<your-render-service>.onrender.com/api/...`
+
 ### Local vs production behavior
 
 - Local dev (`npm run dev`): frontend calls `/api/*` through Vite proxy (`vite.config.ts`).
