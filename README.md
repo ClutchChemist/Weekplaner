@@ -41,6 +41,39 @@ Expected variables:
 
 ⚠️ Never commit real API keys.
 
+## 🔒 Security
+
+**⚠️ CRITICAL**: A Google API key was previously exposed in the Git commit history of this repository.
+
+See [SECURITY.md](SECURITY.md) for:
+
+- **Immediate action required** to revoke the exposed key
+- Steps to generate and configure a new API key securely
+- Best practices for secret management
+- Pre-commit hook installation to prevent future exposures
+
+### Quick Setup: Security Hooks
+
+Install pre-commit hooks to prevent accidental credential commits:
+
+```bash
+# Install Python tools (if not already installed)
+pip install pre-commit detect-secrets
+
+# Install Git hooks (runs automatically during npm install)
+npm run prepare
+```
+
+The security hooks will:
+
+- ✅ Scan all commits for potential secrets before allowing them
+- ✅ Block commits containing API keys, tokens, or credentials
+- ✅ Help maintain secure coding practices
+
+**Test the hook** by trying to commit a file with a fake API key - it should be blocked.
+
+For more details, see [SECURITY.md](SECURITY.md).
+
 ## GitHub migration
 
 This repository is prepared for GitHub migration:
@@ -79,15 +112,15 @@ This repo includes `render.yaml` for deploying the Node proxy in `server/maps-pr
 3. Set environment variable `GOOGLE_MAPS_KEY` in Render dashboard.
 4. After deploy, copy service URL (for example `https://weekplaner-maps-proxy.onrender.com`).
 5. Set frontend env variable:
-	- `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`
+   - `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`
 
 ### Configure `VITE_API_BASE_URL` in GitHub
 
 Use one of these options in your GitHub repository:
 
 - **Settings → Secrets and variables → Actions → Variables**
-	- Name: `VITE_API_BASE_URL`
-	- Value: `https://<your-render-service>.onrender.com`
+  - Name: `VITE_API_BASE_URL`
+  - Value: `https://<your-render-service>.onrender.com`
 - or **Secrets** with the same name (supported as fallback in workflow).
 
 Then trigger a new Pages deployment:
