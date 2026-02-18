@@ -3176,7 +3176,7 @@ const holOnlyPlayers = useMemo(() => {
                     }}
                   >
                     <img
-                      src={theme.locale === "de" ? "/flags/de.svg" : "/flags/gb.svg"}
+                      src={`${import.meta.env.BASE_URL}flags/${theme.locale === "de" ? "de" : "gb"}.svg`}
                       alt={theme.locale === "de" ? "Deutsch" : "English"}
                       style={{ width: 24, height: 16, borderRadius: 2, display: "block" }}
                     />
