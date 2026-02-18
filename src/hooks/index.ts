@@ -6,3 +6,4 @@ export { useSessionEditor } from "./useSessionEditor";
 export { useThemePresets } from "./useThemePresets";
 export { useLocationUsageMap } from "./useLocationUsageMap";
 export { composeOpponentInfo, getOpponentMode, getOpponentName, useOpponentMode } from "./useOpponentMode";
+export { useCloudSync } from "./useCloudSync";

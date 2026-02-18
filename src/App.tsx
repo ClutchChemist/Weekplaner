@@ -30,7 +30,7 @@ import { makeT, makeTF } from "./i18n/translate";
 import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
 import { CalendarPane } from "@/components/layout";
 import { LeftLocationsView } from "@/components/locations";
-import { ConfirmModal, EventEditorModal, NewWeekModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
+import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
 import {
   composeOpponentInfo,
@@ -38,6 +38,7 @@ import {
   getOpponentName,
   useConfirmDialog,
   useDndPlan,
+  useCloudSync,
   useLocationUsageMap,
   usePersistedState,
   useRightSidebarPersistence,
@@ -70,6 +71,15 @@ import {
 } from "./state/playerMeta";
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
 import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
+import {
+  ACTIVE_PROFILE_STORAGE_KEY,
+  CLOUD_AUTO_SYNC_KEY,
+  PROFILES_STORAGE_KEY,
+  safeParseProfiles,
+  type CloudSnapshotV1,
+  type ProfilePayload,
+  type SavedProfile,
+} from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
 import { DEFAULT_THEME } from "./state/themeDefaults";
 import { applyThemeToCssVars } from "./themes/cssVars";
@@ -147,20 +157,6 @@ import weekMasterRaw from "./data/weekplan_master.json";
 
 type SidebarModule = "calendar" | "preview" | "maps" | "none";
 
-type ProfilePayload = {
-  rosterMeta: { season: string; ageGroups: unknown };
-  players: Player[];
-  coaches: Coach[];
-  locations: NonNullable<ThemeSettings["locations"]>;
-  clubLogoDataUrl: string | null;
-};
-
-type SavedProfile = {
-  id: string;
-  name: string;
-  payload: ProfilePayload;
-};
-
 type PromptDialogState = {
   open: boolean;
   title: string;
@@ -169,25 +165,8 @@ type PromptDialogState = {
   placeholder?: string;
 };
 
-const PROFILES_STORAGE_KEY = "ubc_planner_profiles_v1";
-const ACTIVE_PROFILE_STORAGE_KEY = "ubc_planner_active_profile_v1";
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
-
-function safeParseProfiles(raw: string | null): SavedProfile[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is SavedProfile => {
-      if (!entry || typeof entry !== "object") return false;
-      const e = entry as Record<string, unknown>;
-      return typeof e.id === "string" && typeof e.name === "string" && typeof e.payload === "object";
-    });
-  } catch {
-    return [];
-  }
-}
 
 function RightSidebarModuleSelect({
   value,
@@ -1823,6 +1802,71 @@ const holOnlyPlayers = useMemo(() => {
       clubLogoDataUrl,
     };
   }, [rosterMeta, players, coaches, theme.locations, clubLogoDataUrl]);
+
+  const buildCloudSnapshot = useCallback((): CloudSnapshotV1 => {
+    return {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      data: {
+        rosterMeta,
+        players,
+        coaches,
+        theme,
+        plan,
+        profiles,
+        activeProfileId,
+        clubLogoDataUrl,
+      },
+    };
+  }, [rosterMeta, players, coaches, theme, plan, profiles, activeProfileId, clubLogoDataUrl]);
+
+  const applyCloudSnapshot = useCallback((snapshot: CloudSnapshotV1) => {
+    const data = snapshot.data;
+
+    setRosterMeta(data.rosterMeta);
+    setPlayers(data.players);
+    setCoaches(data.coaches);
+    setTheme(data.theme);
+    setPlan(data.plan);
+    setProfiles(data.profiles);
+    setClubLogoDataUrl(data.clubLogoDataUrl ?? null);
+    setProfileHydratedId(null);
+    setActiveProfileId(data.activeProfileId ?? "");
+  }, [setCoaches, setPlan, setClubLogoDataUrl]);
+
+  const isCloudSnapshotV1 = useCallback((raw: unknown): raw is CloudSnapshotV1 => {
+    if (!raw || typeof raw !== "object") return false;
+    const r = raw as Record<string, unknown>;
+    return r.version === 1 && !!r.data && typeof r.data === "object";
+  }, []);
+
+  const cloudSyncSignal = useMemo(
+    () => JSON.stringify({ rosterMeta, players, coaches, theme, plan, profiles, activeProfileId, clubLogoDataUrl }),
+    [rosterMeta, players, coaches, theme, plan, profiles, activeProfileId, clubLogoDataUrl]
+  );
+
+  const {
+    cloudConfigured,
+    cloudEmailInput,
+    cloudStatusMsg,
+    cloudUserEmail,
+    cloudBusy,
+    cloudLastSyncAt,
+    cloudAutoSync,
+    setCloudEmailInput,
+    signInToCloud,
+    signOutFromCloud,
+    loadSnapshotFromCloud,
+    saveSnapshotToCloud,
+    toggleCloudAutoSync,
+  } = useCloudSync<CloudSnapshotV1>({
+    t,
+    autoSyncStorageKey: CLOUD_AUTO_SYNC_KEY,
+    buildSnapshot: buildCloudSnapshot,
+    applySnapshot: applyCloudSnapshot,
+    isSnapshot: isCloudSnapshotV1,
+    autoSyncSignal: cloudSyncSignal,
+  });
 
   function applyProfile(profile: SavedProfile) {
     setRosterMeta(profile.payload.rosterMeta);
@@ -3788,6 +3832,32 @@ const holOnlyPlayers = useMemo(() => {
             <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
               {t("profileHint")}
             </div>
+
+            <ProfileCloudSyncPanel
+              t={t}
+              lang={lang}
+              cloudConfigured={cloudConfigured}
+              cloudUserEmail={cloudUserEmail}
+              cloudEmailInput={cloudEmailInput}
+              cloudStatusMsg={cloudStatusMsg}
+              cloudLastSyncAt={cloudLastSyncAt}
+              cloudBusy={cloudBusy}
+              cloudAutoSync={cloudAutoSync}
+              onEmailInputChange={setCloudEmailInput}
+              onSignIn={() => {
+                void signInToCloud();
+              }}
+              onLoad={() => {
+                void loadSnapshotFromCloud();
+              }}
+              onSave={() => {
+                void saveSnapshotToCloud(false);
+              }}
+              onToggleAutoSync={toggleCloudAutoSync}
+              onSignOut={() => {
+                void signOutFromCloud();
+              }}
+            />
           </div>
         </Modal>
       )}

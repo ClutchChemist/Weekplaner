@@ -36,6 +36,8 @@ Expected variables:
 - `GOOGLE_MAPS_KEY` (optional if Maps features are not used)
 - `PORT` (proxy port, default `5055`)
 - `VITE_API_BASE_URL` (optional; use for production frontend to call external proxy)
+- `VITE_SUPABASE_URL` (optional; required for cloud sync)
+- `VITE_SUPABASE_ANON_KEY` (optional; required for cloud sync)
 
 ⚠️ Never commit real API keys.
 
@@ -101,3 +103,60 @@ Tip: open browser devtools on the deployed site and verify API calls go to:
 
 - Local dev (`npm run dev`): frontend calls `/api/*` through Vite proxy (`vite.config.ts`).
 - Production (GitHub Pages): frontend calls `${VITE_API_BASE_URL}/api/*` when `VITE_API_BASE_URL` is set.
+
+## Cloud Sync (Supabase)
+
+The app includes an optional cloud sync in the Profiles dialog:
+
+- Email magic-link sign-in
+- Save current session snapshot to cloud
+- Load snapshot on another device
+- Optional auto-sync while editing
+
+### 1) Set env vars
+
+In `.env`:
+
+- `VITE_SUPABASE_URL=https://<project-ref>.supabase.co`
+- `VITE_SUPABASE_ANON_KEY=<public-anon-key>`
+
+### 2) Create table + RLS policies
+
+Run this SQL in Supabase SQL editor:
+
+```sql
+create table if not exists public.planner_snapshots (
+	user_id uuid primary key references auth.users(id) on delete cascade,
+	snapshot jsonb not null,
+	updated_at timestamptz not null default now()
+);
+
+alter table public.planner_snapshots enable row level security;
+
+create policy "Users can read own snapshot"
+on public.planner_snapshots
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can upsert own snapshot"
+on public.planner_snapshots
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update own snapshot"
+on public.planner_snapshots
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+```
+
+### 3) Use in app
+
+Open **Profiles** and use **Cloud sync** section:
+
+- enter email + send magic link
+- after sign-in: load or save snapshot
+- enable auto-sync for seamless device switching
