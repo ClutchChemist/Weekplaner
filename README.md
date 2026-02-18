@@ -35,6 +35,7 @@ Expected variables:
 
 - `GOOGLE_MAPS_KEY` (optional if Maps features are not used)
 - `PORT` (proxy port, default `5055`)
+- `VITE_API_BASE_URL` (optional; use for production frontend to call external proxy)
 
 ⚠️ Never commit real API keys.
 
@@ -64,3 +65,21 @@ For production (GitHub Pages), `/api` requests need either:
 
 - an external backend URL, or
 - feature-flagged optional API usage.
+
+## Maps proxy deployment (Render example)
+
+This repo includes `render.yaml` for deploying the Node proxy in `server/maps-proxy.ts`.
+
+### Recommended setup
+
+1. Create a new Render Web Service from this repository.
+2. Use settings from `render.yaml` (or import Blueprint).
+3. Set environment variable `GOOGLE_MAPS_KEY` in Render dashboard.
+4. After deploy, copy service URL (for example `https://weekplaner-maps-proxy.onrender.com`).
+5. Set frontend env variable:
+	- `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`
+
+### Local vs production behavior
+
+- Local dev (`npm run dev`): frontend calls `/api/*` through Vite proxy (`vite.config.ts`).
+- Production (GitHub Pages): frontend calls `${VITE_API_BASE_URL}/api/*` when `VITE_API_BASE_URL` is set.

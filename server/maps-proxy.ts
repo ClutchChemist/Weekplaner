@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import "dotenv/config";
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,10 @@ function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
 }
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
 
 /** Places Autocomplete (New) -> predictions */
 app.post("/api/places/autocomplete", async (req, res) => {

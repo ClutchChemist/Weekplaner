@@ -1,11 +1,19 @@
 import { uid } from "./id";
 
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL ?? "")
+  .trim()
+  .replace(/\/+$/, "");
+
+function apiUrl(path: string): string {
+  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+}
+
 export function generateSessionToken(): string {
   return uid();
 }
 
 export async function fetchPlacePredictions(input: string, sessionToken: string) {
-  const r = await fetch("/api/places/autocomplete", {
+  const r = await fetch(apiUrl("/api/places/autocomplete"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ input, sessionToken }),
@@ -15,7 +23,7 @@ export async function fetchPlacePredictions(input: string, sessionToken: string)
 }
 
 export async function fetchPlaceDetails(placeId: string, sessionToken: string) {
-  const r = await fetch("/api/places/details", {
+  const r = await fetch(apiUrl("/api/places/details"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ placeId, sessionToken }),
@@ -29,7 +37,7 @@ export async function fetchTravelMinutes(
   destinationAddress: string,
   departureTimeIso?: string
 ): Promise<number | null> {
-  const r = await fetch("/api/routes/compute", {
+  const r = await fetch(apiUrl("/api/routes/compute"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ originAddress, destinationAddress, departureTimeIso }),

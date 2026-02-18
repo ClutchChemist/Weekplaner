@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: weekplaner-maps-proxy
+    env: node
+    plan: free
+    rootDir: .
+    buildCommand: npm ci
+    startCommand: npx tsx server/maps-proxy.ts
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 5055
+      - key: GOOGLE_MAPS_KEY
+        sync: false
