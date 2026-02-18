@@ -65,12 +65,18 @@ This project implements the following security measures:
 To verify no secrets are exposed:
 
 ```bash
-# Search for potential API key patterns
-git log --all -p | grep -i "api.*key\|secret\|token" | grep -v "\.example\|placeholder"
+# Search for potential API key patterns in git history
+# Note: Results need manual review to distinguish between actual secrets and documentation
+git log --all -p | grep -i "api.*key\|secret\|token" | grep -v "\.example\|placeholder\|SECURITY.md"
 
-# Check current files
-grep -r "AIza" . --exclude-dir=node_modules --exclude-dir=.git
+# Check current files for Google Maps API keys (AIza pattern)
+grep -r "AIza[0-9A-Za-z_-]{35}" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs
+
+# Check for other common secret patterns
+grep -rE "(sk-[a-zA-Z0-9]{40,}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36})" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs
 ```
+
+**Note**: These commands may produce false positives in documentation. Always manually review results to distinguish between actual secrets and legitimate references.
 
 ### 📚 Additional Resources
 
