@@ -143,6 +143,7 @@ type ProfilePayload = {
   players: Player[];
   coaches: Coach[];
   locations: NonNullable<ThemeSettings["locations"]>;
+  clubLogoDataUrl: string | null;
 };
 
 type SavedProfile = {
@@ -161,6 +162,8 @@ type PromptDialogState = {
 
 const PROFILES_STORAGE_KEY = "ubc_planner_profiles_v1";
 const ACTIVE_PROFILE_STORAGE_KEY = "ubc_planner_active_profile_v1";
+const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
+const CLUB_LOGO_MAX_BYTES = 600 * 1024;
 
 function safeParseProfiles(raw: string | null): SavedProfile[] {
   if (!raw) return [];
@@ -1623,10 +1626,25 @@ export default function App() {
   const [activeProfileId, setActiveProfileId] = useState<string>(() =>
     typeof window !== "undefined" ? localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY) ?? "" : ""
   );
+  const [profileHydratedId, setProfileHydratedId] = useState<string | null>(null);
   const [profilesOpen, setProfilesOpen] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState("");
+  const [logoUploadError, setLogoUploadError] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const logoFileRef = useRef<HTMLInputElement | null>(null);
+  const [clubLogoDataUrl, setClubLogoDataUrl] = usePersistedState<string | null>(
+    CLUB_LOGO_STORAGE_KEY,
+    null,
+    (savedRaw) => {
+      try {
+        const parsed = JSON.parse(savedRaw);
+        return typeof parsed === "string" || parsed === null ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+  );
   const activeProfileName = useMemo(
     () => profiles.find((p) => p.id === activeProfileId)?.name ?? null,
     [profiles, activeProfileId]
@@ -1799,6 +1817,38 @@ export default function App() {
 
   const [players, setPlayers] = useState<Player[]>(() => normalizedRoster.players);
 
+  function handleClubLogoUpload(file: File) {
+    setLogoUploadError("");
+
+    if (!file.type.startsWith("image/")) {
+      setLogoUploadError(theme.locale === "de" ? "Bitte eine Bilddatei auswählen." : "Please choose an image file.");
+      return;
+    }
+    if (file.size > CLUB_LOGO_MAX_BYTES) {
+      const maxKb = Math.round(CLUB_LOGO_MAX_BYTES / 1024);
+      setLogoUploadError(
+        theme.locale === "de"
+          ? `Logo ist zu groß (max. ${maxKb} KB).`
+          : `Logo is too large (max ${maxKb} KB).`
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
+        return;
+      }
+      setClubLogoDataUrl(reader.result);
+      setLogoUploadError("");
+    };
+    reader.onerror = () => {
+      setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
+    };
+    reader.readAsDataURL(file);
+  }
+
   useEffect(() => {
     localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
   }, [profiles]);
@@ -1856,9 +1906,9 @@ export default function App() {
       clubName: theme.clubName,
       locale: theme.locale,
       locations: theme.locations ?? DEFAULT_THEME.locations!,
-      logoUrl: undefined,
+      logoUrl: clubLogoDataUrl ?? undefined,
     });
-  }, [plan, players, coaches, theme]);
+  }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
   const previewPages = useMemo(() => {
     return buildPreviewPages({
@@ -1868,9 +1918,9 @@ export default function App() {
       clubName: theme.clubName,
       locale: theme.locale,
       locations: theme.locations ?? DEFAULT_THEME.locations!,
-      logoUrl: undefined,
+      logoUrl: clubLogoDataUrl ?? undefined,
     });
-  }, [plan, players, coaches, theme]);
+  }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
   /* ----------------------
      Derived
@@ -2238,13 +2288,15 @@ const holOnlyPlayers = useMemo(() => {
       players,
       coaches,
       locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
+      clubLogoDataUrl,
     };
-  }, [rosterMeta, players, coaches, theme.locations]);
+  }, [rosterMeta, players, coaches, theme.locations, clubLogoDataUrl]);
 
   function applyProfile(profile: SavedProfile) {
     setRosterMeta(profile.payload.rosterMeta);
     setPlayers(profile.payload.players);
     setCoaches(profile.payload.coaches);
+    setClubLogoDataUrl(profile.payload.clubLogoDataUrl ?? null);
     setTheme((prev) => ({
       ...prev,
       locations: profile.payload.locations,
@@ -2261,6 +2313,7 @@ const holOnlyPlayers = useMemo(() => {
       payload: currentProfilePayload(),
     };
     setProfiles((prev) => [...prev, entry]);
+    setProfileHydratedId(id);
     setActiveProfileId(id);
     setProfileNameInput("");
   }
@@ -2283,20 +2336,42 @@ const holOnlyPlayers = useMemo(() => {
   function deleteActiveProfile() {
     if (!activeProfileId) return;
     setProfiles((prev) => prev.filter((p) => p.id !== activeProfileId));
+    setProfileHydratedId(null);
     setActiveProfileId("");
   }
 
   function selectProfile(id: string) {
+    if (!id) {
+      setProfileHydratedId(null);
+      setActiveProfileId("");
+      return;
+    }
     setActiveProfileId(id);
     const hit = profiles.find((p) => p.id === id);
     if (hit) {
       applyProfile(hit);
       setProfileNameInput(hit.name);
+      setProfileHydratedId(id);
     }
   }
 
   useEffect(() => {
-    if (!activeProfileId) return;
+    if (!activeProfileId) {
+      setProfileHydratedId(null);
+      return;
+    }
+    if (profileHydratedId === activeProfileId) return;
+
+    const hit = profiles.find((p) => p.id === activeProfileId);
+    if (!hit) return;
+
+    applyProfile(hit);
+    setProfileNameInput(hit.name);
+    setProfileHydratedId(activeProfileId);
+  }, [activeProfileId, profileHydratedId, profiles]);
+
+  useEffect(() => {
+    if (!activeProfileId || profileHydratedId !== activeProfileId) return;
     setProfiles((prev) => {
       const idx = prev.findIndex((p) => p.id === activeProfileId);
       if (idx < 0) return prev;
@@ -2307,7 +2382,7 @@ const holOnlyPlayers = useMemo(() => {
       copy[idx] = { ...cur, payload: nextPayload };
       return copy;
     });
-  }, [activeProfileId, currentProfilePayload]);
+  }, [activeProfileId, currentProfilePayload, profileHydratedId]);
 
   /* ============================================================
      Roster editor: import/export roster.json
@@ -3196,7 +3271,18 @@ const holOnlyPlayers = useMemo(() => {
                         textOverflow: "ellipsis",
                       }}
                     >
-                      👤 {activeProfileName ?? t("profiles")}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        {clubLogoDataUrl ? (
+                          <img
+                            src={clubLogoDataUrl}
+                            alt="Logo"
+                            style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 4 }}
+                          />
+                        ) : (
+                          <span>👤</span>
+                        )}
+                        <span>{activeProfileName ?? t("profiles")}</span>
+                      </span>
                     </Button>
 
                     <Button
@@ -3927,6 +4013,59 @@ const holOnlyPlayers = useMemo(() => {
                 onChange={setProfileNameInput}
                 placeholder={t("profileNamePlaceholder")}
               />
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 900 }}>Logo</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 10,
+                    border: "1px solid var(--ui-border)",
+                    background: "var(--ui-card)",
+                    display: "grid",
+                    placeItems: "center",
+                    overflow: "hidden",
+                  }}
+                >
+                  {clubLogoDataUrl ? (
+                    <img src={clubLogoDataUrl} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  ) : (
+                    <span style={{ color: "var(--ui-muted)", fontSize: 11, fontWeight: 900 }}>Logo</span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Button variant="outline" onClick={() => logoFileRef.current?.click()}>
+                    {theme.locale === "de" ? "Logo hochladen" : "Upload logo"}
+                  </Button>
+                  <Button variant="danger" onClick={() => setClubLogoDataUrl(null)} disabled={!clubLogoDataUrl}>
+                    {theme.locale === "de" ? "Logo entfernen" : "Remove logo"}
+                  </Button>
+                </div>
+
+                <input
+                  ref={logoFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleClubLogoUpload(file);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </div>
+              <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                {theme.locale === "de"
+                  ? `Empfohlen: quadratisches Logo, max. ${Math.round(CLUB_LOGO_MAX_BYTES / 1024)} KB.`
+                  : `Recommended: square logo, max ${Math.round(CLUB_LOGO_MAX_BYTES / 1024)} KB.`}
+              </div>
+              {logoUploadError && (
+                <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 800 }}>{logoUploadError}</div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
