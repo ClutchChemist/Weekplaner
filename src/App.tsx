@@ -1571,28 +1571,44 @@ const holOnlyPlayers = useMemo(() => {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const opponentInputRef = useRef<HTMLInputElement | null>(null);
   const editorTopRef = useRef<HTMLDivElement | null>(null);
+  const prevOpponentModeRef = useRef<{ game: boolean; away: boolean } | null>(null);
 
   // Default-Logik:
-  // - sobald "vs" oder "@" erkannt wird: Treffen+Warm-up default 90 min
-  // - bei "@": zusätzlich Reisezeit default 90 min, bei "vs": Reisezeit = 0
+  // - nur bei Modus-Übergängen defaults setzen:
+  //   * non-game -> game: warmup default 90 (falls bisher 0)
+  //   * home -> away: travel default 90 (falls bisher 0)
+  //   * away -> home: travel = 0
+  //   * game -> non-game: warmup/travel = 0
   useEffect(() => {
     const info = normalizeOpponentInfo(formOpponent);
     const game = isGameInfo(info);
     const away = info.startsWith("@");
 
     setEditorState((prev) => {
+      const prevMode = prevOpponentModeRef.current;
+      prevOpponentModeRef.current = { game, away };
+
       let nextWarmupMin = prev.formWarmupMin;
       let nextTravelMin = prev.formTravelMin;
 
-      if (game) {
-        if (nextWarmupMin <= 0) nextWarmupMin = 90;
+      // Bei reinem Gegnernamen-Ändern ohne Moduswechsel keine automatischen Anpassungen.
+      if (prevMode && prevMode.game === game && prevMode.away === away) {
+        return prev;
+      }
 
-        if (away) {
-          if (nextTravelMin <= 0) nextTravelMin = 90;
-        } else if (nextTravelMin !== 0) {
-          nextTravelMin = 0;
-        }
-      } else {
+      if (game && !prevMode?.game) {
+        if (nextWarmupMin <= 0) nextWarmupMin = 90;
+      }
+
+      if (game && away && prevMode && !prevMode.away) {
+        if (nextTravelMin <= 0) nextTravelMin = 90;
+      }
+
+      if (game && !away && prevMode?.away) {
+        if (nextTravelMin !== 0) nextTravelMin = 0;
+      }
+
+      if (!game && prevMode?.game) {
         if (nextWarmupMin !== 0) nextWarmupMin = 0;
         if (nextTravelMin !== 0) nextTravelMin = 0;
       }
