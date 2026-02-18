@@ -4,7 +4,7 @@ import type { AppState } from "./types";
 
 const initialAppUiState: AppState = {
   settingsOpen: false,
-  eventEditorOpen: true,
+  eventEditorOpen: false,
   newWeekOpen: false,
   rightSidebarOpen: true,
   rightLayout: "split",

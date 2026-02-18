@@ -66,7 +66,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "RESET_UI":
       return {
         settingsOpen: false,
-        eventEditorOpen: true,
+        eventEditorOpen: false,
         newWeekOpen: false,
         rightSidebarOpen: true,
         rightLayout: "split",
