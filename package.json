@@ -12,7 +12,7 @@
     "format:check": "prettier --check .",
     "security:scan": "detect-secrets scan --baseline .secrets.baseline",
     "security:audit": "detect-secrets audit .secrets.baseline",
-    "prepare": "command -v pre-commit >/dev/null 2>&1 && pre-commit install || echo 'Warning: pre-commit not found. Install with: pip install pre-commit'"
+    "prepare": "node scripts/install-hooks.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
