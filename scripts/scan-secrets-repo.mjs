@@ -27,10 +27,6 @@ const secretRules = [
     { name: "OpenAI key", pattern: /sk-[A-Za-z0-9]{20,}/g },
     { name: "AWS access key", pattern: /AKIA[0-9A-Z]{16}/g },
     { name: "Private key block", pattern: /-----BEGIN (?:RSA|EC|OPENSSH|PGP|DSA)? ?PRIVATE KEY-----/g },
-    {
-        name: "Inline env assignment with long token",
-        pattern: /(?:GOOGLE_MAPS_KEY|VITE_SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)\s*=\s*[^\s#]{20,}/g,
-    },
 ];
 
 const files = getTrackedFiles();

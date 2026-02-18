@@ -12,7 +12,9 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "secrets:scan:staged": "node scripts/scan-secrets-staged.mjs",
-    "secrets:scan:repo": "node scripts/scan-secrets-repo.mjs"
+    "secrets:scan:repo": "node scripts/scan-secrets-repo.mjs",
+    "security:scan": "detect-secrets scan --baseline .secrets.baseline",
+    "security:audit": "detect-secrets audit .secrets.baseline"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
