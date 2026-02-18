@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "security:scan": "detect-secrets scan --baseline .secrets.baseline",
+    "security:audit": "detect-secrets audit .secrets.baseline",
+    "prepare": "node scripts/install-hooks.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
