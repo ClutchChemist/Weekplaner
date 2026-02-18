@@ -84,12 +84,14 @@ import {
   sessionsOverlap,
 } from "./utils/session";
 import {
+  buildLocationUsageMap,
   ensureLocationSaved,
   getCachedTravelMinutes,
   getLocationOptions,
   resolveLocationAddress,
   resolveLocationPlaceId,
   setCachedTravelMinutes,
+  sortLocationNamesByUsage,
   splitAddressLines,
 } from "./utils/locations";
 import { fetchPlaceDetails, fetchPlacePredictions, fetchTravelMinutes, generateSessionToken } from "./utils/mapsApi";
@@ -274,11 +276,13 @@ function AddressAutocomplete({
   placeId,
   onChange,
   placeholder,
+  openMapsLabel,
 }: {
   value: string;
   placeId?: string;
   onChange: (address: string, placeId: string) => void;
   placeholder?: string;
+  openMapsLabel?: string;
 }) {
   type PlaceSuggestion = {
     placePrediction?: {
@@ -404,6 +408,29 @@ function AddressAutocomplete({
           ID: {placeId.slice(0, 20)}...
         </div>
       )}
+      <div style={{ marginTop: 6, display: "flex", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          onClick={() => {
+            const q = encodeURIComponent((inputVal || value || "").trim());
+            if (!q) return;
+            window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
+          }}
+          style={{
+            border: "1px solid var(--ui-border)",
+            borderRadius: 10,
+            padding: "6px 9px",
+            background: "transparent",
+            color: "var(--ui-text)",
+            fontWeight: 900,
+            fontSize: 11,
+            cursor: "pointer",
+          }}
+          title={openMapsLabel ?? "Google Maps"}
+        >
+          🗺️ {openMapsLabel ?? "Google Maps"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -415,6 +442,7 @@ function AddressAutocomplete({
 function LeftLocationsView({
   theme,
   setTheme,
+  locationUsageMap,
   editMode,
   openLocationName,
   setOpenLocationName,
@@ -422,6 +450,7 @@ function LeftLocationsView({
 }: {
   theme: ThemeSettings;
   setTheme: (t: ThemeSettings) => void;
+  locationUsageMap: Record<string, number>;
   editMode: boolean;
   openLocationName: string | null;
   setOpenLocationName: (v: string | null) => void;
@@ -429,14 +458,14 @@ function LeftLocationsView({
 }) {
   // Wenn editMode AN: nutze bestehendes LocationsPanel (inkl. Autocomplete)
   if (editMode) {
-    return <LocationsPanel theme={theme} setTheme={setTheme} t={t} />;
+    return <LocationsPanel theme={theme} setTheme={setTheme} locationUsageMap={locationUsageMap} t={t} />;
   }
 
   const L = theme.locations ?? {};
   const locs = L.locations ?? {};
   const defs = L.definitions ?? {};
 
-  const names = Object.keys(locs).sort((a, b) => a.localeCompare(b));
+  const names = sortLocationNamesByUsage(Object.keys(locs), locationUsageMap);
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -488,6 +517,9 @@ function LeftLocationsView({
                     Halle {def.hallNo}
                   </div>
                 ) : null}
+                <div style={{ color: "var(--ui-muted)", fontWeight: 900, fontSize: 12 }}>
+                  {t("used")}: {locationUsageMap[name] ?? 0}
+                </div>
                 <div style={{ color: "var(--ui-muted)", fontWeight: 900 }}>{isOpen ? "▲" : "▼"}</div>
               </button>
 
@@ -528,6 +560,7 @@ function LocationCard({
   name,
   def,
   isPreset,
+  usageCount,
   locData,
   onToggle,
   open,
@@ -539,6 +572,7 @@ function LocationCard({
   name: string;
   def: { abbr: string; name: string; hallNo?: string };
   isPreset: boolean;
+  usageCount: number;
   locData: { address: string; placeId?: string };
   open: boolean;
   onToggle: () => void;
@@ -548,6 +582,15 @@ function LocationCard({
   t: (k: string) => string;
 }) {
   const hasMaps = Boolean(locData.placeId);
+  const [line1, line2] = (() => {
+    const lines = splitAddressLines(locData.address ?? "");
+    return [lines[0] ?? "", lines.slice(1).join(", ") ?? ""];
+  })();
+
+  const setManualAddress = (nextLine1: string, nextLine2: string) => {
+    const next = [nextLine1.trim(), nextLine2.trim()].filter(Boolean).join(", ");
+    onAddressChange(next, "");
+  };
 
   return (
     <div
@@ -581,6 +624,7 @@ function LocationCard({
             {def.abbr ? `${t("abbr")}: ${def.abbr}` : `${t("abbr")}: —`}
             {def.hallNo ? `  •  ${t("hall")} ${def.hallNo}` : ""}
             {hasMaps ? `  •  ${t("maps")} ✓` : `  •  ${t("maps")} —`}
+            {`  •  ${t("used")}: ${usageCount}`}
           </div>
         </div>
 
@@ -619,7 +663,20 @@ function LocationCard({
               placeId={locData.placeId}
               onChange={onAddressChange}
               placeholder={t("searchAddress")}
+              openMapsLabel={t("openInGoogleMaps")}
             />
+            <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Input
+                value={line1}
+                onChange={(v) => setManualAddress(v, line2)}
+                placeholder={t("addressLine1")}
+              />
+              <Input
+                value={line2}
+                onChange={(v) => setManualAddress(line1, v)}
+                placeholder={t("addressLine2")}
+              />
+            </div>
           </div>
 
           {!isPreset && onRemove && (
@@ -658,13 +715,16 @@ function LocationCard({
 function LocationsPanel({
   theme,
   setTheme,
+  locationUsageMap,
   t,
 }: {
   theme: ThemeSettings;
   setTheme: (t: ThemeSettings) => void;
+  locationUsageMap: Record<string, number>;
   t: (k: string) => string;
 }) {
   const loc = theme.locations ?? {};
+  const [homeLocationName, setHomeLocationName] = React.useState("");
 
   function setHomeAddress(address: string, placeId: string) {
     setTheme({
@@ -696,13 +756,23 @@ function LocationsPanel({
   }
   
   function setDef(name: string, next: { abbr: string; name: string; hallNo?: string }) {
+    const normalized = {
+      name: String(next.name ?? "").trim().replace(/\s+/g, " "),
+      abbr: String(next.abbr ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toUpperCase(),
+      hallNo: String(next.hallNo ?? "")
+        .trim()
+        .replace(/\s+/g, " "),
+    };
     setTheme({
       ...theme,
       locations: {
         ...(theme.locations ?? {}),
         definitions: {
           ...(theme.locations?.definitions ?? {}),
-          [name]: next,
+          [name]: normalized,
         },
       },
     });
@@ -716,21 +786,66 @@ function LocationsPanel({
   const [openName, setOpenName] = React.useState<string | null>(null);
 
   // Combined list: presets + custom, sorted
-  const allNames = [
-    ...presetNames,
-    ...customLocationNames.sort((a, b) => a.localeCompare(b)),
-  ];
+  const allNames = sortLocationNamesByUsage([...new Set([...presetNames, ...customLocationNames])], locationUsageMap);
+  const locationNamesWithAddress = allNames.filter((name) => Boolean(resolveLocationAddress(name, theme)));
+
+  function selectHomeFromLocation(name: string) {
+    const address = resolveLocationAddress(name, theme);
+    const placeId = resolveLocationPlaceId(name, theme);
+    setHomeAddress(address, placeId);
+  }
+
+  function saveHomeAsLocation() {
+    const name = homeLocationName.trim().replace(/\s+/g, " ");
+    const homeAddress = String(loc.homeAddress ?? "").trim();
+    const homePlaceId = String(loc.homePlaceId ?? "").trim();
+    if (!name || !homeAddress) return;
+
+    ensureLocationSaved(theme, setTheme, name);
+    setLocationAddress(name, homeAddress, homePlaceId);
+    if (!(theme.locations?.definitions ?? {})[name]) {
+      setDef(name, { abbr: "", name, hallNo: "" });
+    }
+    setOpenName(name);
+  }
 
   return (
     <div style={{ padding: 12, display: "grid", gap: 14 }}>
       <div>
         <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("home")}</div>
+        <div style={{ display: "grid", gap: 8, marginBottom: 8 }}>
+          <Select
+            value=""
+            onChange={(v) => {
+              if (!v) return;
+              selectHomeFromLocation(v);
+            }}
+            options={[
+              { value: "", label: `— ${t("useLocationAsHome")} —` },
+              ...locationNamesWithAddress.map((name) => ({
+                value: name,
+                label: `${name} (${t("used")}: ${locationUsageMap[name] ?? 0})`,
+              })),
+            ]}
+          />
+        </div>
         <AddressAutocomplete
           value={loc.homeAddress ?? ""}
           placeId={loc.homePlaceId}
           onChange={setHomeAddress}
           placeholder={t("startPointOptional")}
+          openMapsLabel={t("openInGoogleMaps")}
         />
+        <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
+          <Input
+            value={homeLocationName}
+            onChange={setHomeLocationName}
+            placeholder={t("homeLocationNamePlaceholder")}
+          />
+          <Button variant="outline" onClick={saveHomeAsLocation}>
+            {t("saveHomeAsLocation")}
+          </Button>
+        </div>
       </div>
 
       <div>
@@ -749,6 +864,7 @@ function LocationsPanel({
                 name={name}
                 def={def}
                 isPreset={isPreset}
+                usageCount={locationUsageMap[name] ?? 0}
                 locData={locData}
                 open={openName === name}
                 onToggle={() => setOpenName(openName === name ? null : name)}
@@ -1944,6 +2060,7 @@ export default function App() {
 
   const sortParticipants = useMemo(() => makeParticipantSorter(playerById), [playerById]);
   const trainingCounts = useMemo(() => computeTrainingCounts(plan), [plan]);
+  const locationUsageMap = useMemo(() => buildLocationUsageMap(plan.sessions ?? []), [plan.sessions]);
 
   // Plan date set & birthdays for players present in the plan
   const planDates = useMemo(() => planDateSet(plan), [plan]);
@@ -3221,6 +3338,7 @@ const holOnlyPlayers = useMemo(() => {
                 <LeftLocationsView
                   theme={theme}
                   setTheme={setTheme}
+                  locationUsageMap={locationUsageMap}
                   editMode={leftEditMode}
                   openLocationName={openLocationName}
                   setOpenLocationName={setOpenLocationName}
@@ -3472,7 +3590,7 @@ const holOnlyPlayers = useMemo(() => {
                   <div style={{ fontWeight: 900 }}>{t("location")}</div>
                   <div style={{ display: "grid", gap: 8 }}>
                     {(() => {
-                      const locationOptions = getLocationOptions(theme, t);
+                      const locationOptions = getLocationOptions(theme, t, locationUsageMap);
                       return (
                         <select
                           value={locationMode === "__CUSTOM__" ? "__CUSTOM__" : locationMode}
@@ -3520,7 +3638,7 @@ const holOnlyPlayers = useMemo(() => {
 
                           {(() => {
                             const name = customLocation.trim().replace(/\s+/g, " ");
-                            const locationOptions = getLocationOptions(theme, t);
+                            const locationOptions = getLocationOptions(theme, t, locationUsageMap);
                             const alreadyExists = locationOptions.some(
                               (o) => o.value.toLowerCase() === name.toLowerCase() && o.kind !== "custom"
                             );

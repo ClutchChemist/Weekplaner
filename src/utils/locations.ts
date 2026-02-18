@@ -6,6 +6,26 @@ export type LocationOption = {
   kind: "preset" | "saved" | "custom";
 };
 
+export type LocationUsageMap = Record<string, number>;
+
+export function buildLocationUsageMap(sessions: Array<{ location?: string | null }>): LocationUsageMap {
+  const usage: LocationUsageMap = {};
+  for (const s of sessions) {
+    const loc = String(s?.location ?? "").trim();
+    if (!loc) continue;
+    usage[loc] = (usage[loc] ?? 0) + 1;
+  }
+  return usage;
+}
+
+export function sortLocationNamesByUsage(names: string[], usageMap: LocationUsageMap = {}): string[] {
+  return [...names].sort((a, b) => {
+    const diff = (usageMap[b] ?? 0) - (usageMap[a] ?? 0);
+    if (diff !== 0) return diff;
+    return a.localeCompare(b, "de");
+  });
+}
+
 export function splitAddressLines(addr: string) {
   const cleaned = String(addr ?? "").trim();
   if (!cleaned) return [];
@@ -33,34 +53,29 @@ export function resolveLocationPlaceId(location: string, theme: ThemeSettings): 
   return L.locations?.[loc]?.placeId ?? "";
 }
 
-export function getLocationOptions(theme: ThemeSettings, t: (key: string) => string): LocationOption[] {
+export function getLocationOptions(
+  theme: ThemeSettings,
+  t: (key: string) => string,
+  usageMap: LocationUsageMap = {}
+): LocationOption[] {
   const L = theme.locations ?? {};
   const locs = L.locations ?? {};
   const defs = L.definitions ?? {};
 
   const presetNames = ["BSH", "SHP", "Seminarraum"];
 
-  const presets: LocationOption[] = presetNames.map((name) => {
-    const d = defs[name] ?? { abbr: name, name, hallNo: "" };
-    const hall = d.hallNo ? ` • ${t("hall")} ${d.hallNo}` : "";
-    const abbr = d.abbr && d.abbr !== name ? ` (${d.abbr})` : "";
-    return { value: name, label: `${d.name || name}${abbr}${hall}`, kind: "preset" };
-  });
+  const allNames = Array.from(new Set([...presetNames, ...Object.keys(locs)]));
 
-  const savedNames = Object.keys(locs)
-    .filter((n) => !presetNames.includes(n))
-    .sort((a, b) => a.localeCompare(b));
-
-  const saved: LocationOption[] = savedNames.map((name) => {
+  const items: LocationOption[] = sortLocationNamesByUsage(allNames, usageMap).map((name) => {
     const d = defs[name] ?? { abbr: "", name, hallNo: "" };
     const hall = d.hallNo ? ` • ${t("hall")} ${d.hallNo}` : "";
     const abbr = d.abbr ? ` (${d.abbr})` : "";
-    return { value: name, label: `${d.name || name}${abbr}${hall}`, kind: "saved" };
+    const isPreset = presetNames.includes(name);
+    return { value: name, label: `${d.name || name}${abbr}${hall}`, kind: isPreset ? "preset" : "saved" };
   });
 
   return [
-    ...presets,
-    ...saved,
+    ...items,
     { value: "__CUSTOM__", label: `— ${t("custom")} / ${t("freeText")} —`, kind: "custom" },
   ];
 }
