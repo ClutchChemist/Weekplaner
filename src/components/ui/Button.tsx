@@ -19,6 +19,8 @@ export function Button({
     fontWeight: 900,
     border: "1px solid transparent",
     opacity: disabled ? 0.5 : 1,
+    minWidth: 0,
+    maxWidth: "100%",
   };
 
   const variants: Record<string, CSSProperties> = {

@@ -62,7 +62,7 @@ function tdCss(): string {
   return "border: 1px solid #ccc; padding: 8px;";
 }
 
-function renderWeekOverviewHtml(opts: {
+export function renderWeekOverviewHtml(opts: {
   sessions: Session[];
   players: Player[];
   coaches: Coach[];
@@ -328,7 +328,7 @@ function renderWeekScheduleOnlyHtml(opts: {
   `;
 }
 
-function renderRostersOnlyHtml(opts: {
+export function renderRostersOnlyHtml(opts: {
   sessions: Session[];
   players: Player[];
   clubName: string;
@@ -391,6 +391,72 @@ function renderRostersOnlyHtml(opts: {
   `;
 }
 
+function renderWeekSummaryAndRostersFirstPageHtml(opts: {
+  sessions: Session[];
+  players: Player[];
+  clubName: string;
+  locale: Lang;
+  locations: ThemeLocations;
+  logoUrl?: string;
+}): string {
+  const { sessions, players, clubName, locale, locations, logoUrl } = opts;
+
+  const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl });
+  const scheduleInner = scheduleHtml
+    .replace(/^\s*<div class="page">/, "")
+    .replace(/<\/div>\s*$/, "")
+    .replace(new RegExp(pageFooterHtml({ clubName, locale }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "");
+
+  const t = locale === "de"
+    ? { rosterTitle: "Kaderlisten", empty: "Keine Teilnehmer zugewiesen." }
+    : { rosterTitle: "Roster lists", empty: "No participants assigned." };
+
+  const playerById = new Map(players.map((p) => [p.id, p] as const));
+
+  const rosterRows = sessions
+    .map((s) => {
+      const names = (s.participants ?? [])
+        .map((pid) => playerById.get(pid)?.name)
+        .filter((n): n is string => Boolean(n))
+        .sort((a, b) => a.localeCompare(b, locale));
+
+      const eventLabel = `${s.day} · ${s.date} · ${s.time} · ${s.location} · ${s.teams.join(", ")}${s.info ? ` · ${s.info}` : ""}`;
+
+      return `
+        <tr>
+          <td style="${tdCss()} width: 42%;">${escapeHtml(eventLabel)}</td>
+          <td style="${tdCss()}">${names.length ? escapeHtml(names.join(", ")) : `<span style="color:#999;">${escapeHtml(t.empty)}</span>`}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const rosterSection = `
+    <div style="margin-top: 14px;">
+      <h3 style="margin: 0 0 8px 0; font-size: 16px;">${escapeHtml(t.rosterTitle)}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="${thCss()}">${locale === "de" ? "Event" : "Event"}</th>
+            <th style="${thCss()}">${locale === "de" ? "Spieler" : "Players"}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rosterRows}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  return `
+    <div class="page">
+      ${scheduleInner}
+      ${rosterSection}
+      ${pageFooterHtml({ clubName, locale })}
+    </div>
+  `;
+}
+
 function renderGameSheetHtml(opts: {
   session: Session;
   players: Player[];
@@ -442,7 +508,9 @@ function renderGameSheetHtml(opts: {
     })
     .join("");
 
-  const assignedCoaches = coaches.filter((c) => game.participants?.includes(c.id));
+  const assignedCoaches = coaches
+    .slice()
+    .sort((a, b) => `${a.role} ${a.name}`.localeCompare(`${b.role} ${b.name}`, locale));
   let coachRows = "";
   for (const c of assignedCoaches) {
     coachRows += `
@@ -515,8 +583,19 @@ export function buildPrintPages(opts: {
   const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
   const pages: PrintPage[] = [];
 
-  const overviewHtml = renderWeekOverviewHtml({ sessions, players, coaches, clubName, locale, locations, logoUrl });
-  pages.push({ type: "overview", html: overviewHtml, title: "Trainingsübersicht" });
+  const firstPageHtml = renderWeekSummaryAndRostersFirstPageHtml({
+    sessions,
+    players,
+    clubName,
+    locale,
+    locations,
+    logoUrl,
+  });
+  pages.push({
+    type: "overview",
+    html: firstPageHtml,
+    title: locale === "de" ? "Trainingswoche + Kaderlisten" : "Training week + roster lists",
+  });
 
   const games = sessions.filter((s) => isGameSession(s));
   for (const g of games) {
@@ -543,14 +622,8 @@ export function buildPreviewPages(opts: {
 
   pages.push({
     type: "overview",
-    html: renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl }),
-    title: locale === "de" ? "Trainingswoche" : "Training week",
-  });
-
-  pages.push({
-    type: "rosters",
-    html: renderRostersOnlyHtml({ sessions, players, clubName, locale, logoUrl }),
-    title: locale === "de" ? "Kader pro Event" : "Rosters per event",
+    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl }),
+    title: locale === "de" ? "Trainingswoche + Kaderlisten" : "Training week + roster lists",
   });
 
   const games = sessions.filter((s) => isGameSession(s));
