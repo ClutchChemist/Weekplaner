@@ -48,3 +48,19 @@ This repository is prepared for GitHub migration:
 Detailed migration steps:
 
 - `docs/GITHUB_MIGRATION.md`
+
+## GitHub Pages deployment
+
+This project can be deployed via GitHub Actions to GitHub Pages.
+
+- Workflow: `.github/workflows/pages.yml`
+- Expected URL: `https://clutchchemist.github.io/Weekplaner/`
+- Vite `base` is set automatically with `GITHUB_PAGES=true` during the Pages build.
+
+### Important runtime note
+
+The Vite proxy for `/api` is **dev-only** and works only with `npm run dev`.
+For production (GitHub Pages), `/api` requests need either:
+
+- an external backend URL, or
+- feature-flagged optional API usage.
