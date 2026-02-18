@@ -62,21 +62,45 @@ This project implements the following security measures:
 
 ### 🔍 Verification
 
-To verify no secrets are exposed:
+To verify no secrets are exposed, you can use these methods:
+
+#### Quick Manual Check
 
 ```bash
-# Search for potential API key patterns in git history
-# Note: Results need manual review to distinguish between actual secrets and documentation
-git log --all -p | grep -i "api.*key\|secret\|token" | grep -v "\.example\|placeholder\|SECURITY.md"
-
 # Check current files for Google Maps API keys (AIza pattern)
-grep -r "AIza[0-9A-Za-z_-]{35}" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs
+grep -rE "AIza[0-9A-Za-z_-]{35}" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs
 
-# Check for other common secret patterns
+# Check for other common secret patterns (OpenAI, AWS, GitHub tokens)
 grep -rE "(sk-[a-zA-Z0-9]{40,}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36})" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs
+
+# Search git history for patterns (review results manually)
+git log --all -p | grep -E "(AIza[0-9A-Za-z_-]{35}|sk-[a-zA-Z0-9]{40,})"
 ```
 
-**Note**: These commands may produce false positives in documentation. Always manually review results to distinguish between actual secrets and legitimate references.
+#### Recommended Tools
+
+For comprehensive secret scanning, consider using specialized tools:
+
+- **[gitleaks](https://github.com/gitleaks/gitleaks)**: Scan git repositories for secrets
+  ```bash
+  # Install: brew install gitleaks (macOS) or see GitHub releases
+  gitleaks detect --source . --verbose
+  ```
+
+- **[truffleHog](https://github.com/trufflesecurity/trufflehog)**: Find leaked credentials
+  ```bash
+  # Install: brew install trufflehog (macOS) or see GitHub releases
+  trufflehog git file://. --only-verified
+  ```
+
+- **[git-secrets](https://github.com/awslabs/git-secrets)**: Prevent committing secrets
+  ```bash
+  # Install and configure hooks to prevent future leaks
+  git secrets --install
+  git secrets --register-aws
+  ```
+
+**Note**: Manual grep commands may produce false positives in documentation. Specialized tools provide better accuracy and can differentiate between actual secrets and references.
 
 ### 📚 Additional Resources
 
