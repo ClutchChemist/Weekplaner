@@ -1,36 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { THEME_PRESETS } from "../../themes/presets";
-import type { GroupId, ThemePreset, ThemeSettings } from "../../state/types";
-import { randomId } from "../../utils/id";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
-import { Modal } from "../ui/Modal";
-
-const THEME_USER_PRESETS_KEY = "ubc_planner_theme_userpresets_v1";
-
-function asThemePreset(value: unknown): ThemePreset | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const theme = record.theme;
-  if (!theme || typeof theme !== "object") return null;
-
-  const id = String(record.id ?? "");
-  const label = String(record.label ?? "");
-  if (!id || !label) return null;
-
-  return { id, label, theme: theme as ThemeSettings };
-}
-
-function safeParseThemePresets(raw: string | null): ThemePreset[] | null {
-  if (!raw) return null;
-  try {
-    const arr: unknown = JSON.parse(raw);
-    if (!Array.isArray(arr)) return null;
-    return arr.map(asThemePreset).filter((p): p is ThemePreset => p !== null);
-  } catch {
-    return null;
-  }
-}
+import { useMemo, useState } from "react";
+import { THEME_PRESETS } from "@/themes/presets";
+import { useThemePresets } from "@/hooks";
+import type { GroupId, ThemeSettings } from "@/types";
+import { randomId } from "@/utils/id";
+import { Button, Input, Modal } from "@/components/ui";
 
 type Props = {
   open: boolean;
@@ -98,15 +71,8 @@ export function ThemeSettingsModal({
 }: Props) {
   const [presetId, setPresetId] = useState<string>("");
 
-  const [userPresets, setUserPresets] = useState<ThemePreset[]>(() => {
-    const saved = safeParseThemePresets(typeof window !== "undefined" ? localStorage.getItem(THEME_USER_PRESETS_KEY) : null);
-    return saved ?? [];
-  });
+  const { presets: userPresets, setPresets: setUserPresets } = useThemePresets();
   const [newPresetLabel, setNewPresetLabel] = useState<string>("");
-
-  useEffect(() => {
-    localStorage.setItem(THEME_USER_PRESETS_KEY, JSON.stringify(userPresets));
-  }, [userPresets]);
 
   const allPresets = useMemo(
     () => [
@@ -136,7 +102,7 @@ export function ThemeSettingsModal({
     if (isUserPreset) {
       const overwrite = onConfirmOverwrite
         ? await onConfirmOverwrite(t("themePresetOverwriteTitle"), t("confirmPresetOverwrite"))
-        : window.confirm(t("confirmPresetOverwrite"));
+        : false;
 
       if (overwrite) {
         setUserPresets((prev) =>

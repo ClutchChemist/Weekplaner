@@ -25,20 +25,13 @@ import type {
   Position,
   ThemeSettings,
   WeekPlan,
-} from "./state/types";
+} from "@/types";
 import { makeT, makeTF } from "./i18n/translate";
-import { Button } from "./components/ui/Button";
-import { Input } from "./components/ui/Input";
-import { Select } from "./components/ui/Select";
-import { Modal } from "./components/ui/Modal";
-import { segBtn } from "./components/ui/segBtn";
-import { CalendarPane } from "./components/layout/CalendarPane";
-import { ConfirmModal, EventEditorModal, NewWeekModal, ThemeSettingsModal } from "./components/modals";
+import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
+import { CalendarPane } from "@/components/layout";
+import { ConfirmModal, EventEditorModal, NewWeekModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
-import { useDndPlan } from "./hooks/useDndPlan";
-import { useConfirmDialog } from "./hooks/useConfirmDialog";
-import { useRightSidebarPersistence } from "./hooks/useRightSidebarPersistence";
-import { usePersistedState } from "./hooks/usePersistedState";
+import { useConfirmDialog, useDndPlan, usePersistedState, useRightSidebarPersistence, useSessionEditor } from "@/hooks";
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
 import {
@@ -156,6 +149,14 @@ type SavedProfile = {
   id: string;
   name: string;
   payload: ProfilePayload;
+};
+
+type PromptDialogState = {
+  open: boolean;
+  title: string;
+  message: string;
+  value: string;
+  placeholder?: string;
 };
 
 const PROFILES_STORAGE_KEY = "ubc_planner_profiles_v1";
@@ -922,7 +923,7 @@ function DroppableSessionShell({
    Optional right pane: Calendar week view (DnD)
    ============================================================ */
 
-function ParticipantCard({
+const ParticipantCard = React.memo(function ParticipantCard({
   player,
   onRemove,
   groupBg,
@@ -971,7 +972,9 @@ function ParticipantCard({
       </button>
     </div>
   );
-}
+});
+
+ParticipantCard.displayName = "ParticipantCard";
 
 /* ============================================================
    PRINT VIEW (kept)
@@ -1681,6 +1684,37 @@ export default function App() {
   const rosterSearch = appUiState.rosterSearch;
   const selectedPlayerId = appUiState.selectedPlayerId;
   const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
+  const [promptDialog, setPromptDialog] = useState<PromptDialogState>({
+    open: false,
+    title: "",
+    message: "",
+    value: "",
+    placeholder: "",
+  });
+  const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
+
+  const askPrompt = useCallback(
+    (title: string, message: string, initialValue = "", placeholder = "") => {
+      return new Promise<string | null>((resolve) => {
+        promptResolverRef.current = resolve;
+        setPromptDialog({
+          open: true,
+          title,
+          message,
+          value: initialValue,
+          placeholder,
+        });
+      });
+    },
+    []
+  );
+
+  const resolvePrompt = useCallback((value: string | null) => {
+    setPromptDialog((prev) => ({ ...prev, open: false }));
+    const resolver = promptResolverRef.current;
+    promptResolverRef.current = null;
+    resolver?.(value);
+  }, []);
 
     /* ============================================================
       EFFECTS (useEffect...)
@@ -2071,32 +2105,17 @@ const holOnlyPlayers = useMemo(() => {
     };
   }
 
+  const { upsert: upsertSessionInPlan, remove: removeSessionFromPlan } = useSessionEditor(setPlan, sortParticipants);
+
   function upsertSession() {
     if (!formDate || formTeams.length === 0) return;
 
-    setPlan((prev) => {
-      const next = { ...prev, sessions: [...prev.sessions] };
-
-      if (editingSessionId) {
-        const idx = next.sessions.findIndex((s) => s.id === editingSessionId);
-        if (idx >= 0) {
-          const old = next.sessions[idx];
-          const updated = buildSessionFromForm(old.id, old.participants ?? []);
-          updated.participants = (updated.participants ?? []).sort(sortParticipants);
-          next.sessions[idx] = updated;
-        }
-      } else {
-        next.sessions.push(buildSessionFromForm());
-      }
-
-      next.sessions.sort((a, b) => {
-        const ad = a.date.localeCompare(b.date);
-        if (ad !== 0) return ad;
-        return a.time.localeCompare(b.time);
-      });
-
-      return next;
-    });
+    if (editingSessionId) {
+      const old = plan.sessions.find((s) => s.id === editingSessionId);
+      if (old) upsertSessionInPlan(buildSessionFromForm(old.id, old.participants ?? []));
+    } else {
+      upsertSessionInPlan(buildSessionFromForm());
+    }
 
     resetForm();
   }
@@ -2156,7 +2175,7 @@ const holOnlyPlayers = useMemo(() => {
     const label = s ? `${s.day} ${s.date} | ${(s.teams ?? []).join("/")} | ${s.time}` : sessionId;
     if (!(await askConfirm(t("delete"), tf("confirmDeleteEvent", { label })))) return;
 
-    setPlan((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== sessionId) }));
+    removeSessionFromPlan(sessionId);
     if (editingSessionId === sessionId) resetForm();
   }
 
@@ -2210,6 +2229,7 @@ const holOnlyPlayers = useMemo(() => {
     t,
     tf,
     confirm: askConfirm,
+    prompt: askPrompt,
   });
 
   const currentProfilePayload = useCallback((): ProfilePayload => {
@@ -3860,6 +3880,18 @@ const holOnlyPlayers = useMemo(() => {
         message={confirmDialog.message}
         onConfirm={() => resolveConfirm(true)}
         onCancel={() => resolveConfirm(false)}
+        t={t}
+      />
+
+      <PromptModal
+        open={promptDialog.open}
+        title={promptDialog.title}
+        message={promptDialog.message}
+        value={promptDialog.value}
+        onValueChange={(value) => setPromptDialog((prev) => ({ ...prev, value }))}
+        placeholder={promptDialog.placeholder}
+        onConfirm={() => resolvePrompt(promptDialog.value.trim())}
+        onCancel={() => resolvePrompt(null)}
         t={t}
       />
 

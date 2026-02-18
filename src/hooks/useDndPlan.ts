@@ -22,6 +22,7 @@ export function useDndPlan(params: {
 	t: (key: string) => string;
 	tf: (key: string, vars?: Record<string, string | number>) => string;
 	confirm: (title: string, message: string) => Promise<boolean>;
+	prompt: (title: string, message: string, initialValue?: string, placeholder?: string) => Promise<string | null>;
 }) {
 	const {
 		weekPlan,
@@ -36,6 +37,7 @@ export function useDndPlan(params: {
 		t,
 		tf,
 		confirm,
+		prompt,
 	} = params;
 
 	function requiresTaForTeams(teams: string[]): boolean {
@@ -102,8 +104,11 @@ export function useDndPlan(params: {
 			if (targetIsGame && requiresTaForTeams(target.teams)) {
 				const player = players.find((p) => p.id === playerId);
 				if (player && !player.taNumber) {
-					const input = window.prompt(
-						tf("promptTaNumber", { playerName: player.name, teams: target.teams.join("·") })
+					const input = await prompt(
+						t("confirm"),
+						tf("promptTaNumber", { playerName: player.name, teams: target.teams.join("·") }),
+						"",
+						t("taNumber")
 					);
 					if (input === null) return;
 					if (input.trim() === "") {
