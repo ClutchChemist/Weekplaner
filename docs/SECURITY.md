@@ -31,7 +31,8 @@ This project implements the following security measures:
 
 - **Supabase Keys** (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`): Used for cloud sync
   - Anon key is public-safe (protected by Row Level Security policies)
-  - Optional feature - app works without it
+  - Optional feature - enables profile cloud synchronization across devices
+  - Core scheduling and planning features work without Supabase configuration
 
 ### 📋 Setup Instructions
 
