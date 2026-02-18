@@ -11,7 +11,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "secrets:scan:staged": "node scripts/scan-secrets-staged.mjs"
+    "secrets:scan:staged": "node scripts/scan-secrets-staged.mjs",
+    "secrets:scan:repo": "node scripts/scan-secrets-repo.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
