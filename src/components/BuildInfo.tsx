@@ -1,6 +1,6 @@
 export default function BuildInfo() {
   const buildSha = import.meta.env.VITE_BUILD_SHA?.slice(0, 7) ?? "local";
-  const version = "0.1.0"; // Aus package.json
+  const version = "0.1.0"; // From package.json
 
   return (
     <div
