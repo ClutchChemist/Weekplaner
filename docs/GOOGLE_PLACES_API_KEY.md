@@ -7,9 +7,11 @@ The Google Places API key is stored in a local `.env` file in the repository roo
 ### File: `.env`
 
 ```
-GOOGLE_MAPS_KEY=AIzaSyD6C3RUtIB1QDjZRWBIRyRfsyyB97k-bJ4
+GOOGLE_MAPS_KEY=<your-api-key-here>
 PORT=5055
 ```
+
+**Note**: The actual API key is stored locally and should be obtained from the project maintainer or Google Cloud Console.
 
 ## Security
 
@@ -40,14 +42,13 @@ The API key is used by the maps proxy server (`server/maps-proxy.ts`) which prov
 
 The server reads the key from `process.env.GOOGLE_MAPS_KEY` at startup.
 
-## Current API Key
+## API Key Management
 
-**Key ID**: AIzaSyD6C3RUtIB1QDjZRWBIRyRfsyyB97k-bJ4
-
-This key should be:
+The API key should be:
 - Restricted to specific APIs (Places API, Routes API)
 - Restricted to specific domains/IPs if possible
 - Monitored for usage in Google Cloud Console
+- Obtained from the project maintainer or Google Cloud Console
 
 ## Running the server
 
@@ -64,5 +65,5 @@ tsx server/maps-proxy.ts
 Or set the environment variable directly:
 
 ```bash
-GOOGLE_MAPS_KEY=AIzaSyD6C3RUtIB1QDjZRWBIRyRfsyyB97k-bJ4 tsx server/maps-proxy.ts
+GOOGLE_MAPS_KEY=<your-api-key-here> tsx server/maps-proxy.ts
 ```
