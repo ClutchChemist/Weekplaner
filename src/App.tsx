@@ -31,6 +31,7 @@ import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
 import { CalendarPane } from "@/components/layout";
 import { ConfirmModal, EventEditorModal, NewWeekModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
+import BuildInfo from "./components/BuildInfo";
 import { useConfirmDialog, useDndPlan, usePersistedState, useRightSidebarPersistence, useSessionEditor } from "@/hooks";
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
@@ -4543,6 +4544,8 @@ const holOnlyPlayers = useMemo(() => {
           </div>
         </Modal>
       )}
+
+      <BuildInfo />
     </>
   );
 }
