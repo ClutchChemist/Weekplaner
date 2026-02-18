@@ -80,36 +80,44 @@ export function onCloudAuthStateChange(onEmailChange: (email: string | null) => 
   return () => data.subscription.unsubscribe();
 }
 
-export async function saveCloudSnapshot(snapshot: unknown): Promise<void> {
+export async function saveCloudSnapshot(profileId: string, snapshot: unknown): Promise<void> {
   const client = getCloudSyncClient();
   if (!client) throw new Error("Cloud sync is not configured.");
 
   const user = await getCurrentCloudUser();
   if (!user) throw new Error("No authenticated cloud user.");
 
-  const { error } = await client.from("planner_snapshots").upsert(
+  const pid = profileId.trim();
+  if (!pid) throw new Error("Missing profile id for cloud sync.");
+
+  const { error } = await client.from("planner_profile_snapshots").upsert(
     {
       user_id: user.id,
+      profile_id: pid,
       snapshot,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id" }
+    { onConflict: "user_id,profile_id" }
   );
 
   if (error) throw error;
 }
 
-export async function loadCloudSnapshot(): Promise<{ snapshot: unknown; updatedAt: string | null } | null> {
+export async function loadCloudSnapshot(profileId: string): Promise<{ snapshot: unknown; updatedAt: string | null } | null> {
   const client = getCloudSyncClient();
   if (!client) throw new Error("Cloud sync is not configured.");
 
   const user = await getCurrentCloudUser();
   if (!user) throw new Error("No authenticated cloud user.");
 
+  const pid = profileId.trim();
+  if (!pid) throw new Error("Missing profile id for cloud sync.");
+
   const { data, error } = await client
-    .from("planner_snapshots")
+    .from("planner_profile_snapshots")
     .select("snapshot, updated_at")
     .eq("user_id", user.id)
+    .eq("profile_id", pid)
     .maybeSingle();
 
   if (error) throw error;

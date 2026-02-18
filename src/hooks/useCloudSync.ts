@@ -8,11 +8,13 @@ import {
   sendCloudMagicLink,
   signOutCloud,
 } from "@/utils/cloudSync";
-import { usePersistedState } from "./usePersistedState";
 
 type UseCloudSyncArgs<TSnapshot> = {
   t: (k: string) => string;
-  autoSyncStorageKey: string;
+  profileId: string | null;
+  enabled: boolean;
+  autoSyncEnabled: boolean;
+  onAutoSyncChange: (next: boolean) => void;
   buildSnapshot: () => TSnapshot;
   applySnapshot: (snapshot: TSnapshot) => void;
   isSnapshot: (raw: unknown) => raw is TSnapshot;
@@ -21,7 +23,10 @@ type UseCloudSyncArgs<TSnapshot> = {
 
 export function useCloudSync<TSnapshot>({
   t,
-  autoSyncStorageKey,
+  profileId,
+  enabled,
+  autoSyncEnabled,
+  onAutoSyncChange,
   buildSnapshot,
   applySnapshot,
   isSnapshot,
@@ -36,19 +41,6 @@ export function useCloudSync<TSnapshot>({
   const cloudHydratingRef = useRef(false);
   const cloudSyncTimerRef = useRef<number | null>(null);
   const cloudConfigured = useMemo(() => isCloudSyncConfigured(), []);
-
-  const [cloudAutoSync, setCloudAutoSync] = usePersistedState<boolean>(
-    autoSyncStorageKey,
-    true,
-    (savedRaw) => {
-      try {
-        const parsed = JSON.parse(savedRaw);
-        return typeof parsed === "boolean" ? parsed : null;
-      } catch {
-        return null;
-      }
-    }
-  );
 
   useEffect(() => {
     if (!cloudConfigured) return;
@@ -79,11 +71,19 @@ export function useCloudSync<TSnapshot>({
         if (!silent) setCloudStatusMsg(t("cloudPleaseSignIn"));
         return false;
       }
+      if (!profileId) {
+        if (!silent) setCloudStatusMsg(t("cloudProfileRequired"));
+        return false;
+      }
+      if (!enabled) {
+        if (!silent) setCloudStatusMsg(t("cloudSyncDisabledForProfile"));
+        return false;
+      }
 
       if (!silent) setCloudBusy(true);
       try {
         const snapshot = buildSnapshot();
-        await saveCloudSnapshot(snapshot);
+        await saveCloudSnapshot(profileId, snapshot);
         const when = new Date().toISOString();
         setCloudLastSyncAt(when);
         if (!silent) setCloudStatusMsg(t("cloudSaveSuccess"));
@@ -98,7 +98,7 @@ export function useCloudSync<TSnapshot>({
         if (!silent) setCloudBusy(false);
       }
     },
-    [buildSnapshot, cloudConfigured, cloudUserEmail, t]
+    [buildSnapshot, cloudConfigured, cloudUserEmail, enabled, profileId, t]
   );
 
   const loadSnapshotFromCloud = useCallback(async () => {
@@ -110,10 +110,18 @@ export function useCloudSync<TSnapshot>({
       setCloudStatusMsg(t("cloudPleaseSignIn"));
       return;
     }
+    if (!profileId) {
+      setCloudStatusMsg(t("cloudProfileRequired"));
+      return;
+    }
+    if (!enabled) {
+      setCloudStatusMsg(t("cloudSyncDisabledForProfile"));
+      return;
+    }
 
     setCloudBusy(true);
     try {
-      const data = await loadCloudSnapshot();
+      const data = await loadCloudSnapshot(profileId);
       if (!data) {
         setCloudStatusMsg(t("cloudNoSnapshot"));
         return;
@@ -137,7 +145,7 @@ export function useCloudSync<TSnapshot>({
     } finally {
       setCloudBusy(false);
     }
-  }, [applySnapshot, cloudConfigured, cloudUserEmail, isSnapshot, t]);
+  }, [applySnapshot, cloudConfigured, cloudUserEmail, enabled, isSnapshot, profileId, t]);
 
   const signInToCloud = useCallback(async () => {
     if (!cloudConfigured) {
@@ -179,11 +187,11 @@ export function useCloudSync<TSnapshot>({
   }, [t]);
 
   const toggleCloudAutoSync = useCallback(() => {
-    setCloudAutoSync((v) => !v);
-  }, [setCloudAutoSync]);
+    onAutoSyncChange(!autoSyncEnabled);
+  }, [autoSyncEnabled, onAutoSyncChange]);
 
   useEffect(() => {
-    if (!cloudConfigured || !cloudAutoSync || !cloudUserEmail) return;
+    if (!cloudConfigured || !enabled || !autoSyncEnabled || !cloudUserEmail || !profileId) return;
     if (cloudHydratingRef.current) return;
 
     if (cloudSyncTimerRef.current != null) {
@@ -200,7 +208,7 @@ export function useCloudSync<TSnapshot>({
         cloudSyncTimerRef.current = null;
       }
     };
-  }, [cloudConfigured, cloudAutoSync, cloudUserEmail, saveSnapshotToCloud, autoSyncSignal]);
+  }, [cloudConfigured, enabled, autoSyncEnabled, cloudUserEmail, profileId, saveSnapshotToCloud, autoSyncSignal]);
 
   return {
     cloudConfigured,
@@ -209,7 +217,7 @@ export function useCloudSync<TSnapshot>({
     cloudUserEmail,
     cloudBusy,
     cloudLastSyncAt,
-    cloudAutoSync,
+    cloudAutoSync: autoSyncEnabled,
     setCloudEmailInput,
     signInToCloud,
     signOutFromCloud,

@@ -73,8 +73,9 @@ import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./s
 import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
 import {
   ACTIVE_PROFILE_STORAGE_KEY,
-  CLOUD_AUTO_SYNC_KEY,
+  DEFAULT_PROFILE_SYNC,
   PROFILES_STORAGE_KEY,
+  type ProfileSyncMode,
   safeParseProfiles,
   type CloudSnapshotV1,
   type ProfilePayload,
@@ -1139,6 +1140,11 @@ export default function App() {
     () => profiles.find((p) => p.id === activeProfileId)?.name ?? null,
     [profiles, activeProfileId]
   );
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) ?? null,
+    [profiles, activeProfileId]
+  );
+  const activeProfileSync = activeProfile?.sync ?? DEFAULT_PROFILE_SYNC;
 
   useEffect(() => {
     if (!profileMenuOpen) return;
@@ -1807,18 +1813,18 @@ const holOnlyPlayers = useMemo(() => {
     return {
       version: 1,
       savedAt: new Date().toISOString(),
+      profileId: activeProfileId,
+      profileName: activeProfileName ?? "",
       data: {
         rosterMeta,
         players,
         coaches,
         theme,
         plan,
-        profiles,
-        activeProfileId,
         clubLogoDataUrl,
       },
     };
-  }, [rosterMeta, players, coaches, theme, plan, profiles, activeProfileId, clubLogoDataUrl]);
+  }, [rosterMeta, players, coaches, theme, plan, activeProfileId, activeProfileName, clubLogoDataUrl]);
 
   const applyCloudSnapshot = useCallback((snapshot: CloudSnapshotV1) => {
     const data = snapshot.data;
@@ -1828,21 +1834,64 @@ const holOnlyPlayers = useMemo(() => {
     setCoaches(data.coaches);
     setTheme(data.theme);
     setPlan(data.plan);
-    setProfiles(data.profiles);
     setClubLogoDataUrl(data.clubLogoDataUrl ?? null);
-    setProfileHydratedId(null);
-    setActiveProfileId(data.activeProfileId ?? "");
+    setProfiles((prev) =>
+      prev.map((p) =>
+        p.id === snapshot.profileId
+          ? {
+              ...p,
+              payload: {
+                rosterMeta: data.rosterMeta,
+                players: data.players,
+                coaches: data.coaches,
+                locations: data.theme.locations ?? p.payload.locations,
+                clubLogoDataUrl: data.clubLogoDataUrl,
+              },
+            }
+          : p
+      )
+    );
+    setProfileHydratedId(snapshot.profileId);
+    setActiveProfileId(snapshot.profileId);
   }, [setCoaches, setPlan, setClubLogoDataUrl]);
 
   const isCloudSnapshotV1 = useCallback((raw: unknown): raw is CloudSnapshotV1 => {
     if (!raw || typeof raw !== "object") return false;
     const r = raw as Record<string, unknown>;
-    return r.version === 1 && !!r.data && typeof r.data === "object";
+    return (
+      r.version === 1 &&
+      typeof r.profileId === "string" &&
+      typeof r.profileName === "string" &&
+      !!r.data &&
+      typeof r.data === "object"
+    );
   }, []);
 
   const cloudSyncSignal = useMemo(
-    () => JSON.stringify({ rosterMeta, players, coaches, theme, plan, profiles, activeProfileId, clubLogoDataUrl }),
-    [rosterMeta, players, coaches, theme, plan, profiles, activeProfileId, clubLogoDataUrl]
+    () => JSON.stringify({ rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync }),
+    [rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync]
+  );
+
+  const cloudSyncEnabledForActiveProfile = Boolean(activeProfileId && activeProfileSync.mode === "cloud");
+
+  const updateActiveProfileSync = useCallback(
+    (patch: Partial<{ mode: ProfileSyncMode; autoSync: boolean }>) => {
+      if (!activeProfileId) return;
+      setProfiles((prev) =>
+        prev.map((p) =>
+          p.id === activeProfileId
+            ? {
+                ...p,
+                sync: {
+                  ...p.sync,
+                  ...patch,
+                },
+              }
+            : p
+        )
+      );
+    },
+    [activeProfileId]
   );
 
   const {
@@ -1861,7 +1910,10 @@ const holOnlyPlayers = useMemo(() => {
     toggleCloudAutoSync,
   } = useCloudSync<CloudSnapshotV1>({
     t,
-    autoSyncStorageKey: CLOUD_AUTO_SYNC_KEY,
+    profileId: activeProfileId || null,
+    enabled: cloudSyncEnabledForActiveProfile,
+    autoSyncEnabled: Boolean(activeProfileSync.autoSync),
+    onAutoSyncChange: (next) => updateActiveProfileSync({ autoSync: next }),
     buildSnapshot: buildCloudSnapshot,
     applySnapshot: applyCloudSnapshot,
     isSnapshot: isCloudSnapshotV1,
@@ -1887,6 +1939,7 @@ const holOnlyPlayers = useMemo(() => {
       id,
       name,
       payload: currentProfilePayload(),
+      sync: { ...DEFAULT_PROFILE_SYNC },
     };
     setProfiles((prev) => [...prev, entry]);
     setProfileHydratedId(id);
@@ -3836,6 +3889,12 @@ const holOnlyPlayers = useMemo(() => {
             <ProfileCloudSyncPanel
               t={t}
               lang={lang}
+              hasActiveProfile={Boolean(activeProfileId)}
+              profileName={activeProfileName}
+              syncMode={activeProfileSync.mode}
+              onSyncModeChange={(mode) => {
+                updateActiveProfileSync({ mode });
+              }}
               cloudConfigured={cloudConfigured}
               cloudUserEmail={cloudUserEmail}
               cloudEmailInput={cloudEmailInput}

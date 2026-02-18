@@ -1,9 +1,14 @@
 import type { Lang } from "@/types";
 import { Button, Input } from "@/components/ui";
+import type { ProfileSyncMode } from "@/state/profileTypes";
 
 type Props = {
   t: (k: string) => string;
   lang: Lang;
+  hasActiveProfile: boolean;
+  profileName: string | null;
+  syncMode: ProfileSyncMode;
+  onSyncModeChange: (mode: ProfileSyncMode) => void;
   cloudConfigured: boolean;
   cloudUserEmail: string | null;
   cloudEmailInput: string;
@@ -22,6 +27,10 @@ type Props = {
 export function ProfileCloudSyncPanel({
   t,
   lang,
+  hasActiveProfile,
+  profileName,
+  syncMode,
+  onSyncModeChange,
   cloudConfigured,
   cloudUserEmail,
   cloudEmailInput,
@@ -36,6 +45,8 @@ export function ProfileCloudSyncPanel({
   onToggleAutoSync,
   onSignOut,
 }: Props) {
+  const cloudMode = syncMode === "cloud";
+
   return (
     <div
       style={{
@@ -49,7 +60,41 @@ export function ProfileCloudSyncPanel({
     >
       <div style={{ fontWeight: 900 }}>{t("cloudSync")}</div>
 
-      {!cloudConfigured ? (
+      {!hasActiveProfile && (
+        <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 800 }}>{t("cloudProfilePickFirst")}</div>
+      )}
+
+      {hasActiveProfile && (
+        <>
+          <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+            {t("cloudProfileCurrent")}: {profileName ?? "—"}
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>{t("cloudStorageMode")}</div>
+            <select
+              value={syncMode}
+              onChange={(e) => onSyncModeChange(e.target.value as ProfileSyncMode)}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--ui-border)",
+                background: "var(--ui-card)",
+                color: "var(--ui-text)",
+                fontWeight: 800,
+                width: "100%",
+              }}
+            >
+              <option value="local">{t("cloudStorageLocal")}</option>
+              <option value="cloud">{t("cloudStorageCloud")}</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {!cloudMode ? (
+        <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>{t("cloudLocalModeHint")}</div>
+      ) : !cloudConfigured ? (
         <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 800 }}>{t("cloudNotConfiguredHint")}</div>
       ) : (
         <>

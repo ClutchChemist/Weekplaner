@@ -125,28 +125,30 @@ In `.env`:
 Run this SQL in Supabase SQL editor:
 
 ```sql
-create table if not exists public.planner_snapshots (
-	user_id uuid primary key references auth.users(id) on delete cascade,
+create table if not exists public.planner_profile_snapshots (
+	user_id uuid not null references auth.users(id) on delete cascade,
+	profile_id text not null,
 	snapshot jsonb not null,
-	updated_at timestamptz not null default now()
+	updated_at timestamptz not null default now(),
+	primary key (user_id, profile_id)
 );
 
-alter table public.planner_snapshots enable row level security;
+alter table public.planner_profile_snapshots enable row level security;
 
-create policy "Users can read own snapshot"
-on public.planner_snapshots
+create policy "Users can read own profile snapshots"
+on public.planner_profile_snapshots
 for select
 to authenticated
 using (auth.uid() = user_id);
 
-create policy "Users can upsert own snapshot"
-on public.planner_snapshots
+create policy "Users can insert own profile snapshots"
+on public.planner_profile_snapshots
 for insert
 to authenticated
 with check (auth.uid() = user_id);
 
-create policy "Users can update own snapshot"
-on public.planner_snapshots
+create policy "Users can update own profile snapshots"
+on public.planner_profile_snapshots
 for update
 to authenticated
 using (auth.uid() = user_id)
