@@ -49,6 +49,23 @@ Diese Liste sammelt bewusst geparkte Refactor-/Qualitätsaufgaben, die wir in kl
 
 ## Später / optional (P3)
 
+- [ ] OAuth/SSO Login evaluieren und einführen (Google + Microsoft)
+  - Ziel: Alternative zu Magic-Link, schnelleres Sign-in für wiederkehrende Nutzer
+  - Scope: Supabase Provider-Konfiguration + UI-Buttons + Redirect/Callback-Handling
+  - Hinweis: Setup von OAuth-Credentials (Google Cloud / Azure Entra) erforderlich
+
+- [ ] Test-Basis aufbauen (Vitest)
+  - Ziel: kritische Logik absichern (Reducer, Snapshot-Validation, Cloud-Sync Guards)
+  - Scope: mindestens Unit-Tests für `state/*` und `utils/*` Kernpfade
+
+- [ ] Changelog-Automation evaluieren
+  - Ziel: Releases konsistent und automatisch dokumentieren
+  - Kandidaten: `release-please` oder `conventional-changelog`
+
+- [ ] API-Zugriffsschicht weiter zentralisieren
+  - Ziel: klare Runtime-Fallback-Logik für Dev/Prod an einer Stelle
+  - Scope: bestehende `mapsApi.ts` als gemeinsames Muster für weitere Backend-Calls nutzen
+
 - [x] Einheitliches Modal-basiertes Confirm/Alert überall durchziehen
   - `window.alert/confirm/prompt` vollständig vermeiden
 

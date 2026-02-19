@@ -2,6 +2,8 @@
 
 Training planning board built with React + TypeScript + Vite.
 
+> Note on naming: Repository/deployment path uses `Weekplaner` for historical compatibility (GitHub Pages URL and existing links).
+
 ## Tech stack
 
 - React 19
@@ -38,6 +40,10 @@ Expected variables:
 - `VITE_API_BASE_URL` (optional; use for production frontend to call external proxy)
 - `VITE_SUPABASE_URL` (optional; required for cloud sync)
 - `VITE_SUPABASE_ANON_KEY` (optional; required for cloud sync)
+- `ALLOWED_ORIGINS` (recommended for production maps proxy)
+- `MAPS_PROXY_TOKEN` (optional but recommended for production maps proxy)
+- `MAPS_PROXY_RATE_LIMIT_WINDOW_MS` + `MAPS_PROXY_RATE_LIMIT_MAX` (optional proxy throttling)
+- `VITE_MAPS_PROXY_TOKEN` (optional; required if proxy token auth is enabled)
 
 ⚠️ Never commit real API keys.
 
@@ -113,6 +119,16 @@ This repo includes `render.yaml` for deploying the Node proxy in `server/maps-pr
 4. After deploy, copy service URL (for example `https://weekplaner-maps-proxy.onrender.com`).
 5. Set frontend env variable:
    - `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`
+
+### Production hardening checklist (maps proxy)
+
+- Set `ALLOWED_ORIGINS` to an explicit allow-list (no wildcard in production)
+- Set `MAPS_PROXY_TOKEN` and require `X-Proxy-Token` from clients
+- Keep `GOOGLE_MAPS_KEY` API-restricted in Google Cloud Console
+- Tune `MAPS_PROXY_RATE_LIMIT_*` based on traffic profile
+- Monitor 4xx/5xx and rate-limit hits in your hosting logs
+
+If `NODE_ENV=production` and `ALLOWED_ORIGINS` is empty, the proxy now refuses to start.
 
 ### Configure `VITE_API_BASE_URL` in GitHub
 

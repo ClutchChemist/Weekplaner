@@ -1,6 +1,7 @@
 import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core";
 import type { Dispatch, SetStateAction } from "react";
 import { addMinutesToHHMM, splitTimeRange, weekdayShortDE } from "../utils/date";
+import { isGameInfo } from "../utils/session";
 import type { CalendarEvent as Session, Player, WeekPlan } from "../state/types";
 
 export type DndPlanHandlers = {
@@ -42,11 +43,6 @@ export function useDndPlan(params: {
 
 	function requiresTaForTeams(teams: string[]): boolean {
 		return teams.some((team) => team === "U18" || team === "HOL" || team === "1RLH");
-	}
-
-	function isGameInfo(info: string | null | undefined): boolean {
-		const value = String(info ?? "").trim().toLowerCase();
-		return value.startsWith("vs") || value.startsWith("@") || value.includes(" vs ") || value.includes(" @ ");
 	}
 
 	function addPlayerToSession(sessionId: string, playerId: string) {

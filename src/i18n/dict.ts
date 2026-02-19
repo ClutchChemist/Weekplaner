@@ -58,6 +58,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
     confirmDeleteEvent: "Event wirklich löschen?\n{label}",
     confirmPresetOverwrite: "Du hast ein User-Preset ausgewählt.\n\nOK = Preset überschreiben\nAbbrechen = als neues Preset speichern",
     promptTaNumber: 'TA-Nummer erforderlich für {playerName} in {teams}-Spiel.\n\nBitte TA-Nummer eingeben (oder leer lassen um abzubrechen):',
+    taNumber: "TA-Nummer",
     confirmRemovePlayerFromGame: "Keine TA-Nummer eingegeben. Möchten Sie den Spieler aus dem Spiel entfernen?",
 
     preview: "Preview",
@@ -103,6 +104,12 @@ export const I18N: Record<Lang, Record<string, string>> = {
     cloudAutoSyncOn: "Auto-Sync: AN",
     cloudAutoSyncOff: "Auto-Sync: AUS",
     cloudLastSync: "Letzter Sync",
+    logoUploadButton: "Logo hochladen",
+    logoRemoveButton: "Logo entfernen",
+    logoUploadChooseImage: "Bitte eine Bilddatei auswählen.",
+    logoUploadTooLarge: "Logo ist zu groß (max. {maxKb} KB).",
+    logoUploadReadError: "Logo konnte nicht gelesen werden.",
+    logoUploadHint: "Empfohlen: quadratisches Logo, max. {maxKb} KB.",
 
     eventEdit: "Event bearbeiten",
     eventPlan: "Event planen",
@@ -346,6 +353,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
     confirmDeleteEvent: "Delete event?\n{label}",
     confirmPresetOverwrite: "You selected a user preset.\n\nOK = Overwrite preset\nCancel = Save as new preset",
     promptTaNumber: 'TA number required for {playerName} in {teams} game.\n\nPlease enter TA number (or leave empty to cancel):',
+    taNumber: "TA number",
     confirmRemovePlayerFromGame: "No TA number entered. Do you want to remove the player from the game?",
 
     preview: "Preview",
@@ -391,6 +399,12 @@ export const I18N: Record<Lang, Record<string, string>> = {
     cloudAutoSyncOn: "Auto sync: ON",
     cloudAutoSyncOff: "Auto sync: OFF",
     cloudLastSync: "Last sync",
+    logoUploadButton: "Upload logo",
+    logoRemoveButton: "Remove logo",
+    logoUploadChooseImage: "Please choose an image file.",
+    logoUploadTooLarge: "Logo is too large (max {maxKb} KB).",
+    logoUploadReadError: "Could not read logo file.",
+    logoUploadHint: "Recommended: square logo, max {maxKb} KB.",
 
     eventEdit: "Edit Event",
     eventPlan: "Plan Event",

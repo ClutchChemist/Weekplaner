@@ -25,7 +25,15 @@ export default defineConfig([
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-console': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+    },
+  },
+  {
+    files: ['server/**/*.{ts,tsx,js,mjs,cjs}'],
+    rules: {
+      'no-console': 'off',
     },
   },
   eslintConfigPrettier,

@@ -7,3 +7,5 @@ export { useThemePresets } from "./useThemePresets";
 export { useLocationUsageMap } from "./useLocationUsageMap";
 export { composeOpponentInfo, getOpponentMode, getOpponentName, useOpponentMode } from "./useOpponentMode";
 export { useCloudSync } from "./useCloudSync";
+export { useProfilesState } from "./useProfilesState";
+export { LOCATION_PRESETS, TEAM_OPTIONS, useEventPlannerState } from "./useEventPlannerState";
