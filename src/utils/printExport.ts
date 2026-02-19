@@ -31,12 +31,12 @@ function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: strin
   const { title, clubName, logoUrl } = opts;
   const logoHtml = logoUrl
     ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="width: 80px; height: 80px; object-fit: contain;" />`
-    : `<div style="width: 80px; height: 80px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999;">Logo</div>`;
+    : `<div style="width: 80px; height: 80px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #555;">Logo</div>`;
   return `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <div style="flex: 1;">
         <h1 style="margin: 0; font-size: 24px; font-weight: bold;">${escapeHtml(title)}</h1>
-        <div style="font-size: 14px; color: #666; margin-top: 4px;">${escapeHtml(clubName)}</div>
+        <div style="font-size: 14px; color: #333; margin-top: 4px;">${escapeHtml(clubName)}</div>
       </div>
       ${logoHtml}
     </div>
@@ -48,7 +48,7 @@ function pageFooterHtml(opts: { clubName: string; locale: Lang }): string {
   const trainingLabel = locale === "de" ? "Basketballtraining" : "Basketball Training";
   const planLabel = locale === "de" ? "Wochenplanung" : "Weekly Plan";
   return `
-    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #bbb; font-size: 12px; color: #333;">
       ${escapeHtml(clubName)} · ${trainingLabel} · ${planLabel}
     </div>
   `;
@@ -269,8 +269,8 @@ function renderWeekScheduleOnlyHtml(opts: {
             <div style="font-weight:900; font-size:11px;">${escapeHtml(d.abbr || name)} — ${escapeHtml(d.name || name)}${escapeHtml(hall)}</div>
             ${
               addrShort
-                ? `<div style="font-size:10px; color:#555; margin-top:2px;">${escapeHtml(addrShort)}</div>`
-                : `<div style="font-size:10px; color:#999; margin-top:2px;">(no address)</div>`
+                ? `<div style="font-size:10px; color:#333; margin-top:2px;">${escapeHtml(addrShort)}</div>`
+                : `<div style="font-size:10px; color:#555; margin-top:2px;">(no address)</div>`
             }
           </div>
         `;
@@ -345,7 +345,7 @@ export function renderRostersOnlyHtml(opts: {
     .map((s) => {
       const label = `${s.day} · ${s.date} · ${s.time} · ${s.location} · ${s.teams.join(", ")} ${s.info ? `· ${s.info}` : ""}`;
       const assigned = players.filter((p) => s.participants?.includes(p.id));
-      if (assigned.length === 0) return `<div style="color:#999; font-size:12px;">${t.none}</div>`;
+      if (assigned.length === 0) return `<div style="color:#555; font-size:12px;">${t.none}</div>`;
 
       const sorted = assigned
         .slice()
@@ -354,7 +354,7 @@ export function renderRostersOnlyHtml(opts: {
       const rows = sorted
         .map((p, idx) => `
           <tr>
-            <td style="${tdCss()} width:28px; text-align:center; font-size:10px; color:#555;">${idx + 1}</td>
+            <td style="${tdCss()} width:28px; text-align:center; font-size:10px; color:#333;">${idx + 1}</td>
             <td style="${tdCss()}">${escapeHtml(p.name)}</td>
           </tr>
         `)
@@ -425,7 +425,7 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
       return `
         <tr>
           <td style="${tdCss()} width: 42%;">${escapeHtml(eventLabel)}</td>
-          <td style="${tdCss()}">${names.length ? escapeHtml(names.join(", ")) : `<span style="color:#999;">${escapeHtml(t.empty)}</span>`}</td>
+          <td style="${tdCss()}">${names.length ? escapeHtml(names.join(", ")) : `<span style="color:#555;">${escapeHtml(t.empty)}</span>`}</td>
         </tr>
       `;
     })
@@ -497,7 +497,7 @@ function renderGameSheetHtml(opts: {
 
       return `
         <tr>
-          <td style="${tdCss()} text-align:center; font-size:10px; color:#555; width:22px;">${idx + 1}</td>
+          <td style="${tdCss()} text-align:center; font-size:10px; color:#333; width:22px;">${idx + 1}</td>
           <td style="${tdCss()} text-align:center; width:44px;">${escapeHtml(String(jerseyVal))}</td>
           <td style="${tdCss()}">${escapeHtml(nachname)}</td>
           <td style="${tdCss()}">${escapeHtml(vorname)}</td>
@@ -549,7 +549,7 @@ function renderGameSheetHtml(opts: {
         </tbody>
       </table>
 
-      <div style="font-size:11px; color:#555; margin-top:8px;">
+      <div style="font-size:11px; color:#333; margin-top:8px;">
         Hinweis: Bitte maximal <b>12</b> Spieler als <b>Aktiv</b> markieren. Insgesamt sind <b>15</b> Zeilen für kurzfristige Änderungen vorgesehen.
       </div>
 

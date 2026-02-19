@@ -895,12 +895,6 @@ const holOnlyPlayers = useMemo(() => {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
-    if (!printWindow) {
-      console.warn("Could not open print window for PDF export.");
-      return;
-    }
-
     const pagesHtml = exportPages
       .map(
         (p, i) => `
@@ -911,72 +905,59 @@ const holOnlyPlayers = useMemo(() => {
       )
       .join("\n");
 
-    const html = `
-      <!doctype html>
-      <html lang="de">
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>${theme.clubName} Weekplan PDF</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 10mm;
-            }
-
-            html, body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              color: #111;
-              font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-            }
-
-            .print-root {
-              width: 100%;
-            }
-
-            .print-page {
-              break-after: page;
-              page-break-after: always;
-              box-sizing: border-box;
-            }
-
-            .print-page:last-child {
-              break-after: auto;
-              page-break-after: auto;
-            }
-          </style>
-        </head>
-        <body>
-          <main class="print-root">${pagesHtml}</main>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      if (printWindow.document.readyState === "complete") {
-        setTimeout(done, 250);
-      } else {
-        printWindow.addEventListener("load", () => setTimeout(done, 250), { once: true });
+    const html = `<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${theme.clubName} Weekplan PDF</title>
+    <style>
+      @page { size: A4 portrait; margin: 10mm; }
+      html, body {
+        margin: 0; padding: 0;
+        background: #fff; color: #111;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
-    });
+      .print-root { width: 100%; }
+      .print-page { break-after: page; page-break-after: always; box-sizing: border-box; }
+      .print-page:last-child { break-after: auto; page-break-after: auto; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 11px; }
+      th { background: #f5f5f5; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <main class="print-root">${pagesHtml}</main>
+    <script>
+      window.addEventListener('load', function() {
+        setTimeout(function() { window.print(); }, 300);
+      });
+    </script>
+  </body>
+</html>`;
 
-    printWindow.focus();
-    printWindow.print();
+    // Blob-URL-Ansatz: zuverlässiger als document.write() + print() in allen Browsern
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
 
-    setTimeout(() => {
-      try {
-        printWindow.close();
-      } catch {
-        // ignore
-      }
-    }, 400);
+    // Kein "noopener" – sonst kann der Browser das Fenster manchmal nicht korrekt laden
+    const printWindow = window.open(url, "_blank", "width=1100,height=900");
+    if (!printWindow) {
+      // Popup blockiert – Fallback: direkt als Download
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${theme.clubName.replace(/\s+/g, "_")}_Weekplan.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      return;
+    }
+
+    // Blob-URL nach 60 Sekunden freigeben (genug Zeit zum Drucken)
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async function createPlanPngPages() {
