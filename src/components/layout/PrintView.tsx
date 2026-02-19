@@ -1,4 +1,4 @@
-import type { CalendarEvent as Session, Coach, GroupId, Player, WeekPlan } from "@/types";
+import type { CalendarEvent as Session, Coach, GroupId, Player, ThemeLocations, WeekPlan } from "@/types";
 import { PRINT_GROUP_ORDER, getPlayerGroup } from "@/state/playerGrouping";
 import { dateToDDMMYYYY_DOTS, dateToShortDE, kwLabelFromPlan, weekdayShortDE } from "@/utils/date";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
@@ -9,6 +9,9 @@ type Props = {
   groupBg: Record<GroupId, string>;
   coaches: Coach[];
   birthdayPlayerIds: Set<string>;
+  clubName: string;
+  logoUrl?: string | null;
+  locations?: ThemeLocations;
   t: (k: string) => string;
 };
 
@@ -32,8 +35,17 @@ function exportShortName(p: Player): string {
   return `${parts[0]} ${parts[1][0].toUpperCase()}`;
 }
 
-export function PrintView({ plan, playerById, groupBg, coaches, birthdayPlayerIds, t }: Props) {
-  const logoUrl = "https://ubc.ms/wp-content/uploads/2022/06/ubc-logo.png";
+export function PrintView({
+  plan,
+  playerById,
+  groupBg,
+  coaches,
+  birthdayPlayerIds,
+  clubName,
+  logoUrl,
+  locations,
+  t,
+}: Props) {
 
   const mondayDate =
     plan.sessions.find((s) => (s.day || "").toLowerCase().startsWith("mo"))?.date ??
@@ -41,6 +53,23 @@ export function PrintView({ plan, playerById, groupBg, coaches, birthdayPlayerId
     new Date().toISOString().slice(0, 10);
 
   const kwText = kwLabelFromPlan(plan);
+
+  const locationLegend = (() => {
+    const defs = locations?.definitions ?? {};
+    const namesInPlan = Array.from(new Set((plan.sessions ?? []).map((s) => String(s.location ?? "").trim()).filter(Boolean)));
+    const rows = namesInPlan
+      .map((name) => {
+        const def = defs[name];
+        const full = (def?.name ?? name).trim();
+        const abbr = (def?.abbr ?? "").trim();
+        if (!full) return null;
+        if (!abbr || abbr.toLowerCase() === full.toLowerCase()) return full;
+        return `${abbr} = ${full}`;
+      })
+      .filter((v): v is string => Boolean(v));
+
+    return rows.join("; ");
+  })();
 
   function sessionLabel(s: Session) {
     if (s.kaderLabel) return s.kaderLabel;
@@ -117,9 +146,9 @@ export function PrintView({ plan, playerById, groupBg, coaches, birthdayPlayerId
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src={logoUrl} alt="UBC" style={{ height: 38 }} />
+          {logoUrl ? <img src={logoUrl} alt={clubName} style={{ height: 38 }} /> : null}
           <div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>UBC Münster</div>
+            <div style={{ fontSize: 14, fontWeight: 900 }}>{clubName}</div>
             <div style={{ fontSize: 11, fontWeight: 800 }}>{t("seasonTrainingOverview")}</div>
           </div>
         </div>
@@ -129,9 +158,9 @@ export function PrintView({ plan, playerById, groupBg, coaches, birthdayPlayerId
           <div style={{ fontSize: 11, fontWeight: 900 }}>
             {t("trainingWeek")}: {kwText}
           </div>
-          <div style={{ fontSize: 10, color: "#374151", fontWeight: 700 }}>
-            BSH = Ballsporthalle; SHP = Sporthalle Pascal; Seminarraum = Seminarraum
-          </div>
+          {locationLegend ? (
+            <div style={{ fontSize: 10, color: "#374151", fontWeight: 700 }}>{locationLegend}</div>
+          ) : null}
         </div>
       </div>
 

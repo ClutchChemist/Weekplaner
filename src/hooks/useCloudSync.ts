@@ -18,7 +18,7 @@ type UseCloudSyncArgs<TSnapshot> = {
   buildSnapshot: () => TSnapshot;
   applySnapshot: (snapshot: TSnapshot) => void;
   isSnapshot: (raw: unknown) => raw is TSnapshot;
-  autoSyncSignal: string;
+  autoSyncSignal: unknown;
 };
 
 export function useCloudSync<TSnapshot>({

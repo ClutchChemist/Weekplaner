@@ -1,16 +1,14 @@
-import React, {
+import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import "./App.css";
 import {
   DndContext,
   PointerSensor,
-  useDraggable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -28,6 +26,7 @@ import { makeT, makeTF } from "./i18n/translate";
 import { Button } from "@/components/ui";
 import { AppTopBar, CalendarOverviewPanel, LeftSidebar, PrintView, RightSidebar, WeekPlanBoard } from "@/components/layout";
 import { ConfirmModal, EventEditorModal, EventPlannerForm, NewWeekModal, ProfilesModal, PromptModal, RosterEditorModal, ThemeSettingsModal } from "@/components/modals";
+import { DraggablePlayerRow } from "@/components/roster";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
 import {
   useConfirmDialog,
@@ -41,6 +40,7 @@ import {
   usePersistedState,
   useRightSidebarPersistence,
   useSessionEditor,
+  usePromptDialog,
 } from "@/hooks";
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
@@ -53,9 +53,7 @@ import {
 import { normalizeMasterWeek, normalizeRoster } from "./state/normalizers";
 import { birthYearOf, getPlayerGroup, GROUPS, isCorePlayer, isHolOnly, isU18Only, makeParticipantSorter } from "./state/playerGrouping";
 import {
-  dbbDobMatchesBirthDate,
   enrichPlayersWithBirthFromDBBTA,
-  hasAnyTna,
 } from "./state/playerMeta";
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
 import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
@@ -85,215 +83,17 @@ import {
   ensureLocationSaved,
 } from "./utils/locations";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
-import { normalizeYearColor, pickTextColor } from "./utils/color";
 import { downloadJson } from "./utils/json";
 import { randomId } from "./utils/id";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
 
-/* ============================================================
-   TYPES
-   ============================================================ */
-
-/* ============================================================
-   CONSTANTS / PRESETS
-   ============================================================ */
-
-/* ============================================================
-  UTILS (date/color/json/...)
-  ============================================================ */
-
-/* ============================================================
-   HELPERS (colors / contrast)
-   ============================================================ */
-
-/* ============================================================
-   ISO WEEK
-   ============================================================ */
-
-/* ============================================================
-  DOWNLOAD JSON
-  ============================================================ */
-
-/* ============================================================
-   ROSTER helpers (TA badge + grouping)
-   ============================================================ */
-
-  /* ============================================================
-    COMPONENTS (Modal..., Button..., Row..., Pane...)
-    ============================================================ */
-
-/* ============================================================
-   UI PRIMITIVES (CSS vars)
-   ============================================================ */
-
-type PromptDialogState = {
-  open: boolean;
-  title: string;
-  message: string;
-  value: string;
-  placeholder?: string;
-};
-
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
 
-/* ============================================================
-   LOCATIONS PANEL
-   ============================================================ */
-
-/* Locations UI moved to src/components/locations/LeftLocationsView.tsx */
-
-
-/* ============================================================
-   SETTINGS MODAL (Theme)
-   ============================================================ */
-
-/* ============================================================
-   DND COMPONENTS
-   ============================================================ */
-
-export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
-  player,
-  trainingCount,
-  groupBg,
-  isBirthday,
-  t,
-}: {
-  player: Player;
-  trainingCount: number;
-  groupBg: Record<GroupId, string>;
-  isBirthday: boolean;
-  t: (k: string) => string;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `player:${player.id}`,
-    data: { type: "player", playerId: player.id },
-  });
-
-  const style: CSSProperties = {
-    cursor: "grab",
-    opacity: isDragging ? 0.6 : 1,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    boxShadow: isDragging
-      ? "0 10px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)"
-      : "none",
-    zIndex: isDragging ? 40 : undefined,
-  };
-
-  const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
-  const text = pickTextColor(bg);
-  const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
-
-  const pos = (player.positions ?? []).join("/") || "—";
-  const isTbd = player.id === "TBD";
-
-  const taOk = hasAnyTna(player);
-  const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <div
-        style={{
-          border: "1px solid rgba(0,0,0,0.15)",
-          borderRadius: 12,
-          padding: 10,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          background: bg,
-        }}
-        title={
-          isTbd
-            ? t("placeholder")
-            : (player.lizenzen ?? [])
-                .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
-                .join(" | ") || t("noTaTnaSaved")
-        }
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              color: text,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={!taDobCheck.ok ? taDobCheck.reason : undefined}
-          >
-            {player.name}{isBirthday ? " 🎂" : ""}{!taDobCheck.ok ? " ⚠️" : ""}
-          </div>
-          <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
-            {isTbd
-              ? t("placeholder")
-              : `${player.primaryYouthTeam || ""}${
-                  player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
-                }`}
-          </div>
-        </div>
-
-        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-          {isTbd ? (
-            <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>TBD</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{t("groupTbdLong")}</div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{pos}</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{trainingCount}x</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>
-                TA {taOk ? "✓" : "—"}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-DraggablePlayerRow.displayName = "DraggablePlayerRow";
-
-/* ============================================================
-   Optional right pane: Calendar week view (DnD)
-   ============================================================ */
-
-/* ============================================================
-   PRINT VIEW (kept)
-   ============================================================ */
-
-/* ============================================================
-   COACHES: persistence + defaults
-   ============================================================ */
-
-
-/* ============================================================
-   NEW WEEK MODAL
-   ============================================================ */
-
-/* ============================================================
-   PRINT PREVIEW & EXPORT HELPERS
-   ============================================================ */
-
-/* ============================================================
-   GOOGLE MAPS HELPERS
-   ============================================================ */
-
-/* ============================================================
-   APP
-   ============================================================ */
 
 export default function App() {
-  /* ============================================================
-    STATE (useState...)
-    ============================================================ */
 
-  /* ----------------------
-     Theme
-     ---------------------- */
   const [theme, setTheme] = useState<ThemeSettings>(() => {
     const saved = safeParseTheme(typeof window !== "undefined" ? localStorage.getItem(THEME_STORAGE_KEY) : null, DEFAULT_THEME);
     return saved ? migrateLegacyBlueTheme(saved, DEFAULT_THEME) : DEFAULT_THEME;
@@ -382,37 +182,7 @@ export default function App() {
   const rosterSearch = appUiState.rosterSearch;
   const selectedPlayerId = appUiState.selectedPlayerId;
   const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
-  const [promptDialog, setPromptDialog] = useState<PromptDialogState>({
-    open: false,
-    title: "",
-    message: "",
-    value: "",
-    placeholder: "",
-  });
-  const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
-
-  const askPrompt = useCallback(
-    (title: string, message: string, initialValue = "", placeholder = "") => {
-      return new Promise<string | null>((resolve) => {
-        promptResolverRef.current = resolve;
-        setPromptDialog({
-          open: true,
-          title,
-          message,
-          value: initialValue,
-          placeholder,
-        });
-      });
-    },
-    []
-  );
-
-  const resolvePrompt = useCallback((value: string | null) => {
-    setPromptDialog((prev) => ({ ...prev, open: false }));
-    const resolver = promptResolverRef.current;
-    promptResolverRef.current = null;
-    resolver?.(value);
-  }, []);
+  const { promptDialog, setPromptValue, askPrompt, resolvePrompt } = usePromptDialog();
 
     /* ============================================================
       EFFECTS (useEffect...)
@@ -465,9 +235,15 @@ export default function App() {
           };
         })
         .filter((c: Coach) => c.id && c.name);
-      if (normalized.length) setCoaches(normalized);
+      if (normalized.length) {
+        setCoaches(normalized);
+        setLastDropError(null);
+      } else {
+        setLastDropError(t("importJsonError"));
+      }
     } catch (err) {
       console.warn("Staff import failed", err);
+      setLastDropError(t("importJsonError"));
     }
   }
 
@@ -932,7 +708,7 @@ const holOnlyPlayers = useMemo(() => {
   }, []);
 
   const cloudSyncSignal = useMemo(
-    () => JSON.stringify({ rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync }),
+    () => ({ rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync }),
     [rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync]
   );
 
@@ -1067,8 +843,10 @@ const holOnlyPlayers = useMemo(() => {
       setRosterMeta({ season: normalized.season || rosterMeta.season, ageGroups: normalized.ageGroups ?? rosterMeta.ageGroups });
       setPlayers(cleaned);
       setSelectedPlayerId(cleaned[0]?.id ?? null);
+      setLastDropError(null);
     } catch (err) {
       console.warn("Roster import failed", err);
+      setLastDropError(t("importJsonError"));
     }
   }
 
@@ -1095,7 +873,7 @@ const holOnlyPlayers = useMemo(() => {
         group: p.group ?? "",
         lpCategory: p.lpCategory ?? "",
         jerseyByTeam: p.jerseyByTeam ?? {},
-                historyLast6: p.historyLast6 ?? [],
+        historyLast6: p.historyLast6 ?? [],
         yearColor: p.yearColor ?? null,
       };
     });
@@ -1139,7 +917,7 @@ const holOnlyPlayers = useMemo(() => {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>UBC Weekplan PDF</title>
+          <title>${theme.clubName} Weekplan PDF</title>
           <style>
             @page {
               size: A4 portrait;
@@ -1380,6 +1158,9 @@ const holOnlyPlayers = useMemo(() => {
         groupBg={groupBg}
         coaches={coaches}
         birthdayPlayerIds={birthdayPlayerIds}
+        clubName={theme.clubName}
+        logoUrl={clubLogoDataUrl}
+        locations={theme.locations}
         t={t}
       />
 
@@ -1629,7 +1410,7 @@ const holOnlyPlayers = useMemo(() => {
         title={promptDialog.title}
         message={promptDialog.message}
         value={promptDialog.value}
-        onValueChange={(value) => setPromptDialog((prev) => ({ ...prev, value }))}
+        onValueChange={setPromptValue}
         placeholder={promptDialog.placeholder}
         onConfirm={() => resolvePrompt(promptDialog.value.trim())}
         onCancel={() => resolvePrompt(null)}
@@ -1698,6 +1479,7 @@ const holOnlyPlayers = useMemo(() => {
         deletePlayer={deletePlayer}
         updatePlayer={updatePlayer}
         teamOptions={TEAM_OPTIONS}
+        clubName={theme.clubName}
       />
     </>
   );

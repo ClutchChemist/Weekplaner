@@ -9,3 +9,4 @@ export { composeOpponentInfo, getOpponentMode, getOpponentName, useOpponentMode 
 export { useCloudSync } from "./useCloudSync";
 export { useProfilesState } from "./useProfilesState";
 export { LOCATION_PRESETS, TEAM_OPTIONS, useEventPlannerState } from "./useEventPlannerState";
+export { usePromptDialog } from "./usePromptDialog";

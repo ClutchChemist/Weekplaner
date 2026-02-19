@@ -19,6 +19,7 @@ type Props = {
   deletePlayer: (id: string) => void;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
   teamOptions: string[];
+  clubName: string;
 };
 
 export function RosterEditorModal({
@@ -36,6 +37,7 @@ export function RosterEditorModal({
   deletePlayer,
   updatePlayer,
   teamOptions,
+  clubName,
 }: Props) {
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -275,7 +277,7 @@ export function RosterEditorModal({
                         value={(selectedPlayer.lizenzen ?? []).find((x) => String(x.typ).toUpperCase() === "DBB")?.tna ?? ""}
                         onChange={(v) => {
                           const list = [...(selectedPlayer.lizenzen ?? [])].filter((x) => String(x.typ).toUpperCase() !== "DBB");
-                          if (v.trim()) list.push({ typ: "DBB", tna: v.trim(), verein: "UBC Münster" });
+                          if (v.trim()) list.push({ typ: "DBB", tna: v.trim(), verein: clubName });
                           updatePlayer(selectedPlayer.id, { lizenzen: list });
                         }}
                         placeholder={t("dbbTnaExample")}
@@ -287,7 +289,7 @@ export function RosterEditorModal({
                         value={(selectedPlayer.lizenzen ?? []).find((x) => String(x.typ).toUpperCase() === "NBBL")?.tna ?? ""}
                         onChange={(v) => {
                           const list = [...(selectedPlayer.lizenzen ?? [])].filter((x) => String(x.typ).toUpperCase() !== "NBBL");
-                          if (v.trim()) list.push({ typ: "NBBL", tna: v.trim(), verein: "UBC Münster" });
+                          if (v.trim()) list.push({ typ: "NBBL", tna: v.trim(), verein: clubName });
                           updatePlayer(selectedPlayer.id, { lizenzen: list });
                         }}
                         placeholder={t("nbblTnaExample")}
