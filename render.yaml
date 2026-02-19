@@ -12,5 +12,9 @@ services:
         value: 20
       - key: PORT
         value: 5055
+      - key: ALLOWED_ORIGINS
+        value: https://clutchchemist.github.io
       - key: GOOGLE_MAPS_KEY
+        sync: false
+      - key: MAPS_PROXY_TOKEN
         sync: false

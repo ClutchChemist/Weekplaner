@@ -115,7 +115,10 @@ This repo includes `render.yaml` for deploying the Node proxy in `server/maps-pr
 
 1. Create a new Render Web Service from this repository.
 2. Use settings from `render.yaml` (or import Blueprint).
-3. Set environment variable `GOOGLE_MAPS_KEY` in Render dashboard.
+3. Set environment variables in Render dashboard:
+	- `GOOGLE_MAPS_KEY=<your key>`
+	- `ALLOWED_ORIGINS=https://clutchchemist.github.io` (comma-separated if multiple origins)
+	- optional: `MAPS_PROXY_TOKEN=<shared token>`
 4. After deploy, copy service URL (for example `https://weekplaner-maps-proxy.onrender.com`).
 5. Set frontend env variable:
    - `VITE_API_BASE_URL=https://<your-render-service>.onrender.com`

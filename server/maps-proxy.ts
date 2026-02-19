@@ -8,10 +8,19 @@ const NODE_ENV = String(process.env.NODE_ENV ?? "development").trim().toLowerCas
 const IS_PRODUCTION = NODE_ENV === "production";
 
 function parseCsvEnv(name: string): string[] {
-  return String(process.env[name] ?? "")
+  const normalized = String(process.env[name] ?? "")
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((raw) => {
+      try {
+        return new URL(raw).origin;
+      } catch {
+        return raw.replace(/\/+$/, "");
+      }
+    });
+
+  return Array.from(new Set(normalized));
 }
 
 const allowedOrigins = parseCsvEnv("ALLOWED_ORIGINS");
@@ -22,7 +31,7 @@ if (IS_PRODUCTION && allowedOrigins.length === 0) {
 const corsOriginSet = new Set(
   allowedOrigins.length > 0
     ? allowedOrigins
-    : ["http://localhost:5173", "https://clutchchemist.github.io", "https://clutchchemist.github.io/Weekplaner"]
+    : ["http://localhost:5173", "https://clutchchemist.github.io"]
 );
 
 app.use(
