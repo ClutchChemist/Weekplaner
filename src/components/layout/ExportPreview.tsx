@@ -9,8 +9,9 @@ type Props = {
 export function ExportPreview({ pages, t }: Props) {
   const [currentPage, setCurrentPage] = useState(0);
 
+
   if (pages.length === 0) {
-    return <div style={{ padding: 16, color: "#999" }}>{t("previewNoPages")}</div>;
+    return <div style={{ padding: 16, color: "#222" }}>{t("previewNoPages")}</div>;
   }
 
   const page = pages[currentPage];
@@ -19,6 +20,45 @@ export function ExportPreview({ pages, t }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Preview-Styles für bessere Lesbarkeit */}
+      <style>{`
+        .export-preview-content {
+          color: #222 !important;
+        }
+        .export-preview-content h1, .export-preview-content h2, .export-preview-content h3, .export-preview-content h4, .export-preview-content h5, .export-preview-content h6 {
+          color: #111 !important;
+        }
+        .export-preview-content table {
+          color: #222 !important;
+        }
+        .export-preview-content th {
+          background: #e5e7eb !important;
+          color: #111 !important;
+        }
+        .export-preview-content td {
+          color: #222 !important;
+        }
+        .export-preview-content .infoCol {
+          color: #222 !important;
+        }
+        .export-preview-content div, .export-preview-content span, .export-preview-content li {
+          color: #222 !important;
+        }
+        .export-preview-content [style*="color:#999"],
+        .export-preview-content [style*="color: #999"],
+        .export-preview-content [style*="color:#666"],
+        .export-preview-content [style*="color: #666"],
+        .export-preview-content [style*="color:#b4b4b4"],
+        .export-preview-content [style*="color: #b4b4b4"] {
+          color: #222 !important;
+        }
+        .export-preview-content [style*="background:#fafafa"],
+        .export-preview-content [style*="background: #fafafa"],
+        .export-preview-content [style*="background:#f5f5f5"],
+        .export-preview-content [style*="background: #f5f5f5"] {
+          background: #fff !important;
+        }
+      `}</style>
       <div
         style={{
           display: "flex",
@@ -63,6 +103,7 @@ export function ExportPreview({ pages, t }: Props) {
       </div>
 
       <div
+        className="export-preview-content"
         style={{
           flex: 1,
           overflow: "auto",
