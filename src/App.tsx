@@ -9,7 +9,8 @@ import React, {
 } from "react";
 import {
   DndContext,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
@@ -291,6 +292,9 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
       ? "0 10px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)"
       : "none",
     zIndex: isDragging ? 40 : undefined,
+    touchAction: "none",
+    userSelect: "none",
+    WebkitUserSelect: "none",
   };
 
   const group = getPlayerGroup(player);
@@ -2655,10 +2659,13 @@ const holOnlyPlayers = useMemo(() => {
     return out;
   }, [plan]);
 
-  // DnD Sensors für zuverlässiges Event-Clicking
+  // DnD Sensors: separate mouse/touch improve Android drag reliability.
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 140, tolerance: 8 },
     })
   );
 

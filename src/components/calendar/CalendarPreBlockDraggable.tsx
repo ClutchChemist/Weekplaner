@@ -47,6 +47,8 @@ export function CalendarPreBlockDraggable({
     opacity: isDragging ? 0.85 : 1,
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     userSelect: "none",
+    WebkitUserSelect: "none",
+    touchAction: "none",
   };
 
   return (
