@@ -51,7 +51,7 @@ app.post("/api/places/autocomplete", async (req, res) => {
     res.json(data);
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    console.error("Autocomplete error:", msg);
+    process.stderr.write(`Autocomplete error: ${msg}\n`);
     res.status(500).json({ error: msg });
   }
 });
@@ -72,7 +72,7 @@ app.post("/api/places/details", async (req, res) => {
     res.json(data);
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    console.error("Place details error:", msg);
+    process.stderr.write(`Place details error: ${msg}\n`);
     res.status(500).json({ error: msg });
   }
 });
@@ -120,10 +120,10 @@ app.post("/api/routes/compute", async (req, res) => {
     res.json({ minutes, raw: data });
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    console.error("Routes compute error:", msg);
+    process.stderr.write(`Routes compute error: ${msg}\n`);
     res.status(500).json({ error: msg });
   }
 });
 
 const PORT = process.env.PORT || 5055;
-app.listen(PORT, () => console.log(`🗺️  Maps proxy running on :${PORT}`));
+app.listen(PORT, () => process.stdout.write(`🗺️  Maps proxy running on :${PORT}\n`));

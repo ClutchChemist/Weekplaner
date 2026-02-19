@@ -16,10 +16,6 @@ class RootErrorBoundary extends React.Component<
     };
   }
 
-  componentDidCatch(error: unknown, info: React.ErrorInfo) {
-    console.error("App runtime error:", error, info);
-  }
-
   render() {
     if (!this.state.hasError) return this.props.children;
 

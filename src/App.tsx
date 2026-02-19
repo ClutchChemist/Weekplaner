@@ -30,7 +30,7 @@ import type {
 import { makeT, makeTF } from "./i18n/translate";
 import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
 import { CalendarPane } from "@/components/layout";
-import { LeftLocationsView } from "@/components/locations";
+import { LeftLocationsView } from "@/components/locations/LeftLocationsView";
 import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
 import {
@@ -1933,14 +1933,14 @@ const holOnlyPlayers = useMemo(() => {
     profileId: activeProfileId || null,
     enabled: cloudSyncEnabledForActiveProfile,
     autoSyncEnabled: Boolean(activeProfileSync.autoSync),
-    onAutoSyncChange: (next) => updateActiveProfileSync({ autoSync: next }),
+    onAutoSyncChange: (next: boolean) => updateActiveProfileSync({ autoSync: next }),
     buildSnapshot: buildCloudSnapshot,
     applySnapshot: applyCloudSnapshot,
     isSnapshot: isCloudSnapshotV1,
     autoSyncSignal: cloudSyncSignal,
   });
 
-  function applyProfile(profile: SavedProfile) {
+  const applyProfile = useCallback((profile: SavedProfile) => {
     setRosterMeta(profile.payload.rosterMeta);
     setPlayers(profile.payload.players);
     setCoaches(profile.payload.coaches);
@@ -1949,7 +1949,7 @@ const holOnlyPlayers = useMemo(() => {
       ...prev,
       locations: profile.payload.locations,
     }));
-  }
+  }, [setCoaches, setClubLogoDataUrl]);
 
   function createProfile() {
     const name = profileNameInput.trim();
@@ -2017,7 +2017,7 @@ const holOnlyPlayers = useMemo(() => {
     applyProfile(hit);
     setProfileNameInput(hit.name);
     setProfileHydratedId(activeProfileId);
-  }, [activeProfileId, profileHydratedId, profiles]);
+  }, [activeProfileId, applyProfile, profileHydratedId, profiles]);
 
   useEffect(() => {
     if (!activeProfileId || profileHydratedId !== activeProfileId) return;
@@ -2165,13 +2165,11 @@ const holOnlyPlayers = useMemo(() => {
 
   async function createPlanPdf() {
     if (!exportPages || exportPages.length === 0) {
-      console.warn("No export pages available for PDF export.");
       return;
     }
 
     const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
     if (!printWindow) {
-      console.warn("Could not open print window for PDF export.");
       return;
     }
 
@@ -3468,8 +3466,8 @@ const holOnlyPlayers = useMemo(() => {
                                         setCachedTravelMinutes(homePid, destPid, minutes, theme, setTheme);
                                       }
                                     }
-                                  } catch (err) {
-                                    console.error("Auto-Reisezeit error:", err);
+                                  } catch {
+                                    // ignore travel API errors and keep manual entry
                                   } finally {
                                     setAutoTravelLoading(false);
                                   }
@@ -3915,7 +3913,7 @@ const holOnlyPlayers = useMemo(() => {
               hasActiveProfile={Boolean(activeProfileId)}
               profileName={activeProfileName}
               syncMode={activeProfileSync.mode}
-              onSyncModeChange={(mode) => {
+              onSyncModeChange={(mode: ProfileSyncMode) => {
                 updateActiveProfileSync({ mode });
               }}
               cloudConfigured={cloudConfigured}
