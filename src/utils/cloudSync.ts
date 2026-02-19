@@ -15,6 +15,16 @@ function getSupabaseAnonKey(): string {
   return String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
 }
 
+function getCloudAuthRedirectUrl(): string {
+  const envRedirect = String(import.meta.env.VITE_SUPABASE_REDIRECT_TO ?? "").trim();
+  if (envRedirect) return envRedirect;
+
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 export function isCloudSyncConfigured(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
 }
@@ -53,7 +63,13 @@ export async function sendCloudMagicLink(email: string): Promise<void> {
   const target = email.trim();
   if (!target) throw new Error("Missing email address.");
 
-  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const redirectTo = getCloudAuthRedirectUrl();
+  try {
+    new URL(redirectTo);
+  } catch {
+    throw new Error("Invalid cloud auth redirect URL. Check VITE_SUPABASE_REDIRECT_TO.");
+  }
+
   const { error } = await client.auth.signInWithOtp({
     email: target,
     options: { emailRedirectTo: redirectTo },

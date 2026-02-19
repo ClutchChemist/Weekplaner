@@ -152,6 +152,23 @@ In `.env`:
 
 - `VITE_SUPABASE_URL=https://<project-ref>.supabase.co`
 - `VITE_SUPABASE_ANON_KEY=<public-anon-key>`
+- `VITE_SUPABASE_REDIRECT_TO=<optional explicit callback URL>`
+
+Examples for `VITE_SUPABASE_REDIRECT_TO`:
+
+- Local: `http://localhost:5173/`
+- GitHub Pages: `https://<user>.github.io/Weekplaner/`
+
+If you leave `VITE_SUPABASE_REDIRECT_TO` empty, the app uses the current page URL automatically.
+
+### 1b) Supabase Auth URL allow-list (required for magic links)
+
+In Supabase Dashboard → **Authentication** → **URL Configuration**:
+
+- set **Site URL** to your app URL
+- add your local + production callback URLs to **Redirect URLs**
+
+Without this allow-list, magic-link emails may not be delivered or the sign-in callback will fail.
 
 ### 2) Create table + RLS policies
 
