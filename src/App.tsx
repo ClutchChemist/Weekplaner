@@ -92,7 +92,6 @@ import {
 } from "./utils/session";
 import { ensureLocationSaved } from "./utils/locations";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
-import { randomId } from "./utils/id";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
 
@@ -355,13 +354,13 @@ export default function App() {
   const {
     editorState, setEditingSessionId, setFormDate, setFormTeams,
     setLocationMode, setCustomLocation, setFormStart, setFormDuration,
-    setFormOpponent, setFormWarmupMin, setFormTravelMin, setFormEventColor,
+    setFormOpponent, setFormWarmupMin, setFormTravelMin,
     currentLocationValue, onToggleTeam, resetForm, buildSessionFromForm,
   } = useEventPlannerState();
 
   const {
     editingSessionId, formDate, formTeams, locationMode, customLocation,
-    formStart, formDuration, formOpponent, formWarmupMin, formTravelMin, formEventColor,
+    formStart, formDuration, formOpponent, formWarmupMin, formTravelMin,
   } = editorState;
 
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -421,13 +420,15 @@ export default function App() {
     const game = isGameInfo(s.info ?? "");
     setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
     setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
-    setFormEventColor(s.eventColor ?? "");
+    // setFormEventColor(s.eventColor ?? ""); // eventColor not in CalendarEvent
   }
 
   async function onDeleteSession(sessionId: string) {
     const s = plan.sessions.find((x) => x.id === sessionId);
-    const label = s ? `${s.day} ${s.date} | ${(s.teams ?? []).join("/")} | ${s.time}` : sessionId;
-    if (!(await askConfirm(t("delete"), `${label}`))) return;
+    const label = s
+      ? [s.day, s.date, "|", (s.teams ?? []).join("/"), "|", s.time].join(" ")
+      : sessionId;
+    if (!(await askConfirm(t("delete"), String(label)))) return;
     removeSessionFromPlan(sessionId);
     if (editingSessionId === sessionId) resetForm();
   }
@@ -549,14 +550,14 @@ export default function App() {
                   theme={theme} locationUsageMap={locationUsageMap} locationMode={locationMode}
                   customLocation={customLocation} formStart={formStart} formDuration={formDuration}
                   formOpponent={formOpponent} formWarmupMin={formWarmupMin} formTravelMin={formTravelMin}
-                  formEventColor={formEventColor} autoTravelLoading={autoTravelLoading}
+                  autoTravelLoading={autoTravelLoading}
                   setTheme={setTheme} setLeftTab={setLeftTab} setLeftEditMode={setLeftEditMode}
                   setOpenLocationName={setOpenLocationName} setAutoTravelLoading={setAutoTravelLoading}
                   setFormDate={setFormDate} onToggleTeam={onToggleTeam} setLocationMode={setLocationMode}
                   setCustomLocation={setCustomLocation} setFormStart={setFormStart}
                   setFormDuration={setFormDuration} setFormOpponent={setFormOpponent}
                   setFormWarmupMin={setFormWarmupMin} setFormTravelMin={setFormTravelMin}
-                  setFormEventColor={setFormEventColor} currentLocationValue={currentLocationValue}
+                  currentLocationValue={currentLocationValue}
                   onRecallLocationEdit={handleRecallLocationEdit} upsertSession={upsertSession}
                   resetForm={resetForm}
                   onDeleteCurrentSession={() => { if (!editingSessionId) return; void onDeleteSession(editingSessionId); }}

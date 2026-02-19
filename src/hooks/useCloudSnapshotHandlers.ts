@@ -5,7 +5,6 @@ import type { Coach } from "@/types";
 import type {
   CloudSnapshotV1,
   ProfileSyncMode,
-  Profile,
 } from "@/state/profileTypes";
 
 export function useCloudSnapshotHandlers({
@@ -43,7 +42,7 @@ export function useCloudSnapshotHandlers({
   setTheme: Dispatch<SetStateAction<ThemeSettings>>;
   setPlan: Dispatch<SetStateAction<WeekPlan>>;
   setClubLogoDataUrl: (url: string | null) => void;
-  setProfiles: Dispatch<SetStateAction<Profile[]>>;
+  setProfiles: Dispatch<SetStateAction<any[]>>;
   setProfileHydratedId: (id: string) => void;
   setActiveProfileId: (id: string) => void;
 }) {

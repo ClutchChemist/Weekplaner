@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky",
+    "prepare": "[ -d .git ] && husky || echo 'Skipping husky prepare (no .git)'",
     "secrets:scan:staged": "node scripts/scan-secrets-staged.mjs",
     "secrets:scan:repo": "node scripts/scan-secrets-repo.mjs",
     "security:scan": "detect-secrets scan --baseline .secrets.baseline",
