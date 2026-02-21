@@ -3,93 +3,8 @@ import cors from "cors";
 import "dotenv/config";
 
 const app = express();
-
-const NODE_ENV = String(process.env.NODE_ENV ?? "development").trim().toLowerCase();
-const IS_PRODUCTION = NODE_ENV === "production";
-
-function parseCsvEnv(name: string): string[] {
-  const normalized = String(process.env[name] ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((raw) => {
-      try {
-        return new URL(raw).origin;
-      } catch {
-        return raw.replace(/\/+$/, "");
-      }
-    });
-
-  return Array.from(new Set(normalized));
-}
-
-const allowedOrigins = parseCsvEnv("ALLOWED_ORIGINS");
-if (IS_PRODUCTION && allowedOrigins.length === 0) {
-  throw new Error("Missing ALLOWED_ORIGINS in production. Refusing to start insecure maps proxy.");
-}
-
-const corsOriginSet = new Set(
-  allowedOrigins.length > 0
-    ? allowedOrigins
-    : ["http://localhost:5173", "https://clutchchemist.github.io"]
-);
-
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (corsOriginSet.has(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error("Origin not allowed by CORS"));
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "X-Proxy-Token"],
-    maxAge: 600,
-  })
-);
-
-app.use(express.json({ limit: "64kb" }));
-
-const proxyToken = String(process.env.MAPS_PROXY_TOKEN ?? "").trim();
-if (proxyToken) {
-  app.use((req, res, next) => {
-    const headerToken = String(req.header("X-Proxy-Token") ?? "").trim();
-    if (!headerToken || headerToken !== proxyToken) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    next();
-  });
-}
-
-const rateLimitWindowMs = Math.max(5_000, Number(process.env.MAPS_PROXY_RATE_LIMIT_WINDOW_MS ?? 60_000));
-const rateLimitMax = Math.max(5, Number(process.env.MAPS_PROXY_RATE_LIMIT_MAX ?? 120));
-const rateStore = new Map<string, { count: number; resetAt: number }>();
-
-app.use((req, res, next) => {
-  const now = Date.now();
-  const key = `${req.ip ?? "unknown"}:${req.path}`;
-  const cur = rateStore.get(key);
-
-  if (!cur || now >= cur.resetAt) {
-    rateStore.set(key, { count: 1, resetAt: now + rateLimitWindowMs });
-    next();
-    return;
-  }
-
-  cur.count += 1;
-  if (cur.count > rateLimitMax) {
-    res.status(429).json({ error: "Too many requests" });
-    return;
-  }
-
-  next();
-});
+app.use(cors());
+app.use(express.json());
 
 const GOOGLE_KEY = process.env.GOOGLE_MAPS_KEY!;
 if (!GOOGLE_KEY) throw new Error("Missing GOOGLE_MAPS_KEY in .env");
@@ -116,11 +31,6 @@ app.get("/api/health", (_req, res) => {
 app.post("/api/places/autocomplete", async (req, res) => {
   try {
     const { input, sessionToken } = req.body as { input: string; sessionToken: string };
-    if (!input?.trim()) {
-      res.status(400).json({ error: "Missing input" });
-      return;
-    }
-
     const url = `https://places.googleapis.com/v1/places:autocomplete`;
     const body = {
       input,
@@ -141,7 +51,7 @@ app.post("/api/places/autocomplete", async (req, res) => {
     res.json(data);
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    console.error("Autocomplete error:", msg);
+    process.stderr.write(`Autocomplete error: ${msg}\n`);
     res.status(500).json({ error: msg });
   }
 });
@@ -150,11 +60,6 @@ app.post("/api/places/autocomplete", async (req, res) => {
 app.post("/api/places/details", async (req, res) => {
   try {
     const { placeId, sessionToken } = req.body as { placeId: string; sessionToken: string };
-    if (!placeId?.trim()) {
-      res.status(400).json({ error: "Missing placeId" });
-      return;
-    }
-
     const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
     const data = await gFetch(url, {
       method: "GET",
@@ -167,7 +72,7 @@ app.post("/api/places/details", async (req, res) => {
     res.json(data);
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    console.error("Place details error:", msg);
+    process.stderr.write(`Place details error: ${msg}\n`);
     res.status(500).json({ error: msg });
   }
 });
@@ -180,11 +85,6 @@ app.post("/api/routes/compute", async (req, res) => {
       destinationAddress: string;
       departureTimeIso?: string;
     };
-
-    if (!originAddress?.trim() || !destinationAddress?.trim()) {
-      res.status(400).json({ error: "Missing originAddress or destinationAddress" });
-      return;
-    }
 
     const url = "https://routes.googleapis.com/directions/v2:computeRoutes";
     const body: {
@@ -220,15 +120,10 @@ app.post("/api/routes/compute", async (req, res) => {
     res.json({ minutes, raw: data });
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    console.error("Routes compute error:", msg);
+    process.stderr.write(`Routes compute error: ${msg}\n`);
     res.status(500).json({ error: msg });
   }
 });
 
 const PORT = process.env.PORT || 5055;
-app.listen(PORT, () => {
-  console.log(`🗺️  Maps proxy running on :${PORT}`);
-  console.log(`🌐 CORS origins configured: ${Array.from(corsOriginSet).join(", ")}`);
-  if (proxyToken) console.log("🔐 Proxy token auth enabled");
-  console.log(`🚦 Rate limit: ${rateLimitMax} req / ${Math.round(rateLimitWindowMs / 1000)}s per IP+route`);
-});
+app.listen(PORT, () => process.stdout.write(`🗺️  Maps proxy running on :${PORT}\n`));

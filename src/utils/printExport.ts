@@ -2,9 +2,11 @@ import type { Lang } from "../i18n/types";
 import type {
   CalendarEvent as Session,
   Coach,
+  GroupId,
   Player,
   ThemeLocations,
 } from "../state/types";
+import { pickTextColor } from "./color";
 
 export interface PrintPage {
   type: "overview" | "rosters" | "game";
@@ -31,12 +33,12 @@ function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: strin
   const { title, clubName, logoUrl } = opts;
   const logoHtml = logoUrl
     ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="width: 80px; height: 80px; object-fit: contain;" />`
-    : `<div style="width: 80px; height: 80px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #555;">Logo</div>`;
+    : `<div style="width: 80px; height: 80px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999;">Logo</div>`;
   return `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
       <div style="flex: 1;">
         <h1 style="margin: 0; font-size: 24px; font-weight: bold;">${escapeHtml(title)}</h1>
-        <div style="font-size: 14px; color: #333; margin-top: 4px;">${escapeHtml(clubName)}</div>
+        <div style="font-size: 14px; color: #666; margin-top: 4px;">${escapeHtml(clubName)}</div>
       </div>
       ${logoHtml}
     </div>
@@ -48,7 +50,7 @@ function pageFooterHtml(opts: { clubName: string; locale: Lang }): string {
   const trainingLabel = locale === "de" ? "Basketballtraining" : "Basketball Training";
   const planLabel = locale === "de" ? "Wochenplanung" : "Weekly Plan";
   return `
-    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #bbb; font-size: 12px; color: #333;">
+    <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
       ${escapeHtml(clubName)} · ${trainingLabel} · ${planLabel}
     </div>
   `;
@@ -60,6 +62,102 @@ function thCss(): string {
 
 function tdCss(): string {
   return "border: 1px solid #ccc; padding: 8px;";
+}
+
+// ── Kader-Listen Spalten-Layout Helpers ──────────────────────────────────────
+
+/** Gibt "Vorname N." zurück (oder nur Vorname wenn kein Nachname erkennbar) */
+function formatPlayerShortName(player: Player): string {
+  const first = player.firstName?.trim();
+  const last = player.lastName?.trim();
+  if (first && last) return `${first} ${last.charAt(0)}`;
+  // fallback: name-Feld splitten
+  const parts = (player.name ?? "").trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0]} ${parts[parts.length - 1].charAt(0)}`;
+  }
+  return player.name ?? "";
+}
+
+/** Gibt abgekürzten Event-Header zurück: z.B. "Mi-NBBL", "Do-U18" */
+function abbrevEventHeader(s: Session): string {
+  const day = (s.day ?? "").slice(0, 2); // "Mi", "Do", "Fr" etc.
+  const teams = (s.teams ?? []).join("/");
+  return `${day}-${teams}`;
+}
+
+const GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
+
+function groupSortKey(group: GroupId | undefined): number {
+  if (!group) return GROUP_ORDER.length;
+  const idx = GROUP_ORDER.indexOf(group);
+  return idx === -1 ? GROUP_ORDER.length : idx;
+}
+
+function sortPlayersByGroup(players: Player[]): Player[] {
+  return [...players].sort((a, b) => {
+    const ka = groupSortKey(a.group);
+    const kb = groupSortKey(b.group);
+    if (ka !== kb) return ka - kb;
+    return (a.name ?? "").localeCompare(b.name ?? "", "de");
+  });
+}
+
+/** Rendert die Kader-Listen als Spalten-Layout (eine Spalte pro Event) */
+function renderKaderColumnLayoutHtml(opts: {
+  sessions: Session[];
+  players: Player[];
+  groupColors: Record<string, string>;
+}): string {
+  const { sessions, players, groupColors } = opts;
+
+  if (sessions.length === 0) return "";
+
+  const playerById = new Map(players.map((p) => [p.id, p] as const));
+
+  // Für jede Session: sortierte Spielerliste aufbauen
+  const columns = sessions.map((s) => {
+    const assigned = (s.participants ?? [])
+      .map((pid) => playerById.get(pid))
+      .filter((p): p is Player => Boolean(p));
+    return {
+      session: s,
+      players: sortPlayersByGroup(assigned),
+    };
+  });
+
+  const maxRows = Math.max(0, ...columns.map((c) => c.players.length));
+
+  // Header-Zeile
+  const headerCells = columns
+    .map((c) => {
+      const label = abbrevEventHeader(c.session);
+      return `<th style="border:1px solid #bbb; padding:5px 7px; background:#f0f0f0; font-size:11px; font-weight:900; white-space:nowrap; text-align:left;">${escapeHtml(label)}</th>`;
+    })
+    .join("");
+
+  // Daten-Zeilen
+  const rows: string[] = [];
+  for (let i = 0; i < maxRows; i++) {
+    const cells = columns
+      .map((c) => {
+        const p = c.players[i];
+        if (!p) return `<td style="border:1px solid #ddd; padding:3px 7px;"></td>`;
+        const bg = groupColors[p.group ?? "TBD"] ?? "#eee";
+        const fg = pickTextColor(bg);
+        const name = formatPlayerShortName(p);
+        return `<td style="border:1px solid #ddd; padding:3px 7px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:11px; white-space:nowrap;">${escapeHtml(name)}</td>`;
+      })
+      .join("");
+    rows.push(`<tr>${cells}</tr>`);
+  }
+
+  return `
+    <table style="border-collapse:collapse; font-size:11px; width:100%;">
+      <thead><tr>${headerCells}</tr></thead>
+      <tbody>${rows.join("")}</tbody>
+    </table>
+  `;
 }
 
 export function renderWeekOverviewHtml(opts: {
@@ -230,10 +328,14 @@ function renderWeekScheduleOnlyHtml(opts: {
   const { sessions, clubName, locale, locations, logoUrl } = opts;
 
   const t = locale === "de"
-    ? { title: "Trainingswoche", date: "Datum", day: "Tag", type: "Typ", teams: "Teams", time: "Zeit", loc: "Ort", info: "Info",
-        trainingShort: "Tr", gameShort: "Sp" }
-    : { title: "Training week", date: "Date", day: "Day", type: "Type", teams: "Teams", time: "Time", loc: "Location", info: "Info",
-        trainingShort: "Tr", gameShort: "Gm" };
+    ? {
+      title: "Trainingswoche", date: "Datum", day: "Tag", type: "Typ", teams: "Teams", time: "Zeit", loc: "Ort", info: "Info",
+      trainingShort: "Tr", gameShort: "Sp"
+    }
+    : {
+      title: "Training week", date: "Date", day: "Day", type: "Type", teams: "Teams", time: "Time", loc: "Location", info: "Info",
+      trainingShort: "Tr", gameShort: "Gm"
+    };
 
   const locationsLegendHtml = (() => {
     const defs = locations?.definitions || {};
@@ -267,11 +369,10 @@ function renderWeekScheduleOnlyHtml(opts: {
         return `
           <div style="border:1px solid #eee; padding:6px 8px; border-radius:8px;">
             <div style="font-weight:900; font-size:11px;">${escapeHtml(d.abbr || name)} — ${escapeHtml(d.name || name)}${escapeHtml(hall)}</div>
-            ${
-              addrShort
-                ? `<div style="font-size:10px; color:#333; margin-top:2px;">${escapeHtml(addrShort)}</div>`
-                : `<div style="font-size:10px; color:#555; margin-top:2px;">(no address)</div>`
-            }
+            ${addrShort
+            ? `<div style="font-size:10px; color:#555; margin-top:2px;">${escapeHtml(addrShort)}</div>`
+            : `<div style="font-size:10px; color:#999; margin-top:2px;">(no address)</div>`
+          }
           </div>
         `;
       })
@@ -345,7 +446,7 @@ export function renderRostersOnlyHtml(opts: {
     .map((s) => {
       const label = `${s.day} · ${s.date} · ${s.time} · ${s.location} · ${s.teams.join(", ")} ${s.info ? `· ${s.info}` : ""}`;
       const assigned = players.filter((p) => s.participants?.includes(p.id));
-      if (assigned.length === 0) return `<div style="color:#555; font-size:12px;">${t.none}</div>`;
+      if (assigned.length === 0) return `<div style="color:#999; font-size:12px;">${t.none}</div>`;
 
       const sorted = assigned
         .slice()
@@ -354,7 +455,7 @@ export function renderRostersOnlyHtml(opts: {
       const rows = sorted
         .map((p, idx) => `
           <tr>
-            <td style="${tdCss()} width:28px; text-align:center; font-size:10px; color:#333;">${idx + 1}</td>
+            <td style="${tdCss()} width:28px; text-align:center; font-size:10px; color:#555;">${idx + 1}</td>
             <td style="${tdCss()}">${escapeHtml(p.name)}</td>
           </tr>
         `)
@@ -398,8 +499,9 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
   locale: Lang;
   locations: ThemeLocations;
   logoUrl?: string;
+  groupColors?: Record<string, string>;
 }): string {
-  const { sessions, players, clubName, locale, locations, logoUrl } = opts;
+  const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {} } = opts;
 
   const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl });
   const scheduleInner = scheduleHtml
@@ -408,43 +510,15 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
     .replace(new RegExp(pageFooterHtml({ clubName, locale }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "");
 
   const t = locale === "de"
-    ? { rosterTitle: "Kaderlisten", empty: "Keine Teilnehmer zugewiesen." }
-    : { rosterTitle: "Roster lists", empty: "No participants assigned." };
+    ? { rosterTitle: "Kader-Listen" }
+    : { rosterTitle: "Roster lists" };
 
-  const playerById = new Map(players.map((p) => [p.id, p] as const));
-
-  const rosterRows = sessions
-    .map((s) => {
-      const names = (s.participants ?? [])
-        .map((pid) => playerById.get(pid)?.name)
-        .filter((n): n is string => Boolean(n))
-        .sort((a, b) => a.localeCompare(b, locale));
-
-      const eventLabel = `${s.day} · ${s.date} · ${s.time} · ${s.location} · ${s.teams.join(", ")}${s.info ? ` · ${s.info}` : ""}`;
-
-      return `
-        <tr>
-          <td style="${tdCss()} width: 42%;">${escapeHtml(eventLabel)}</td>
-          <td style="${tdCss()}">${names.length ? escapeHtml(names.join(", ")) : `<span style="color:#555;">${escapeHtml(t.empty)}</span>`}</td>
-        </tr>
-      `;
-    })
-    .join("");
+  const kaderColumns = renderKaderColumnLayoutHtml({ sessions, players, groupColors });
 
   const rosterSection = `
     <div style="margin-top: 14px;">
-      <h3 style="margin: 0 0 8px 0; font-size: 16px;">${escapeHtml(t.rosterTitle)}</h3>
-      <table>
-        <thead>
-          <tr>
-            <th style="${thCss()}">${locale === "de" ? "Event" : "Event"}</th>
-            <th style="${thCss()}">${locale === "de" ? "Spieler" : "Players"}</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rosterRows}
-        </tbody>
-      </table>
+      <div style="font-weight:900; font-size:13px; margin-bottom:8px;">${escapeHtml(t.rosterTitle)}:</div>
+      ${kaderColumns}
     </div>
   `;
 
@@ -497,7 +571,7 @@ function renderGameSheetHtml(opts: {
 
       return `
         <tr>
-          <td style="${tdCss()} text-align:center; font-size:10px; color:#333; width:22px;">${idx + 1}</td>
+          <td style="${tdCss()} text-align:center; font-size:10px; color:#555; width:22px;">${idx + 1}</td>
           <td style="${tdCss()} text-align:center; width:44px;">${escapeHtml(String(jerseyVal))}</td>
           <td style="${tdCss()}">${escapeHtml(nachname)}</td>
           <td style="${tdCss()}">${escapeHtml(vorname)}</td>
@@ -549,7 +623,7 @@ function renderGameSheetHtml(opts: {
         </tbody>
       </table>
 
-      <div style="font-size:11px; color:#333; margin-top:8px;">
+      <div style="font-size:11px; color:#555; margin-top:8px;">
         Hinweis: Bitte maximal <b>12</b> Spieler als <b>Aktiv</b> markieren. Insgesamt sind <b>15</b> Zeilen für kurzfristige Änderungen vorgesehen.
       </div>
 
@@ -579,8 +653,9 @@ export function buildPrintPages(opts: {
   locale: Lang;
   locations: ThemeLocations;
   logoUrl?: string;
+  groupColors?: Record<string, string>;
 }): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors } = opts;
   const pages: PrintPage[] = [];
 
   const firstPageHtml = renderWeekSummaryAndRostersFirstPageHtml({
@@ -590,6 +665,7 @@ export function buildPrintPages(opts: {
     locale,
     locations,
     logoUrl,
+    groupColors,
   });
   pages.push({
     type: "overview",
@@ -615,14 +691,15 @@ export function buildPreviewPages(opts: {
   locale: Lang;
   locations: ThemeLocations;
   logoUrl?: string;
+  groupColors?: Record<string, string>;
 }): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors } = opts;
 
   const pages: PrintPage[] = [];
 
   pages.push({
     type: "overview",
-    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl }),
+    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl, groupColors }),
     title: locale === "de" ? "Trainingswoche + Kaderlisten" : "Training week + roster lists",
   });
 

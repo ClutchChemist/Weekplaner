@@ -53,8 +53,7 @@ function AddressAutocomplete({
           setLoading(true);
           const res = await fetchPlacePredictions(input, sessionToken);
           setPredictions(res.suggestions ?? []);
-        } catch (err) {
-          console.error("Places Autocomplete error:", err);
+        } catch {
           setPredictions([]);
         } finally {
           setLoading(false);
@@ -78,8 +77,8 @@ function AddressAutocomplete({
       setInputVal(details.formattedAddress ?? "");
       setPredictions([]);
       setShowPredictions(false);
-    } catch (err) {
-      console.error("Place Details error:", err);
+    } catch {
+      // ignore failed place details fetch and keep user input
     } finally {
       setLoading(false);
     }
