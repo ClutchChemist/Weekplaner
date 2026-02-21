@@ -31,12 +31,11 @@ import { makeT, makeTF } from "./i18n/translate";
 import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
 import {
   CalendarPane,
-  ExportPreview,
+  LeftSidebar,
   PrintView,
   RightSidebar,
-  type SidebarModule,
+  WeekPlanBoard,
 } from "@/components/layout";
-import { LeftLocationsView } from "@/components/locations/LeftLocationsView";
 
 import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
@@ -69,7 +68,6 @@ import {
   isHolOnly,
   isU18Only,
   makeParticipantSorter,
-  PRINT_GROUP_ORDER,
 } from "./state/playerGrouping";
 import {
   dbbDobMatchesBirthDate,
@@ -96,7 +94,6 @@ import { applyThemeToCssVars } from "./themes/cssVars";
 import {
   addDaysISO,
   addMinutesToHHMM,
-  dateToDDMMYYYY_DOTS,
   dateToShortDE,
   isoWeekMonday,
   kwLabelFromPlan,
@@ -122,7 +119,7 @@ import {
   setCachedTravelMinutes,
 } from "./utils/locations";
 import { fetchTravelMinutes } from "./utils/mapsApi";
-import { buildPreviewPages, buildPrintPages, type PrintPage } from "./utils/printExport";
+import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
 import { normalizeYearColor, pickTextColor } from "./utils/color";
 import { downloadJson } from "./utils/json";
 import { randomId } from "./utils/id";
@@ -688,8 +685,6 @@ export default function App() {
     DEFAULT_STAFF,
     (savedRaw) => safeParseStaff(savedRaw) ?? DEFAULT_STAFF
   );
-
-  const staffFileRef = useRef<HTMLInputElement | null>(null);
 
   /* ============================================================
      HANDLERS (onDrag..., upsert..., export...)
@@ -2223,297 +2218,43 @@ export default function App() {
         <DndContext sensors={sensors} onDragStart={dnd.onDragStart} onDragOver={dnd.onDragOver} onDragEnd={dnd.onDragEnd}>
           <div className={rightOpen ? "appGrid appGrid3" : "appGrid"}>
             {/* LEFT */}
-            <div
-              className="leftPane"
-              style={{
-                padding: 16,
-                borderRight: `1px solid var(--ui-border)`,
-                overflow: "auto",
-                background: "var(--ui-panel)",
-              }}
-            >
-              {/* Left Tabs */}
-              <div className="leftTabsRow">
-                <div className="leftTabsGroup">
-                  <button
-                    type="button"
-                    onClick={() => { setLeftTab("players"); setLeftEditMode(false); }}
-                    style={segBtn(leftTab === "players")}
-                  >
-                    {t("players")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setLeftTab("coaches"); setLeftEditMode(false); }}
-                    style={segBtn(leftTab === "coaches")}
-                  >
-                    {t("coaches")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setLeftTab("locations"); setLeftEditMode(false); }}
-                    style={segBtn(leftTab === "locations")}
-                  >
-                    {t("locations")}
-                  </button>
-                </div>
-
-                <div className="leftTabsEdit">
-                  <button
-                    type="button"
-                    onClick={() => setLeftEditMode((v) => !v)}
-                    style={{
-                      ...segBtn(false),
-                      borderColor: leftEditMode ? "var(--ui-accent)" : "var(--ui-border)",
-                      background: leftEditMode ? "rgba(59,130,246,.18)" : "transparent",
-                      padding: "8px 10px",
-                      fontSize: 12,
-                      fontWeight: 950,
-                    }}
-                    title={t("editModeCurrentListTitle")}
-                  >
-                    {leftEditMode ? t("editModeOn") : t("editModeOff")}
-                  </button>
-                </div>
-              </div>
-
-              {leftTab === "players" && (
-                <>
-                  <div className="leftSectionHeader">
-                    <div style={{ fontSize: 18, fontWeight: 900 }}>{t("roster")}</div>
-                    <Button variant="outline" onClick={() => { setRosterSearch(""); setRosterOpen(true); }} style={{ padding: "8px 10px" }}>
-                      {leftEditMode ? t("rosterEdit") : t("rosterShow")}
-                    </Button>
-                  </div>
-
-                  <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 13, fontWeight: 700 }}>
-                    {t("playersPanelHint")}
-                  </div>
-
-                  <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-                    {/* U18-only */}
-                    <div style={{ borderRadius: 14 }}>
-                      <button
-                        onClick={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          border: `1px solid var(--ui-border)`,
-                          background: "var(--ui-card)",
-                          color: "var(--ui-text)",
-                          borderRadius: 14,
-                          padding: "12px 12px",
-                          cursor: "pointer",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
-                          fontWeight: 900,
-                        }}
-                      >
-                        <span>{t("groupU18Only")}</span>
-                        <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-                          {u18OnlyPlayers.length} {t("players")}
-                        </span>
-                      </button>
-
-                      {openExtra === "U18_ONLY" && (
-                        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                          {u18OnlyPlayers.map((p) => (
-                            <DraggablePlayerRow
-                              key={p.id}
-                              player={p}
-                              trainingCount={trainingCounts.get(p.id) ?? 0}
-                              groupBg={groupBg}
-                              isBirthday={birthdayPlayerIds.has(p.id)}
-                              t={t}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* HOL-only */}
-                    <div style={{ borderRadius: 14 }}>
-                      <button
-                        onClick={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          border: `1px solid var(--ui-border)`,
-                          background: "var(--ui-card)",
-                          color: "var(--ui-text)",
-                          borderRadius: 14,
-                          padding: "12px 12px",
-                          cursor: "pointer",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
-                          fontWeight: 900,
-                        }}
-                      >
-                        <span>{t("groupHolOnly")}</span>
-                        <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-                          {holOnlyPlayers.length} {t("players")}
-                        </span>
-                      </button>
-
-                      {openExtra === "HOL_ONLY" && (
-                        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                          {holOnlyPlayers.map((p) => (
-                            <DraggablePlayerRow
-                              key={p.id}
-                              player={p}
-                              trainingCount={trainingCounts.get(p.id) ?? 0}
-                              groupBg={groupBg}
-                              isBirthday={birthdayPlayerIds.has(p.id)}
-                              t={t}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                    {GROUPS.map((g) => {
-                      const arr = playersByGroup.get(g.id) ?? [];
-                      const isOpen = openGroup === g.id;
-                      const groupRightLabel = g.id === "TBD" ? t("groupTbdLong") : `${arr.length} ${t("players")}`;
-
-                      return (
-                        <div key={g.id} style={{ borderRadius: 14 }}>
-                          <button
-                            onClick={() => setOpenGroup((prev) => (prev === g.id ? null : g.id))}
-                            className="groupHeaderBtn"
-                          >
-                            <span className="groupHeaderLeft">{g.label}</span>
-                            <span className="groupHeaderRight">{groupRightLabel}</span>
-                          </button>
-
-                          {isOpen && (
-                            <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                              {arr.map((p) => (
-                                <DraggablePlayerRow
-                                  key={p.id}
-                                  player={p}
-                                  trainingCount={trainingCounts.get(p.id) ?? 0}
-                                  groupBg={groupBg}
-                                  isBirthday={birthdayPlayerIds.has(p.id)}
-                                  t={t}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {leftTab === "coaches" && (
-                <>
-                  <div className="leftSectionHeader">
-                    <div style={{ fontSize: 18, fontWeight: 900 }}>{t("coaches")}</div>
-                    {leftEditMode && (
-                      <Button variant="outline" onClick={addCoach} style={{ padding: "8px 10px" }}>
-                        + {t("coach")}
-                      </Button>
-                    )}
-                  </div>
-
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Button variant="outline" onClick={exportStaff} style={{ padding: "8px 10px" }}>
-                      {t("export")} staff.json
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => staffFileRef.current?.click()}
-                      style={{ padding: "8px 10px" }}
-                    >
-                      {t("import")} staff.json
-                    </Button>
-                    <input
-                      ref={staffFileRef}
-                      type="file"
-                      accept="application/json"
-                      style={{ display: "none" }}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) importStaffFile(f);
-                        e.currentTarget.value = "";
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                    {coaches.map((c) => (
-                      <div
-                        key={c.id}
-                        style={{
-                          border: `1px solid var(--ui-border)`,
-                          borderRadius: 14,
-                          background: "var(--ui-card)",
-                          padding: 12,
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-                          <div style={{ fontWeight: 900 }}>{c.role}</div>
-                          {leftEditMode && (
-                            <Button
-                              variant="outline"
-                              onClick={() => deleteCoach(c.id)}
-                              style={{ padding: "6px 10px", borderColor: "#ef4444", color: "#ef4444" }}
-                            >
-                              {t("delete").toLowerCase()}
-                            </Button>
-                          )}
-                        </div>
-
-                        {!leftEditMode ? (
-                          <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
-                            {c.name} {c.license ? `• ${c.license}` : ""}
-                          </div>
-                        ) : (
-                          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                            <div>
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("name")}</div>
-                              <Input value={c.name} onChange={(v) => updateCoach(c.id, { name: v })} />
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("role")}</div>
-                              <Input value={c.role} onChange={(v) => updateCoach(c.id, { role: v })} />
-                            </div>
-                            <div style={{ gridColumn: "1 / span 2" }}>
-                              <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("licenseNumber")}</div>
-                              <Input
-                                value={c.license ?? ""}
-                                onChange={(v) => updateCoach(c.id, { license: v })}
-                                placeholder={t("licenseNumberExample")}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {leftTab === "locations" && (
-                <LeftLocationsView
-                  theme={theme}
-                  setTheme={setTheme}
-                  locationUsageMap={locationUsageMap}
-                  editMode={leftEditMode}
-                  openLocationName={openLocationName}
-                  setOpenLocationName={setOpenLocationName}
+            <LeftSidebar
+              t={t}
+              leftTab={leftTab}
+              leftEditMode={leftEditMode}
+              onSelectTab={(tab) => { setLeftTab(tab); setLeftEditMode(false); }}
+              onToggleEditMode={() => setLeftEditMode((v) => !v)}
+              onOpenRoster={() => { setRosterSearch(""); setRosterOpen(true); }}
+              openExtra={openExtra}
+              onToggleU18Only={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
+              onToggleHolOnly={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
+              u18OnlyPlayers={u18OnlyPlayers}
+              holOnlyPlayers={holOnlyPlayers}
+              openGroup={openGroup}
+              onToggleGroup={(gid) => setOpenGroup((prev) => (prev === gid ? null : gid))}
+              playersByGroup={playersByGroup}
+              renderDraggablePlayer={(p) => (
+                <DraggablePlayerRow
+                  key={p.id}
+                  player={p}
+                  trainingCount={trainingCounts.get(p.id) ?? 0}
+                  groupBg={groupBg}
+                  isBirthday={birthdayPlayerIds.has(p.id)}
                   t={t}
                 />
               )}
-            </div>
-
+              coaches={coaches}
+              onAddCoach={addCoach}
+              onUpdateCoach={updateCoach}
+              onDeleteCoach={deleteCoach}
+              onExportStaff={exportStaff}
+              onImportStaffFile={importStaffFile}
+              theme={theme}
+              setTheme={setTheme}
+              locationUsageMap={locationUsageMap}
+              openLocationName={openLocationName}
+              setOpenLocationName={setOpenLocationName}
+            />
             {/* RIGHT */}
             <div className="rightPane" style={{ padding: 16, overflow: "auto", background: "var(--ui-bg)" }}>
               {/* Top bar */}
@@ -3069,188 +2810,25 @@ export default function App() {
               </EventEditorModal>
 
               {/* Week plan board */}
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>{t("weekPlan")}</div>
-                {lastDropError && (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      border: "1px solid #ef4444",
-                      background: "rgba(239,68,68,0.12)",
-                      color: "var(--ui-text)",
-                      borderRadius: 12,
-                      padding: "10px 12px",
-                      fontWeight: 900,
-                      fontSize: 12,
-                    }}
-                  >
-                    {lastDropError}
-                  </div>
-                )}
-                <div className="weekGrid" style={{ marginTop: 10 }}>
-                  {plan.sessions.map((s) => (
-                    <DroppableSessionShell
-                      key={s.id}
-                      session={s}
-                      hasHistoryFlag={(historyFlagsBySession.get(s.id) ?? []).length > 0}
-                      isEditing={editingSessionId === s.id}
-                      isSelected={selectedSessionId === s.id}
-                      onSelect={(session) => setSelectedSessionId(session.id)}
-                    >
-                      {(() => {
-                        const dayLabel = weekdayShortLocalized(s.date, lang) || s.day;
-                        const participantsCollapsed = collapsedParticipantsBySession[s.id] === true;
-                        return (
-                          <>
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                              <div>
-                                <div style={{ fontWeight: 900, color: "var(--ui-text)" }}>
-                                  {dayLabel} • {s.date}
-                                </div>
-                                <div style={{ fontWeight: 800, color: "var(--ui-soft)" }}>
-                                  {(s.teams ?? []).join(" / ")} — {s.time} — {s.location}
-                                </div>
-                                {s.info ? (
-                                  <div style={{ fontSize: 12, color: "var(--ui-muted)", marginTop: 4, fontWeight: 900 }}>
-                                    {s.info}
-                                  </div>
-                                ) : null}
-                                {/* ANCHOR:SESSION_CONFLICT_BADGE
-                           Konfliktanzeige pro Session:
-                           - zeigt Anzahl der Spieler, die in einem überschneidenden Event ebenfalls eingetragen sind
-                           - Tooltip listet Namen (gekürzt)
-                        */}
-                                {(() => {
-                                  const conflicts = conflictsBySession.get(s.id) ?? [];
-                                  if (!conflicts.length) return null;
-
-                                  const uniquePlayers = Array.from(new Set(conflicts.map((c) => c.playerId)));
-                                  const names = uniquePlayers
-                                    .map((pid) => playerById.get(pid)?.name ?? pid)
-                                    .slice(0, 8)
-                                    .join(", ");
-
-                                  return (
-                                    <div
-                                      title={names}
-                                      style={{
-                                        marginTop: 6,
-                                        display: "inline-block",
-                                        border: "1px solid #ef4444",
-                                        background: "rgba(239,68,68,0.12)",
-                                        color: "var(--ui-text)",
-                                        padding: "6px 10px",
-                                        borderRadius: 999,
-                                        fontWeight: 900,
-                                        fontSize: 12,
-                                      }}
-                                    >
-                                      {t("conflict")}: {uniquePlayers.length}
-                                    </div>
-                                  );
-                                })()}
-
-                                {(() => {
-                                  const flaggedIds = historyFlagsBySession.get(s.id) ?? [];
-                                  if (!flaggedIds.length) return null;
-
-                                  const names = flaggedIds
-                                    .map((pid) => playerById.get(pid)?.name ?? pid)
-                                    .slice(0, 8)
-                                    .join(", ");
-
-                                  return (
-                                    <div
-                                      title={names}
-                                      style={{
-                                        marginTop: 6,
-                                        display: "inline-block",
-                                        border: "1px solid #ef4444",
-                                        background: "rgba(239,68,68,0.12)",
-                                        color: "var(--ui-text)",
-                                        padding: "6px 10px",
-                                        borderRadius: 999,
-                                        fontWeight: 900,
-                                        fontSize: 12,
-                                      }}
-                                    >
-                                      {t("hint")}: {flaggedIds.length} ({t("history")})
-                                    </div>
-                                  );
-                                })()}
-
-                              </div>
-
-                              <div style={{ textAlign: "right" }}>
-                                <div style={{ fontSize: 12, color: "var(--ui-text)", fontWeight: 900 }}>
-                                  {(s.participants ?? []).length} {t("players")}
-                                </div>
-                                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8, flexWrap: "wrap" }}>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() =>
-                                      setCollapsedParticipantsBySession((prev) => ({
-                                        ...prev,
-                                        [s.id]: !participantsCollapsed,
-                                      }))
-                                    }
-                                    style={{ padding: "8px 10px" }}
-                                  >
-                                    {participantsCollapsed ? t("expandPlayers") : t("collapsePlayers")}
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => onEditSession(s)}
-                                    title={t("eventEdit")}
-                                    style={{ padding: "8px 10px" }}
-                                  >
-                                    ⚙︎
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => onDeleteSession(s.id)}
-                                    style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
-                                  >
-                                    {t("delete").toLowerCase()}
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-
-                            {!participantsCollapsed && (
-                              <>
-                                <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
-
-                                <div style={{ display: "grid", gap: 6 }}>
-                                  {(s.participants ?? []).map((pid) => {
-                                    const p = playerById.get(pid);
-                                    if (!p) return null;
-                                    return (
-                                      <ParticipantCard
-                                        key={pid}
-                                        player={p}
-                                        onRemove={() => removePlayerFromSession(s.id, pid)}
-                                        groupBg={groupBg}
-                                        isBirthday={birthdayPlayerIds.has(pid)}
-                                        t={t}
-                                      />
-                                    );
-                                  })}
-                                  {(s.participants ?? []).length === 0 && (
-                                    <div style={{ color: "var(--ui-muted)", fontSize: 13, fontWeight: 800 }}>
-                                      {t("dropPlayersHere")}
-                                    </div>
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </DroppableSessionShell>
-                  ))}
-                </div>
-              </div>
+              <WeekPlanBoard
+                sessions={plan.sessions}
+                lang={lang}
+                t={t}
+                lastDropError={lastDropError}
+                conflictsBySession={conflictsBySession}
+                historyFlagsBySession={historyFlagsBySession}
+                editingSessionId={editingSessionId}
+                selectedSessionId={selectedSessionId}
+                onSelectSession={setSelectedSessionId}
+                collapsedParticipantsBySession={collapsedParticipantsBySession}
+                onToggleParticipantsCollapse={toggleParticipantsCollapse}
+                onEditSession={(s) => { setEditingSessionId(s.id); setEventEditorOpen(true); }}
+                onDeleteSession={deleteSession}
+                playerById={playerById}
+                removePlayerFromSession={removePlayerFromSession}
+                groupBg={groupBg}
+                birthdayPlayerIds={birthdayPlayerIds}
+              />
 
               {/* Print */}
               <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end", gap: 10 }}>
