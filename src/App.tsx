@@ -29,8 +29,15 @@ import type {
 } from "@/types";
 import { makeT, makeTF } from "./i18n/translate";
 import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
-import { CalendarPane } from "@/components/layout";
+import {
+  CalendarPane,
+  ExportPreview,
+  PrintView,
+  RightSidebar,
+  type SidebarModule,
+} from "@/components/layout";
 import { LeftLocationsView } from "@/components/locations/LeftLocationsView";
+
 import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import type { NewWeekMode } from "./components/modals/NewWeekModal";
 import {
@@ -158,8 +165,6 @@ import weekMasterRaw from "./data/weekplan_master.json";
    UI PRIMITIVES (CSS vars)
    ============================================================ */
 
-type SidebarModule = "calendar" | "preview" | "maps" | "none";
-
 type PromptDialogState = {
   open: boolean;
   title: string;
@@ -170,36 +175,6 @@ type PromptDialogState = {
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
-
-function RightSidebarModuleSelect({
-  value,
-  onChange,
-  t,
-}: {
-  value: SidebarModule;
-  onChange: (v: SidebarModule) => void;
-  t: (k: string) => string;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as SidebarModule)}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 10,
-        border: "1px solid var(--ui-border)",
-        background: "var(--ui-panel)",
-        color: "var(--ui-text)",
-        fontWeight: 900,
-      }}
-    >
-      <option value="calendar">{t("calendar")}</option>
-      <option value="preview">{t("preview")}</option>
-      <option value="maps">{t("maps")}</option>
-      <option value="none">—</option>
-    </select>
-  );
-}
 
 function MinutePicker({
   value,
@@ -475,582 +450,16 @@ const ParticipantCard = React.memo(function ParticipantCard({
 ParticipantCard.displayName = "ParticipantCard";
 
 /* ============================================================
-   PRINT VIEW (kept)
+   PRINT VIEW → src/components/layout/PrintView.tsx
    ============================================================ */
-
-function exportShortName(p: Player): string {
-  if (p.id === "TBD") return "TBD";
-  const fn = (p.firstName ?? "").trim();
-  const ln = (p.lastName ?? "").trim();
-
-  if (fn || ln) {
-    const initial = ln ? ln[0].toUpperCase() : "";
-    const first = fn ? fn : (p.name ?? "").split(" ")[0] ?? "";
-    return (first || "").trim() + (initial ? ` ${initial}` : "");
-  }
-
-  const parts = String(p.name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "";
-  if (parts.length === 1) return parts[0];
-  return `${parts[0]} ${parts[1][0].toUpperCase()}`;
-}
-
-function PrintView({
-  plan,
-  playerById,
-  groupBg,
-  coaches,
-  birthdayPlayerIds,
-  t,
-}: {
-  plan: WeekPlan;
-  playerById: Map<string, Player>;
-  groupBg: Record<GroupId, string>;
-  coaches: Coach[];
-  birthdayPlayerIds: Set<string>;
-  t: (k: string) => string;
-}) {
-  const logoUrl = "https://ubc.ms/wp-content/uploads/2022/06/ubc-logo.png";
-
-  const mondayDate =
-    plan.sessions.find((s) => (s.day || "").toLowerCase().startsWith("mo"))?.date ??
-    plan.sessions[0]?.date ??
-    new Date().toISOString().slice(0, 10);
-
-  const kwText = kwLabelFromPlan(plan);
-
-  function sessionLabel(s: Session) {
-    if (s.kaderLabel) return s.kaderLabel;
-    const day = s.day || weekdayShortDE(s.date);
-    const t = (s.teams ?? []).join("+").replaceAll("1RLH", "RLH");
-    return `${day}-${t || "Event"}`;
-  }
-
-  function exportDateCell(s: Session) {
-    const day = (s.day || "").toLowerCase();
-    if (day.startsWith("mo")) return dateToDDMMYYYY_DOTS(s.date);
-    return dateToShortDE(s.date);
-  }
-
-  function sortedParticipantsForSession(s: Session): Player[] {
-    const players: Player[] = (s.participants ?? [])
-      .map((pid) => playerById.get(pid))
-      .filter(Boolean) as Player[];
-
-    const byGroup: Record<GroupId, Player[]> = {
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      Herren: [],
-      TBD: [],
-    };
-
-    for (const p of players) byGroup[getPlayerGroup(p)].push(p);
-    for (const gid of PRINT_GROUP_ORDER) byGroup[gid].sort((a, b) => a.name.localeCompare(b.name, "de"));
-
-    return PRINT_GROUP_ORDER.flatMap((gid) => byGroup[gid]);
-  }
-
-  const rosterColumns = plan.sessions.map((s) => ({
-    id: s.id,
-    label: sessionLabel(s),
-    players: sortedParticipantsForSession(s),
-  }));
-
-  const maxRows = Math.max(0, ...rosterColumns.map((c) => c.players.length));
-  const hasTbd = plan.sessions.some((s) => (s.participants ?? []).includes("TBD"));
-
-  return (
-    <div id="print-root" style={{ padding: 18, background: "white", color: "#111" }}>
-      <style>
-        {`
-          @media print {
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            #app-root { display: none !important; }
-            #print-root { display: block !important; }
-            @page { size: A4 portrait; margin: 10mm; }
-          }
-          @media screen {
-            #print-root { display: none; }
-          }
-
-          table { border-collapse: collapse; width: 100%; table-layout: auto; }
-          th, td {
-            border: 1px solid #ddd;
-            padding: 6px 8px;
-            font-size: 11px;
-            vertical-align: middle;
-            text-align: center;
-            white-space: nowrap;
-          }
-          th { background: #f3f4f6; font-weight: 900; }
-
-          .infoCol {
-            white-space: normal !important;
-            word-break: break-word;
-            text-align: left !important;
-            min-width: 260px;
-          }
-        `}
-      </style>
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src={logoUrl} alt="UBC" style={{ height: 38 }} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>UBC Münster</div>
-            <div style={{ fontSize: 11, fontWeight: 800 }}>{t("seasonTrainingOverview")}</div>
-          </div>
-        </div>
-
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, fontWeight: 900 }}>{dateToDDMMYYYY_DOTS(mondayDate)}</div>
-          <div style={{ fontSize: 11, fontWeight: 900 }}>{t("trainingWeek")}: {kwText}</div>
-          <div style={{ fontSize: 10, color: "#374151", fontWeight: 700 }}>
-            BSH = Ballsporthalle; SHP = Sporthalle Pascal; Seminarraum = Seminarraum
-          </div>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>{t("weekOverview")}</div>
-      <div style={{ marginTop: 6 }}>
-        <table>
-          <thead>
-            <tr>
-              <th>{t("date")}</th>
-              <th>{t("day")}</th>
-              <th>{t("time")}</th>
-              <th>{t("teams")}</th>
-              <th>{t("hall")}</th>
-              <th>{t("roster")}</th>
-              <th className="infoCol">{t("info")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(() => {
-              return plan.sessions.map((s, i, arr) => {
-                const prev = arr[i - 1];
-                const sameDayAsPrev = prev ? prev.date === s.date : false;
-
-                const dayLower = (s.day || "").toLowerCase();
-                const isWeekend = dayLower.startsWith("sa") || dayLower.startsWith("so");
-
-                const infoText = (s.info ?? "").trim();
-                const isGame = infoText.toLowerCase().startsWith("vs") || infoText.startsWith("@");
-
-                const topBorder =
-                  !sameDayAsPrev ? (isWeekend ? "2px solid #111" : "1px solid #bbb") : "1px solid #ddd";
-
-                return (
-                  <tr
-                    key={s.id}
-                    style={{
-                      background: isGame ? "#F59E0B" : "transparent",
-                      color: "#111",
-                    }}
-                  >
-                    <td style={{ borderTop: topBorder }}>{sameDayAsPrev ? "" : exportDateCell(s)}</td>
-                    <td style={{ borderTop: topBorder }}>{sameDayAsPrev ? "" : s.day}</td>
-                    <td style={{ borderTop: topBorder }}>{s.time}</td>
-                    <td style={{ borderTop: topBorder }}>{(s.teams ?? []).join(" / ")}</td>
-                    <td style={{ borderTop: topBorder }}>{s.location}</td>
-                    <td style={{ borderTop: topBorder }}>{sessionLabel(s)}</td>
-                    <td className="infoCol" style={{ borderTop: topBorder }}>{s.info ?? ""}</td>
-                  </tr>
-                );
-              });
-            })()}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>{t("rosterLists")}</div>
-      <div style={{ marginTop: 6 }}>
-        <table>
-          <thead>
-            <tr>
-              <th style={{ width: 28 }}>#</th>
-              {rosterColumns.map((c) => (
-                <th key={c.id}>{c.label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: maxRows }, (_, i) => i).map((rowIdx) => (
-              <tr key={rowIdx}>
-                <td style={{ fontWeight: 900 }}>{rowIdx + 1}</td>
-                {rosterColumns.map((c) => {
-                  const p = c.players[rowIdx];
-                  if (!p) return <td key={c.id}></td>;
-
-                  const gid = getPlayerGroup(p);
-                  const bg = normalizeYearColor(p.yearColor) ?? groupBg[gid];
-                  const text = pickTextColor(bg);
-
-                  return (
-                    <td
-                      key={c.id}
-                      style={{
-                        background: bg,
-                        color: text,
-                        fontWeight: 900,
-                      }}
-                    >
-                      {exportShortName(p)}{birthdayPlayerIds.has(p.id) ? " 🎂" : ""}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {hasTbd && (
-          <div style={{ marginTop: 6, fontSize: 10, color: "#374151", fontWeight: 700 }}>
-            {t("tbdLegend")}
-          </div>
-        )}
-      </div>
-
-      {(() => {
-        const games = plan.sessions.filter((s) => {
-          const info = (s.info ?? "").trim();
-          const low = info.toLowerCase();
-          return low.startsWith("vs") || info.startsWith("@");
-        });
-
-        function getOpponent(info: string): { mode: "HOME" | "AWAY"; opponent: string } {
-          const t = (info ?? "").trim();
-          if (t.startsWith("@")) return { mode: "AWAY", opponent: t.slice(1).trim() || "—" };
-          const low = t.toLowerCase();
-          if (low.startsWith("vs")) return { mode: "HOME", opponent: t.slice(2).trim() || "—" };
-          return { mode: "HOME", opponent: t || "—" };
-        }
-
-        function jerseyForTeam(p: Player, team: string): string {
-          const jb = p.jerseyByTeam ?? {};
-          const v = jb[team];
-          if (typeof v === "number" && Number.isFinite(v)) return String(v);
-          if (v === 0) return "0";
-          return "";
-        }
-
-        function taForPlayer(p: Player): string {
-          // prefer DBB, fallback NBBL, fallback any
-          const list = p.lizenzen ?? [];
-          const dbb = list.find((x) => String(x.typ).toUpperCase() === "DBB")?.tna;
-          const nbbl = list.find((x) => String(x.typ).toUpperCase() === "NBBL")?.tna;
-          return (dbb ?? nbbl ?? list[0]?.tna ?? "").trim();
-        }
-
-        if (!games.length) return null;
-
-        return (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900, fontSize: 12 }}>{t("gameExports")}</div>
-
-            <div style={{ marginTop: 8, display: "grid", gap: 12 }}>
-              {games.map((g) => {
-                const team = (g.teams ?? [])[0] ?? "—";
-                const opp = getOpponent(g.info ?? "");
-                const title = `${dateToShortDE(g.date)} | ${team} ${opp.mode === "AWAY" ? "@ " : "vs "}${opp.opponent}`;
-
-                const players: Player[] = (g.participants ?? [])
-                  .map((pid) => playerById.get(pid))
-                  .filter(Boolean) as Player[];
-
-                // sort: jersey (numeric) then name
-                players.sort((a, b) => {
-                  const ja = parseInt(jerseyForTeam(a, team) || "999", 10);
-                  const jb = parseInt(jerseyForTeam(b, team) || "999", 10);
-                  if (ja !== jb) return ja - jb;
-                  return a.name.localeCompare(b.name, "de");
-                });
-
-                return (
-                  <div key={g.id} style={{ border: "1px solid #ddd", borderRadius: 10, padding: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-                      <div style={{ fontWeight: 900, fontSize: 11 }}>{title}</div>
-                      <div style={{ fontWeight: 800, fontSize: 11, color: "#374151" }}>
-                        {g.time} | {g.location}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 8 }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th style={{ width: 28 }}>#</th>
-                            <th style={{ width: 54 }}>{t("jersey")}</th>
-                            <th>{t("lastName")}</th>
-                            <th>{t("firstName")}</th>
-                            <th style={{ width: 120 }}>TA</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {players.map((p, idx) => (
-                            <tr key={p.id}>
-                              <td style={{ fontWeight: 900 }}>{idx + 1}</td>
-                              <td>{jerseyForTeam(p, team)}</td>
-                              <td style={{ textAlign: "left" }}>{(p.lastName ?? "").trim()}</td>
-                              <td style={{ textAlign: "left" }}>{(p.firstName ?? "").trim()}</td>
-                              <td>{taForPlayer(p)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div style={{ marginTop: 8, fontSize: 10, color: "#374151", fontWeight: 800 }}>
-                      {t("coaches")}: {(coaches ?? []).map((c) => `${c.role}: ${c.name}${c.license ? ` (${c.license})` : ""}`).join(" | ")}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>{t("coaches")}</div>
-      <div style={{ marginTop: 6, fontSize: 11 }}>
-        {(coaches ?? []).map((c) => (
-          <div key={c.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderBottom: "1px solid #eee", padding: "4px 0" }}>
-            <div style={{ fontWeight: 800 }}>{c.role}: {c.name}</div>
-            <div style={{ color: "#374151", fontWeight: 800 }}>{c.license ? `${t("license")} ${c.license}` : `${t("license")} —`}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /* ============================================================
    COACHES: persistence + defaults
    ============================================================ */
 
-
 /* ============================================================
    NEW WEEK MODAL
    ============================================================ */
-
-/* ============================================================
-   PRINT PREVIEW & EXPORT HELPERS
-   ============================================================ */
-
-function ExportPreview({ pages, t }: { pages: PrintPage[]; t: (k: string) => string }) {
-  const [currentPage, setCurrentPage] = React.useState(0);
-
-  if (pages.length === 0) {
-    return (
-      <div style={{ padding: 16, color: "#999" }}>
-        {t("previewNoPages")}
-      </div>
-    );
-  }
-
-  const page = pages[currentPage];
-  const canPrev = currentPage > 0;
-  const canNext = currentPage < pages.length - 1;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Navigation header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 16px",
-          borderBottom: "1px solid #444",
-          backgroundColor: "#2a2a2a",
-        }}
-      >
-        <button
-          onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-          disabled={!canPrev}
-          style={{
-            padding: "6px 12px",
-            backgroundColor: canPrev ? "#3f3f3f" : "#2a2a2a",
-            border: "1px solid #555",
-            color: canPrev ? "#fff" : "#666",
-            cursor: canPrev ? "pointer" : "not-allowed",
-            borderRadius: 4,
-          }}
-        >
-          ◀
-        </button>
-        <span style={{ color: "#ddd", fontSize: 14 }}>
-          {t("previewPageLabel")} {currentPage + 1} {t("previewOfLabel")} {pages.length}
-        </span>
-        <button
-          onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}
-          disabled={!canNext}
-          style={{
-            padding: "6px 12px",
-            backgroundColor: canNext ? "#3f3f3f" : "#2a2a2a",
-            border: "1px solid #555",
-            color: canNext ? "#fff" : "#666",
-            cursor: canNext ? "pointer" : "not-allowed",
-            borderRadius: 4,
-          }}
-        >
-          ▶
-        </button>
-      </div>
-
-      {/* Page content */}
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          backgroundColor: "#fff",
-          padding: 16,
-        }}
-        dangerouslySetInnerHTML={{ __html: page.html }}
-      />
-    </div>
-  );
-}
-
-
-/* ============================================================
-   RIGHT SIDEBAR
-   ============================================================ */
-
-function RightSidebar({
-  open,
-  layout,
-  topModule,
-  bottomModule,
-  splitPct,
-  onChangeLayout,
-  onChangeTop,
-  onChangeBottom,
-  onChangeSplitPct,
-  context,
-  t,
-}: {
-  open: boolean;
-  layout: "single" | "split";
-  topModule: SidebarModule;
-  bottomModule: SidebarModule;
-  splitPct: number;
-  onChangeLayout: (v: "single" | "split") => void;
-  onChangeTop: (v: SidebarModule) => void;
-  onChangeBottom: (v: SidebarModule) => void;
-  onChangeSplitPct: (v: number) => void;
-  context: {
-    renderCalendar?: () => React.ReactNode;
-    previewPages: PrintPage[];
-  };
-  t: (k: string) => string;
-}) {
-  const [dragging, setDragging] = useState(false);
-
-  useEffect(() => {
-    if (!dragging) return;
-
-    const onMove = (e: MouseEvent) => {
-      const el = document.getElementById("rightSidebarSplitRoot");
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const y = e.clientY - r.top;
-      const pct = Math.max(0.2, Math.min(0.8, y / r.height));
-      onChangeSplitPct(pct);
-    };
-
-    const onUp = () => setDragging(false);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [dragging, onChangeSplitPct]);
-
-  if (!open) return null;
-
-  const renderModule = (m: SidebarModule) => {
-    if (m === "none") return <div style={{ color: "var(--ui-muted)", padding: 20 }}>{t("rightNoModule")}</div>;
-    if (m === "calendar") return context.renderCalendar ? context.renderCalendar() : null;
-    if (m === "preview")
-      return <ExportPreview pages={context.previewPages} t={t} />;
-    if (m === "maps")
-      return (
-        <div style={{ padding: 10, color: "var(--ui-muted)" }}>
-          {t("rightMapsPlaceholder")}
-        </div>
-      );
-    return null;
-  };
-
-  return (
-    <div
-      style={{
-        borderLeft: "1px solid var(--ui-border)",
-        background: "var(--ui-panel)",
-        display: "grid",
-        gridTemplateRows: "auto 1fr",
-        minWidth: 360,
-      }}
-    >
-      {/* Header */}
-      <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 950 }}>{t("rightAreaTitle")}</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={() => onChangeLayout(layout === "split" ? "single" : "split")}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--ui-border)", background: "transparent", color: "var(--ui-text)", fontWeight: 900, cursor: "pointer" }}
-          >
-            {layout === "split" ? t("layoutSplit") : t("layoutSingle")}
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      {layout === "single" ? (
-        <div style={{ display: "grid", gridTemplateRows: "auto 1fr" }}>
-          <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center" }}>
-            <RightSidebarModuleSelect value={topModule} onChange={onChangeTop} t={t} />
-          </div>
-          <div style={{ minHeight: 0, overflow: "auto" }}>{renderModule(topModule)}</div>
-        </div>
-      ) : (
-        <div id="rightSidebarSplitRoot" style={{ position: "relative", minHeight: 0, display: "grid", gridTemplateRows: `${splitPct}fr 10px ${(1 - splitPct)}fr` }}>
-          {/* Top */}
-          <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
-            <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center" }}>
-              <RightSidebarModuleSelect value={topModule} onChange={onChangeTop} t={t} />
-            </div>
-            <div style={{ minHeight: 0, overflow: "auto" }}>{renderModule(topModule)}</div>
-          </div>
-
-          {/* Divider */}
-          <div
-            onMouseDown={() => setDragging(true)}
-            style={{
-              cursor: "row-resize",
-              background: "rgba(255,255,255,0.04)",
-              borderTop: "1px solid var(--ui-border)",
-              borderBottom: "1px solid var(--ui-border)",
-            }}
-            title={t("rightResizeTitle")}
-          />
-
-          {/* Bottom */}
-          <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: 0 }}>
-            <div style={{ padding: 10, borderBottom: "1px solid var(--ui-border)", display: "flex", gap: 10, alignItems: "center" }}>
-              <RightSidebarModuleSelect value={bottomModule} onChange={onChangeBottom} t={t} />
-            </div>
-            <div style={{ minHeight: 0, overflow: "auto" }}>{renderModule(bottomModule)}</div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ============================================================
    GOOGLE MAPS HELPERS
@@ -2192,11 +1601,6 @@ export default function App() {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
-    if (!printWindow) {
-      return;
-    }
-
     const pagesHtml = exportPages
       .map(
         (p, i) => `
@@ -2226,6 +1630,8 @@ export default function App() {
               background: #fff;
               color: #111;
               font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
 
             .print-root {
@@ -2250,25 +1656,28 @@ export default function App() {
       </html>
     `;
 
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    // Blob URL ist in modernen Browsern deutlich zuverlässiger als document.write()
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
 
-    await new Promise<void>((resolve) => {
-      const done = () => resolve();
-      if (printWindow.document.readyState === "complete") {
-        // Render-Zeit: etwas mehr Luft damit Browser alles painted
-        setTimeout(done, 800);
-      } else {
-        printWindow.addEventListener("load", () => setTimeout(done, 600), { once: true });
-      }
-    });
+    const printWindow = window.open(blobUrl, "_blank");
+    if (!printWindow) {
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
 
-    printWindow.focus();
-    printWindow.print();
-    // Fenster NICHT automatisch schließen – der Browser macht das nach dem
-    // Print-Dialog selbst, und so kann der Nutzer den Inhalt auch sehen
-    // falls er den Dialog abbricht.
+    printWindow.addEventListener(
+      "load",
+      () => {
+        setTimeout(() => {
+          printWindow.focus();
+          printWindow.print();
+          // Blob URL nach kurzem Delay freigeben (nach dem Drucken)
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        }, 500);
+      },
+      { once: true }
+    );
   }
 
   async function createPlanPngPages() {
@@ -2796,6 +2205,9 @@ export default function App() {
         groupBg={groupBg}
         coaches={coaches}
         birthdayPlayerIds={birthdayPlayerIds}
+        clubName={theme.clubName}
+        logoUrl={clubLogoDataUrl ?? null}
+        locations={theme.locations}
         t={t}
       />
 
