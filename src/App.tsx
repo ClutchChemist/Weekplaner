@@ -2257,22 +2257,18 @@ export default function App() {
     await new Promise<void>((resolve) => {
       const done = () => resolve();
       if (printWindow.document.readyState === "complete") {
-        setTimeout(done, 250);
+        // Render-Zeit: etwas mehr Luft damit Browser alles painted
+        setTimeout(done, 800);
       } else {
-        printWindow.addEventListener("load", () => setTimeout(done, 250), { once: true });
+        printWindow.addEventListener("load", () => setTimeout(done, 600), { once: true });
       }
     });
 
     printWindow.focus();
     printWindow.print();
-
-    setTimeout(() => {
-      try {
-        printWindow.close();
-      } catch {
-        // ignore
-      }
-    }, 400);
+    // Fenster NICHT automatisch schließen – der Browser macht das nach dem
+    // Print-Dialog selbst, und so kann der Nutzer den Inhalt auch sehen
+    // falls er den Dialog abbricht.
   }
 
   async function createPlanPngPages() {
