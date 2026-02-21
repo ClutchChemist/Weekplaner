@@ -150,9 +150,9 @@ import weekMasterRaw from "./data/weekplan_master.json";
    ROSTER helpers (TA badge + grouping)
    ============================================================ */
 
-  /* ============================================================
-    COMPONENTS (Modal..., Button..., Row..., Pane...)
-    ============================================================ */
+/* ============================================================
+  COMPONENTS (Modal..., Button..., Row..., Pane...)
+  ============================================================ */
 
 /* ============================================================
    UI PRIMITIVES (CSS vars)
@@ -325,8 +325,8 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
           isTbd
             ? t("placeholder")
             : (player.lizenzen ?? [])
-                .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
-                .join(" | ") || t("noTaTnaSaved")
+              .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
+              .join(" | ") || t("noTaTnaSaved")
         }
       >
         <div style={{ minWidth: 0 }}>
@@ -345,9 +345,8 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
           <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
             {isTbd
               ? t("placeholder")
-              : `${player.primaryYouthTeam || ""}${
-                  player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
-                }`}
+              : `${player.primaryYouthTeam || ""}${player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
+              }`}
           </div>
         </div>
 
@@ -697,7 +696,7 @@ function PrintView({
                         fontWeight: 900,
                       }}
                     >
-                          {exportShortName(p)}{birthdayPlayerIds.has(p.id) ? " 🎂" : ""}
+                      {exportShortName(p)}{birthdayPlayerIds.has(p.id) ? " 🎂" : ""}
                     </td>
                   );
                 })}
@@ -1251,13 +1250,13 @@ export default function App() {
     resolver?.(value);
   }, []);
 
-    /* ============================================================
-      EFFECTS (useEffect...)
-      ============================================================ */
+  /* ============================================================
+    EFFECTS (useEffect...)
+    ============================================================ */
 
-    /* ----------------------
-      Right Sidebar
-      ---------------------- */
+  /* ----------------------
+    Right Sidebar
+    ---------------------- */
 
   useRightSidebarPersistence({
     rightOpen,
@@ -1416,6 +1415,9 @@ export default function App() {
      Export HTML (Source of Truth)
      ---------------------- */
   const exportPages = useMemo(() => {
+    const groupColors = Object.fromEntries(
+      Object.entries(theme.groups).map(([k, v]) => [k, v.bg])
+    );
     return buildPrintPages({
       sessions: plan?.sessions ?? [],
       players,
@@ -1424,10 +1426,14 @@ export default function App() {
       locale: theme.locale,
       locations: theme.locations ?? DEFAULT_THEME.locations!,
       logoUrl: clubLogoDataUrl ?? undefined,
+      groupColors,
     });
   }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
   const previewPages = useMemo(() => {
+    const groupColors = Object.fromEntries(
+      Object.entries(theme.groups).map(([k, v]) => [k, v.bg])
+    );
     return buildPreviewPages({
       sessions: plan?.sessions ?? [],
       players,
@@ -1436,6 +1442,7 @@ export default function App() {
       locale: theme.locale,
       locations: theme.locations ?? DEFAULT_THEME.locations!,
       logoUrl: clubLogoDataUrl ?? undefined,
+      groupColors,
     });
   }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
@@ -1482,28 +1489,28 @@ export default function App() {
      Sidebar grouping
      ---------------------- */
   const playersByGroup = useMemo(() => {
-  const map = new Map<GroupId, Player[]>();
-  for (const g of GROUPS) map.set(g.id, []);
+    const map = new Map<GroupId, Player[]>();
+    for (const g of GROUPS) map.set(g.id, []);
 
-  for (const p of players) {
-    // nur Core (oder TBD) in die Jahrgang/Herren-Gruppen
-    if (!isCorePlayer(p)) continue;
-    map.get(getPlayerGroup(p))?.push(p);
-  }
+    for (const p of players) {
+      // nur Core (oder TBD) in die Jahrgang/Herren-Gruppen
+      if (!isCorePlayer(p)) continue;
+      map.get(getPlayerGroup(p))?.push(p);
+    }
 
-  for (const [gid, arr] of map.entries()) {
-    arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
-    map.set(gid, arr);
-  }
-  return map;
-}, [players]);
-const u18OnlyPlayers = useMemo(() => {
-  return players.filter(isU18Only).slice().sort((a,b)=>a.name.localeCompare(b.name,"de"));
-}, [players]);
+    for (const [gid, arr] of map.entries()) {
+      arr.sort((a, b) => a.name.localeCompare(b.name, "de"));
+      map.set(gid, arr);
+    }
+    return map;
+  }, [players]);
+  const u18OnlyPlayers = useMemo(() => {
+    return players.filter(isU18Only).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }, [players]);
 
-const holOnlyPlayers = useMemo(() => {
-  return players.filter(isHolOnly).slice().sort((a,b)=>a.name.localeCompare(b.name,"de"));
-}, [players]);
+  const holOnlyPlayers = useMemo(() => {
+    return players.filter(isHolOnly).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }, [players]);
   /* ----------------------
     LEFT TABS: Players / Coaches / Locations
     ---------------------- */
@@ -1744,7 +1751,7 @@ const holOnlyPlayers = useMemo(() => {
     // Check if location is a preset or saved location
     const savedLocations = Object.keys(theme.locations?.locations ?? {});
     const isKnownLocation = LOCATION_PRESETS.includes(loc as (typeof LOCATION_PRESETS)[number]) || savedLocations.includes(loc);
-    
+
     if (isKnownLocation) {
       setLocationMode(loc);
       setCustomLocation("");
@@ -1876,15 +1883,15 @@ const holOnlyPlayers = useMemo(() => {
       prev.map((p) =>
         p.id === snapshot.profileId
           ? {
-              ...p,
-              payload: {
-                rosterMeta: data.rosterMeta,
-                players: data.players,
-                coaches: data.coaches,
-                locations: data.theme.locations ?? p.payload.locations,
-                clubLogoDataUrl: data.clubLogoDataUrl,
-              },
-            }
+            ...p,
+            payload: {
+              rosterMeta: data.rosterMeta,
+              players: data.players,
+              coaches: data.coaches,
+              locations: data.theme.locations ?? p.payload.locations,
+              clubLogoDataUrl: data.clubLogoDataUrl,
+            },
+          }
           : p
       )
     );
@@ -1918,12 +1925,12 @@ const holOnlyPlayers = useMemo(() => {
         prev.map((p) =>
           p.id === activeProfileId
             ? {
-                ...p,
-                sync: {
-                  ...p.sync,
-                  ...patch,
-                },
-              }
+              ...p,
+              sync: {
+                ...p.sync,
+                ...patch,
+              },
+            }
             : p
         )
       );
@@ -1990,10 +1997,10 @@ const holOnlyPlayers = useMemo(() => {
       prev.map((p) =>
         p.id === activeProfileId
           ? {
-              ...p,
-              name: profileNameInput.trim() || p.name,
-              payload: currentProfilePayload(),
-            }
+            ...p,
+            name: profileNameInput.trim() || p.name,
+            payload: currentProfilePayload(),
+          }
           : p
       )
     );
@@ -2164,7 +2171,7 @@ const holOnlyPlayers = useMemo(() => {
         group: p.group ?? "",
         lpCategory: p.lpCategory ?? "",
         jerseyByTeam: p.jerseyByTeam ?? {},
-                historyLast6: p.historyLast6 ?? [],
+        historyLast6: p.historyLast6 ?? [],
         yearColor: p.yearColor ?? null,
       };
     });
@@ -2342,8 +2349,8 @@ const holOnlyPlayers = useMemo(() => {
           off !== null
             ? off
             : s.date
-            ? (new Date(s.date + "T00:00:00").getDay() + 6) % 7
-            : 0;
+              ? (new Date(s.date + "T00:00:00").getDay() + 6) % 7
+              : 0;
 
         const nextDate = addDaysISO(weekStartMondayISO, effectiveOffset);
 
@@ -2876,91 +2883,91 @@ const holOnlyPlayers = useMemo(() => {
                   </div>
 
                   <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-  {/* U18-only */}
-  <div style={{ borderRadius: 14 }}>
-    <button
-      onClick={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        border: `1px solid var(--ui-border)`,
-        background: "var(--ui-card)",
-        color: "var(--ui-text)",
-        borderRadius: 14,
-        padding: "12px 12px",
-        cursor: "pointer",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 10,
-        fontWeight: 900,
-      }}
-    >
-      <span>{t("groupU18Only")}</span>
-      <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-        {u18OnlyPlayers.length} {t("players")}
-      </span>
-    </button>
+                    {/* U18-only */}
+                    <div style={{ borderRadius: 14 }}>
+                      <button
+                        onClick={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          border: `1px solid var(--ui-border)`,
+                          background: "var(--ui-card)",
+                          color: "var(--ui-text)",
+                          borderRadius: 14,
+                          padding: "12px 12px",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                          fontWeight: 900,
+                        }}
+                      >
+                        <span>{t("groupU18Only")}</span>
+                        <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
+                          {u18OnlyPlayers.length} {t("players")}
+                        </span>
+                      </button>
 
-    {openExtra === "U18_ONLY" && (
-      <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-        {u18OnlyPlayers.map((p) => (
-          <DraggablePlayerRow
-            key={p.id}
-            player={p}
-            trainingCount={trainingCounts.get(p.id) ?? 0}
-            groupBg={groupBg}
-            isBirthday={birthdayPlayerIds.has(p.id)}
-            t={t}
-          />
-        ))}
-      </div>
-    )}
-  </div>
+                      {openExtra === "U18_ONLY" && (
+                        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                          {u18OnlyPlayers.map((p) => (
+                            <DraggablePlayerRow
+                              key={p.id}
+                              player={p}
+                              trainingCount={trainingCounts.get(p.id) ?? 0}
+                              groupBg={groupBg}
+                              isBirthday={birthdayPlayerIds.has(p.id)}
+                              t={t}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-  {/* HOL-only */}
-  <div style={{ borderRadius: 14 }}>
-    <button
-      onClick={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        border: `1px solid var(--ui-border)`,
-        background: "var(--ui-card)",
-        color: "var(--ui-text)",
-        borderRadius: 14,
-        padding: "12px 12px",
-        cursor: "pointer",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 10,
-        fontWeight: 900,
-      }}
-    >
-      <span>{t("groupHolOnly")}</span>
-      <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-        {holOnlyPlayers.length} {t("players")}
-      </span>
-    </button>
+                    {/* HOL-only */}
+                    <div style={{ borderRadius: 14 }}>
+                      <button
+                        onClick={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          border: `1px solid var(--ui-border)`,
+                          background: "var(--ui-card)",
+                          color: "var(--ui-text)",
+                          borderRadius: 14,
+                          padding: "12px 12px",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                          fontWeight: 900,
+                        }}
+                      >
+                        <span>{t("groupHolOnly")}</span>
+                        <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
+                          {holOnlyPlayers.length} {t("players")}
+                        </span>
+                      </button>
 
-    {openExtra === "HOL_ONLY" && (
-      <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-        {holOnlyPlayers.map((p) => (
-          <DraggablePlayerRow
-            key={p.id}
-            player={p}
-            trainingCount={trainingCounts.get(p.id) ?? 0}
-            groupBg={groupBg}
-            isBirthday={birthdayPlayerIds.has(p.id)}
-            t={t}
-          />
-        ))}
-      </div>
-    )}
-  </div>
-</div>
-<div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                      {openExtra === "HOL_ONLY" && (
+                        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                          {holOnlyPlayers.map((p) => (
+                            <DraggablePlayerRow
+                              key={p.id}
+                              player={p}
+                              trainingCount={trainingCounts.get(p.id) ?? 0}
+                              groupBg={groupBg}
+                              isBirthday={birthdayPlayerIds.has(p.id)}
+                              t={t}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                     {GROUPS.map((g) => {
                       const arr = playersByGroup.get(g.id) ?? [];
                       const isOpen = openGroup === g.id;
@@ -3269,388 +3276,388 @@ const holOnlyPlayers = useMemo(() => {
                 title={editingSessionId ? t("eventEdit") : t("eventPlan")}
                 closeLabel={t("close")}
               >
-              <div ref={editorRef} style={{ border: `1px solid var(--ui-border)`, borderRadius: 16, background: "var(--ui-panel)", overflow: "hidden" }}>
-                <div
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 10,
-                    background: "var(--ui-panel)",
-                    borderBottom: editingSessionId ? `1px solid var(--ui-border)` : "none",
-                    padding: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                    <div style={{ fontSize: 18, fontWeight: 900 }}>
-                      {editingSessionId ? t("eventEdit") : t("eventPlan")}
+                <div ref={editorRef} style={{ border: `1px solid var(--ui-border)`, borderRadius: 16, background: "var(--ui-panel)", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 10,
+                      background: "var(--ui-panel)",
+                      borderBottom: editingSessionId ? `1px solid var(--ui-border)` : "none",
+                      padding: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                      <div style={{ fontSize: 18, fontWeight: 900 }}>
+                        {editingSessionId ? t("eventEdit") : t("eventPlan")}
+                      </div>
+                      <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
+                        {t("week")}: {weekLabel}
+                      </div>
                     </div>
-                    <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
-                      {t("week")}: {weekLabel}
-                    </div>
-                  </div>
-                  {editingSessionId && (
-                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                      <Button
-                        variant="danger"
-                        onClick={() => onDeleteSession(editingSessionId)}
-                        style={{ padding: "8px 10px", fontSize: 13 }}
-                      >
-                        🗑 {t("delete")}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div style={{ padding: 12 }}>
-
-                <div className="grid2">
-                  <div style={{ fontWeight: 900 }}>{t("date")}</div>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {weekDates.map((d) => {
-                        const active = d === formDate;
-                        const wd = weekdayShortLocalized(d, lang);
-                        const dd = d.slice(8, 10);
-                        return (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => setFormDate(d)}
-                            style={{
-                              padding: "8px 10px",
-                              borderRadius: 999,
-                              border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
-                              background: active ? "rgba(59,130,246,.18)" : "transparent",
-                              color: "var(--ui-text)",
-                              fontWeight: 900,
-                              cursor: "pointer",
-                              fontSize: 12,
-                              minHeight: 36,
-                            }}
-                          >
-                            {wd} {dd}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <Input id="event_form_date" type="date" value={formDate} onChange={setFormDate} />
-                  </div>
-
-                  <div style={{ fontWeight: 900 }}>{t("teams")}</div>
-                  <div className="flexRow">
-                    {TEAM_OPTIONS.map((teamOption) => {
-                      const active = formTeams.includes(teamOption);
-                      return (
+                    {editingSessionId && (
+                      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                         <Button
-                          key={teamOption}
-                          variant={active ? "solid" : "outline"}
-                          onClick={() => onToggleTeam(teamOption)}
-                          style={{ padding: "8px 10px" }}
+                          variant="danger"
+                          onClick={() => onDeleteSession(editingSessionId)}
+                          style={{ padding: "8px 10px", fontSize: 13 }}
                         >
-                          {teamOption}
+                          🗑 {t("delete")}
                         </Button>
-                      );
-                    })}
-                  </div>
-
-                  <div style={{ fontWeight: 900 }}>{t("location")}</div>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {(() => {
-                      const locationOptions = getLocationOptions(theme, t, locationUsageMap);
-                      return (
-                        <select
-                          value={locationMode === "__CUSTOM__" ? "__CUSTOM__" : locationMode}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "__CUSTOM__") {
-                              setLocationMode("__CUSTOM__");
-                              setCustomLocation("");
-                            } else {
-                              setLocationMode(v);
-                              setCustomLocation("");
-                            }
-                          }}
-                          style={{
-                            padding: "10px 12px",
-                            borderRadius: 12,
-                            border: "1px solid var(--ui-border)",
-                            background: "var(--ui-card)",
-                            color: "var(--ui-text)",
-                            fontWeight: 900,
-                            width: "100%",
-                          }}
-                        >
-                          <option value="">{t("selectPlaceholder")}</option>
-                          {locationOptions.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      );
-                    })()}
-                    {locationMode === "__CUSTOM__" && (
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <Input
-                          value={customLocation}
-                          onChange={(v) => setCustomLocation(v)}
-                          placeholder={t("customLocationPlaceholder")}
-                        />
-
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-                          <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
-                            {t("customLocationHint")}
-                          </div>
-
-                          {(() => {
-                            const name = customLocation.trim().replace(/\s+/g, " ");
-                            const locationOptions = getLocationOptions(theme, t, locationUsageMap);
-                            const alreadyExists = locationOptions.some(
-                              (o) => o.value.toLowerCase() === name.toLowerCase() && o.kind !== "custom"
-                            );
-
-                            if (alreadyExists && name) {
-                              return (
-                                <div style={{ fontSize: 11, color: "var(--ui-accent)", fontWeight: 900, whiteSpace: "nowrap" }}>
-                                  ✓ {t("locationAlreadyExists")}
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!name) return;
-
-                                  ensureLocationSaved(theme, setTheme, name);
-
-                                  // Optional: direkt auf Orte springen und aufklappen
-                                  setLeftTab("locations");
-                                  setLeftEditMode(true);
-                                  setOpenLocationName(name);
-                                }}
-                                disabled={!name}
-                                style={{
-                                  padding: "8px 10px",
-                                  borderRadius: 10,
-                                  border: "1px solid var(--ui-border)",
-                                  background: "transparent",
-                                  color: "var(--ui-text)",
-                                  fontWeight: 900,
-                                  cursor: name ? "pointer" : "not-allowed",
-                                  opacity: name ? 1 : 0.5,
-                                  whiteSpace: "nowrap",
-                                }}
-                                title={t("saveCustomLocationTitle")}
-                              >
-                                {t("saveAsLocation")}
-                              </button>
-                            );
-                          })()}
-                        </div>
                       </div>
                     )}
                   </div>
+                  <div style={{ padding: 12 }}>
 
-                  <div style={{ fontWeight: 900 }}>{t("start")}</div>
-                  <Input type="time" value={formStart} onChange={setFormStart} />
-
-                  <div style={{ fontWeight: 900 }}>{t("duration")} (Min)</div>
-                  <MinutePicker
-                    value={formDuration}
-                    onChange={setFormDuration}
-                    presets={[60, 90, 120]}
-                    allowZero={false}
-                    placeholder={t("minutesExample")}
-                  />
-
-                  <div style={{ fontWeight: 900 }}>{t("eventOpponent")}</div>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {(() => {
-                      const opponentMode = getOpponentMode(formOpponent);
-                      const opponentName = getOpponentName(formOpponent);
-
-                      return (
-                        <>
-                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextMode = opponentMode === "home" ? null : "home";
-                                setFormOpponent(composeOpponentInfo(nextMode, opponentName));
-                              }}
-                              style={{
-                                ...segBtn(opponentMode === "home"),
-                                padding: "8px 10px",
-                                fontSize: 12,
-                              }}
-                              title={t("eventModeHomeTitle")}
-                            >
-                              vs {t("eventModeHome")}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextMode = opponentMode === "away" ? null : "away";
-                                setFormOpponent(composeOpponentInfo(nextMode, opponentName));
-                              }}
-                              style={{
-                                ...segBtn(opponentMode === "away"),
-                                padding: "8px 10px",
-                                fontSize: 12,
-                              }}
-                              title={t("eventModeAwayTitle")}
-                            >
-                              @ {t("eventModeAway")}
-                            </button>
-
-                            {opponentMode === "away" && (
+                    <div className="grid2">
+                      <div style={{ fontWeight: 900 }}>{t("date")}</div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {weekDates.map((d) => {
+                            const active = d === formDate;
+                            const wd = weekdayShortLocalized(d, lang);
+                            const dd = d.slice(8, 10);
+                            return (
                               <button
+                                key={d}
                                 type="button"
-                                onClick={handleRecallLocationEdit}
+                                onClick={() => setFormDate(d)}
                                 style={{
-                                  ...segBtn(false),
                                   padding: "8px 10px",
+                                  borderRadius: 999,
+                                  border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
+                                  background: active ? "rgba(59,130,246,.18)" : "transparent",
+                                  color: "var(--ui-text)",
+                                  fontWeight: 900,
+                                  cursor: "pointer",
                                   fontSize: 12,
+                                  minHeight: 36,
                                 }}
-                                title={t("eventRecallLocationTitle")}
                               >
-                                📍 {t("eventRecallLocation")}
+                                {wd} {dd}
                               </button>
-                            )}
-                          </div>
+                            );
+                          })}
+                        </div>
+                        <Input id="event_form_date" type="date" value={formDate} onChange={setFormDate} />
+                      </div>
 
-                          <Input
-                            ref={opponentInputRef}
-                            value={opponentName}
-                            onChange={(v) => setFormOpponent(composeOpponentInfo(opponentMode, v))}
-                            placeholder={t("eventOpponentExample")}
-                          />
-                        </>
-                      );
-                    })()}
-                  </div>
+                      <div style={{ fontWeight: 900 }}>{t("teams")}</div>
+                      <div className="flexRow">
+                        {TEAM_OPTIONS.map((teamOption) => {
+                          const active = formTeams.includes(teamOption);
+                          return (
+                            <Button
+                              key={teamOption}
+                              variant={active ? "solid" : "outline"}
+                              onClick={() => onToggleTeam(teamOption)}
+                              style={{ padding: "8px 10px" }}
+                            >
+                              {teamOption}
+                            </Button>
+                          );
+                        })}
+                      </div>
 
-                  {(() => {
-                    const info = normalizeOpponentInfo(formOpponent);
-                    const game = isGameInfo(info);
-                    const away = info.startsWith("@");
-                    if (!game) return null;
+                      <div style={{ fontWeight: 900 }}>{t("location")}</div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {(() => {
+                          const locationOptions = getLocationOptions(theme, t, locationUsageMap);
+                          return (
+                            <select
+                              value={locationMode === "__CUSTOM__" ? "__CUSTOM__" : locationMode}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === "__CUSTOM__") {
+                                  setLocationMode("__CUSTOM__");
+                                  setCustomLocation("");
+                                } else {
+                                  setLocationMode(v);
+                                  setCustomLocation("");
+                                }
+                              }}
+                              style={{
+                                padding: "10px 12px",
+                                borderRadius: 12,
+                                border: "1px solid var(--ui-border)",
+                                background: "var(--ui-card)",
+                                color: "var(--ui-text)",
+                                fontWeight: 900,
+                                width: "100%",
+                              }}
+                            >
+                              <option value="">{t("selectPlaceholder")}</option>
+                              {locationOptions.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          );
+                        })()}
+                        {locationMode === "__CUSTOM__" && (
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <Input
+                              value={customLocation}
+                              onChange={(v) => setCustomLocation(v)}
+                              placeholder={t("customLocationPlaceholder")}
+                            />
 
-                    return (
-                      <>
-                        <div style={{ fontWeight: 900 }}>{t("meetingWarmupMin")}</div>
-                        <MinutePicker
-                          value={formWarmupMin}
-                          onChange={setFormWarmupMin}
-                          presets={[45, 60, 75, 90, 105, 120]}
-                          allowZero={false}
-                          placeholder={t("minutesExample")}
-                        />
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
+                                {t("customLocationHint")}
+                              </div>
 
-                        {away && (
-                          <>
-                            <div style={{ fontWeight: 900 }}>{t("travelMin")}</div>
-                            <div style={{ display: "grid", gap: 8 }}>
-                              <MinutePicker
-                                value={formTravelMin}
-                                onChange={setFormTravelMin}
-                                presets={[30, 45, 60, 75, 90, 105, 120, 150]}
-                                allowZero={true}
-                                placeholder={t("minutesExample")}
-                              />
                               {(() => {
-                                const homeAddr = theme.locations?.homeAddress ?? "";
-                                const destAddr = resolveLocationAddress(currentLocationValue(), theme);
+                                const name = customLocation.trim().replace(/\s+/g, " ");
+                                const locationOptions = getLocationOptions(theme, t, locationUsageMap);
+                                const alreadyExists = locationOptions.some(
+                                  (o) => o.value.toLowerCase() === name.toLowerCase() && o.kind !== "custom"
+                                );
 
-                                const homePid = theme.locations?.homePlaceId ?? "";
-                                const destPid = resolveLocationPlaceId(currentLocationValue(), theme);
-
-                                const canAutoTravel = Boolean(homeAddr && destAddr);
-
-                                async function handleAutoTravel() {
-                                  if (!canAutoTravel || autoTravelLoading) return;
-
-                                  setAutoTravelLoading(true);
-                                  try {
-                                    // Cache nur nutzen, wenn PlaceIds vorhanden
-                                    if (homePid && destPid) {
-                                      const cached = getCachedTravelMinutes(homePid, destPid, theme);
-                                      if (cached != null) {
-                                        setFormTravelMin(cached);
-                                        setAutoTravelLoading(false);
-                                        return;
-                                      }
-                                    }
-
-                                    const minutes = await fetchTravelMinutes(homeAddr, destAddr);
-                                    if (minutes != null) {
-                                      setFormTravelMin(minutes);
-                                      if (homePid && destPid) {
-                                        setCachedTravelMinutes(homePid, destPid, minutes, theme, setTheme);
-                                      }
-                                    }
-                                  } catch {
-                                    // ignore travel API errors and keep manual entry
-                                  } finally {
-                                    setAutoTravelLoading(false);
-                                  }
+                                if (alreadyExists && name) {
+                                  return (
+                                    <div style={{ fontSize: 11, color: "var(--ui-accent)", fontWeight: 900, whiteSpace: "nowrap" }}>
+                                      ✓ {t("locationAlreadyExists")}
+                                    </div>
+                                  );
                                 }
 
                                 return (
                                   <button
                                     type="button"
-                                    onClick={handleAutoTravel}
-                                    disabled={!canAutoTravel || autoTravelLoading}
-                                    title={
-                                      canAutoTravel
-                                        ? t("autoTravelTitle")
-                                        : t("autoTravelDisabledTitle")
-                                    }
-                                    style={{
-                                      ...segBtn(false),
-                                      padding: "8px 10px",
-                                      fontSize: 12,
-                                      opacity: canAutoTravel ? 1 : 0.5,
-                                      cursor: canAutoTravel && !autoTravelLoading ? "pointer" : "not-allowed",
+                                    onClick={() => {
+                                      if (!name) return;
+
+                                      ensureLocationSaved(theme, setTheme, name);
+
+                                      // Optional: direkt auf Orte springen und aufklappen
+                                      setLeftTab("locations");
+                                      setLeftEditMode(true);
+                                      setOpenLocationName(name);
                                     }}
+                                    disabled={!name}
+                                    style={{
+                                      padding: "8px 10px",
+                                      borderRadius: 10,
+                                      border: "1px solid var(--ui-border)",
+                                      background: "transparent",
+                                      color: "var(--ui-text)",
+                                      fontWeight: 900,
+                                      cursor: name ? "pointer" : "not-allowed",
+                                      opacity: name ? 1 : 0.5,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                    title={t("saveCustomLocationTitle")}
                                   >
-                                    {autoTravelLoading ? `⏳ ${t("calculating")}` : `🚗 ${t("autoTravel")}`}
+                                    {t("saveAsLocation")}
                                   </button>
                                 );
                               })()}
                             </div>
-                          </>
+                          </div>
                         )}
-                      </>
-                    );
-                  })()}
-                </div>
-                </div>
+                      </div>
 
-                <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>
-                  <Button onClick={upsertSession}>
-                    {editingSessionId ? t("saveChanges") : t("addEvent")}
-                  </Button>
-                  <Button variant="outline" onClick={resetForm}>{t("reset")}</Button>
+                      <div style={{ fontWeight: 900 }}>{t("start")}</div>
+                      <Input type="time" value={formStart} onChange={setFormStart} />
 
-                  <div style={{ marginLeft: "auto", color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
-                    {(() => {
-                      const info = normalizeOpponentInfo(formOpponent);
-                      const dur = isGameInfo(info) ? 120 : formDuration;
-                      return (
-                        <>{t("preview")}: {formStart}–{addMinutesToHHMM(formStart, dur)} | {currentLocationValue()}</>
-                      );
-                    })()}
-                    {normalizeOpponentInfo(formOpponent) ? ` | ${normalizeOpponentInfo(formOpponent)}` : ""}
+                      <div style={{ fontWeight: 900 }}>{t("duration")} (Min)</div>
+                      <MinutePicker
+                        value={formDuration}
+                        onChange={setFormDuration}
+                        presets={[60, 90, 120]}
+                        allowZero={false}
+                        placeholder={t("minutesExample")}
+                      />
+
+                      <div style={{ fontWeight: 900 }}>{t("eventOpponent")}</div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {(() => {
+                          const opponentMode = getOpponentMode(formOpponent);
+                          const opponentName = getOpponentName(formOpponent);
+
+                          return (
+                            <>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextMode = opponentMode === "home" ? null : "home";
+                                    setFormOpponent(composeOpponentInfo(nextMode, opponentName));
+                                  }}
+                                  style={{
+                                    ...segBtn(opponentMode === "home"),
+                                    padding: "8px 10px",
+                                    fontSize: 12,
+                                  }}
+                                  title={t("eventModeHomeTitle")}
+                                >
+                                  vs {t("eventModeHome")}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextMode = opponentMode === "away" ? null : "away";
+                                    setFormOpponent(composeOpponentInfo(nextMode, opponentName));
+                                  }}
+                                  style={{
+                                    ...segBtn(opponentMode === "away"),
+                                    padding: "8px 10px",
+                                    fontSize: 12,
+                                  }}
+                                  title={t("eventModeAwayTitle")}
+                                >
+                                  @ {t("eventModeAway")}
+                                </button>
+
+                                {opponentMode === "away" && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRecallLocationEdit}
+                                    style={{
+                                      ...segBtn(false),
+                                      padding: "8px 10px",
+                                      fontSize: 12,
+                                    }}
+                                    title={t("eventRecallLocationTitle")}
+                                  >
+                                    📍 {t("eventRecallLocation")}
+                                  </button>
+                                )}
+                              </div>
+
+                              <Input
+                                ref={opponentInputRef}
+                                value={opponentName}
+                                onChange={(v) => setFormOpponent(composeOpponentInfo(opponentMode, v))}
+                                placeholder={t("eventOpponentExample")}
+                              />
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {(() => {
+                        const info = normalizeOpponentInfo(formOpponent);
+                        const game = isGameInfo(info);
+                        const away = info.startsWith("@");
+                        if (!game) return null;
+
+                        return (
+                          <>
+                            <div style={{ fontWeight: 900 }}>{t("meetingWarmupMin")}</div>
+                            <MinutePicker
+                              value={formWarmupMin}
+                              onChange={setFormWarmupMin}
+                              presets={[45, 60, 75, 90, 105, 120]}
+                              allowZero={false}
+                              placeholder={t("minutesExample")}
+                            />
+
+                            {away && (
+                              <>
+                                <div style={{ fontWeight: 900 }}>{t("travelMin")}</div>
+                                <div style={{ display: "grid", gap: 8 }}>
+                                  <MinutePicker
+                                    value={formTravelMin}
+                                    onChange={setFormTravelMin}
+                                    presets={[30, 45, 60, 75, 90, 105, 120, 150]}
+                                    allowZero={true}
+                                    placeholder={t("minutesExample")}
+                                  />
+                                  {(() => {
+                                    const homeAddr = theme.locations?.homeAddress ?? "";
+                                    const destAddr = resolveLocationAddress(currentLocationValue(), theme);
+
+                                    const homePid = theme.locations?.homePlaceId ?? "";
+                                    const destPid = resolveLocationPlaceId(currentLocationValue(), theme);
+
+                                    const canAutoTravel = Boolean(homeAddr && destAddr);
+
+                                    async function handleAutoTravel() {
+                                      if (!canAutoTravel || autoTravelLoading) return;
+
+                                      setAutoTravelLoading(true);
+                                      try {
+                                        // Cache nur nutzen, wenn PlaceIds vorhanden
+                                        if (homePid && destPid) {
+                                          const cached = getCachedTravelMinutes(homePid, destPid, theme);
+                                          if (cached != null) {
+                                            setFormTravelMin(cached);
+                                            setAutoTravelLoading(false);
+                                            return;
+                                          }
+                                        }
+
+                                        const minutes = await fetchTravelMinutes(homeAddr, destAddr);
+                                        if (minutes != null) {
+                                          setFormTravelMin(minutes);
+                                          if (homePid && destPid) {
+                                            setCachedTravelMinutes(homePid, destPid, minutes, theme, setTheme);
+                                          }
+                                        }
+                                      } catch {
+                                        // ignore travel API errors and keep manual entry
+                                      } finally {
+                                        setAutoTravelLoading(false);
+                                      }
+                                    }
+
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={handleAutoTravel}
+                                        disabled={!canAutoTravel || autoTravelLoading}
+                                        title={
+                                          canAutoTravel
+                                            ? t("autoTravelTitle")
+                                            : t("autoTravelDisabledTitle")
+                                        }
+                                        style={{
+                                          ...segBtn(false),
+                                          padding: "8px 10px",
+                                          fontSize: 12,
+                                          opacity: canAutoTravel ? 1 : 0.5,
+                                          cursor: canAutoTravel && !autoTravelLoading ? "pointer" : "not-allowed",
+                                        }}
+                                      >
+                                        {autoTravelLoading ? `⏳ ${t("calculating")}` : `🚗 ${t("autoTravel")}`}
+                                      </button>
+                                    );
+                                  })()}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>
+                    <Button onClick={upsertSession}>
+                      {editingSessionId ? t("saveChanges") : t("addEvent")}
+                    </Button>
+                    <Button variant="outline" onClick={resetForm}>{t("reset")}</Button>
+
+                    <div style={{ marginLeft: "auto", color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
+                      {(() => {
+                        const info = normalizeOpponentInfo(formOpponent);
+                        const dur = isGameInfo(info) ? 120 : formDuration;
+                        return (
+                          <>{t("preview")}: {formStart}–{addMinutesToHHMM(formStart, dur)} | {currentLocationValue()}</>
+                        );
+                      })()}
+                      {normalizeOpponentInfo(formOpponent) ? ` | ${normalizeOpponentInfo(formOpponent)}` : ""}
+                    </div>
                   </div>
                 </div>
-              </div>
               </EventEditorModal>
 
               {/* Week plan board */}
@@ -3686,151 +3693,151 @@ const holOnlyPlayers = useMemo(() => {
                         const dayLabel = weekdayShortLocalized(s.date, lang) || s.day;
                         const participantsCollapsed = collapsedParticipantsBySession[s.id] === true;
                         return (
-                      <>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <div>
-                          <div style={{ fontWeight: 900, color: "var(--ui-text)" }}>
-                            {dayLabel} • {s.date}
-                          </div>
-                          <div style={{ fontWeight: 800, color: "var(--ui-soft)" }}>
-                            {(s.teams ?? []).join(" / ")} — {s.time} — {s.location}
-                          </div>
-                          {s.info ? (
-                            <div style={{ fontSize: 12, color: "var(--ui-muted)", marginTop: 4, fontWeight: 900 }}>
-                              {s.info}
-                            </div>
-                          ) : null}
-                                                  {/* ANCHOR:SESSION_CONFLICT_BADGE
+                          <>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                              <div>
+                                <div style={{ fontWeight: 900, color: "var(--ui-text)" }}>
+                                  {dayLabel} • {s.date}
+                                </div>
+                                <div style={{ fontWeight: 800, color: "var(--ui-soft)" }}>
+                                  {(s.teams ?? []).join(" / ")} — {s.time} — {s.location}
+                                </div>
+                                {s.info ? (
+                                  <div style={{ fontSize: 12, color: "var(--ui-muted)", marginTop: 4, fontWeight: 900 }}>
+                                    {s.info}
+                                  </div>
+                                ) : null}
+                                {/* ANCHOR:SESSION_CONFLICT_BADGE
                            Konfliktanzeige pro Session:
                            - zeigt Anzahl der Spieler, die in einem überschneidenden Event ebenfalls eingetragen sind
                            - Tooltip listet Namen (gekürzt)
                         */}
-                        {(() => {
-                          const conflicts = conflictsBySession.get(s.id) ?? [];
-                          if (!conflicts.length) return null;
+                                {(() => {
+                                  const conflicts = conflictsBySession.get(s.id) ?? [];
+                                  if (!conflicts.length) return null;
 
-                          const uniquePlayers = Array.from(new Set(conflicts.map((c) => c.playerId)));
-                          const names = uniquePlayers
-                            .map((pid) => playerById.get(pid)?.name ?? pid)
-                            .slice(0, 8)
-                            .join(", ");
+                                  const uniquePlayers = Array.from(new Set(conflicts.map((c) => c.playerId)));
+                                  const names = uniquePlayers
+                                    .map((pid) => playerById.get(pid)?.name ?? pid)
+                                    .slice(0, 8)
+                                    .join(", ");
 
-                          return (
-                            <div
-                              title={names}
-                              style={{
-                                marginTop: 6,
-                                display: "inline-block",
-                                border: "1px solid #ef4444",
-                                background: "rgba(239,68,68,0.12)",
-                                color: "var(--ui-text)",
-                                padding: "6px 10px",
-                                borderRadius: 999,
-                                fontWeight: 900,
-                                fontSize: 12,
-                              }}
-                            >
-                              {t("conflict")}: {uniquePlayers.length}
-                            </div>
-                          );
-                        })()}
+                                  return (
+                                    <div
+                                      title={names}
+                                      style={{
+                                        marginTop: 6,
+                                        display: "inline-block",
+                                        border: "1px solid #ef4444",
+                                        background: "rgba(239,68,68,0.12)",
+                                        color: "var(--ui-text)",
+                                        padding: "6px 10px",
+                                        borderRadius: 999,
+                                        fontWeight: 900,
+                                        fontSize: 12,
+                                      }}
+                                    >
+                                      {t("conflict")}: {uniquePlayers.length}
+                                    </div>
+                                  );
+                                })()}
 
-                        {(() => {
-                          const flaggedIds = historyFlagsBySession.get(s.id) ?? [];
-                          if (!flaggedIds.length) return null;
+                                {(() => {
+                                  const flaggedIds = historyFlagsBySession.get(s.id) ?? [];
+                                  if (!flaggedIds.length) return null;
 
-                          const names = flaggedIds
-                            .map((pid) => playerById.get(pid)?.name ?? pid)
-                            .slice(0, 8)
-                            .join(", ");
+                                  const names = flaggedIds
+                                    .map((pid) => playerById.get(pid)?.name ?? pid)
+                                    .slice(0, 8)
+                                    .join(", ");
 
-                          return (
-                            <div
-                              title={names}
-                              style={{
-                                marginTop: 6,
-                                display: "inline-block",
-                                border: "1px solid #ef4444",
-                                background: "rgba(239,68,68,0.12)",
-                                color: "var(--ui-text)",
-                                padding: "6px 10px",
-                                borderRadius: 999,
-                                fontWeight: 900,
-                                fontSize: 12,
-                              }}
-                            >
-                              {t("hint")}: {flaggedIds.length} ({t("history")})
-                            </div>
-                          );
-                        })()}
+                                  return (
+                                    <div
+                                      title={names}
+                                      style={{
+                                        marginTop: 6,
+                                        display: "inline-block",
+                                        border: "1px solid #ef4444",
+                                        background: "rgba(239,68,68,0.12)",
+                                        color: "var(--ui-text)",
+                                        padding: "6px 10px",
+                                        borderRadius: 999,
+                                        fontWeight: 900,
+                                        fontSize: 12,
+                                      }}
+                                    >
+                                      {t("hint")}: {flaggedIds.length} ({t("history")})
+                                    </div>
+                                  );
+                                })()}
 
-                        </div>
-
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 12, color: "var(--ui-text)", fontWeight: 900 }}>
-                            {(s.participants ?? []).length} {t("players")}
-                          </div>
-                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8, flexWrap: "wrap" }}>
-                            <Button
-                              variant="outline"
-                              onClick={() =>
-                                setCollapsedParticipantsBySession((prev) => ({
-                                  ...prev,
-                                  [s.id]: !participantsCollapsed,
-                                }))
-                              }
-                              style={{ padding: "8px 10px" }}
-                            >
-                              {participantsCollapsed ? t("expandPlayers") : t("collapsePlayers")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => onEditSession(s)}
-                              title={t("eventEdit")}
-                              style={{ padding: "8px 10px" }}
-                            >
-                              ⚙︎
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => onDeleteSession(s.id)}
-                              style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
-                            >
-                              {t("delete").toLowerCase()}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {!participantsCollapsed && (
-                        <>
-                          <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
-
-                          <div style={{ display: "grid", gap: 6 }}>
-                            {(s.participants ?? []).map((pid) => {
-                              const p = playerById.get(pid);
-                              if (!p) return null;
-                              return (
-                                <ParticipantCard
-                                  key={pid}
-                                  player={p}
-                                  onRemove={() => removePlayerFromSession(s.id, pid)}
-                                  groupBg={groupBg}
-                                  isBirthday={birthdayPlayerIds.has(pid)}
-                                  t={t}
-                                />
-                              );
-                            })}
-                            {(s.participants ?? []).length === 0 && (
-                              <div style={{ color: "var(--ui-muted)", fontSize: 13, fontWeight: 800 }}>
-                                {t("dropPlayersHere")}
                               </div>
+
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: 12, color: "var(--ui-text)", fontWeight: 900 }}>
+                                  {(s.participants ?? []).length} {t("players")}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8, flexWrap: "wrap" }}>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                      setCollapsedParticipantsBySession((prev) => ({
+                                        ...prev,
+                                        [s.id]: !participantsCollapsed,
+                                      }))
+                                    }
+                                    style={{ padding: "8px 10px" }}
+                                  >
+                                    {participantsCollapsed ? t("expandPlayers") : t("collapsePlayers")}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => onEditSession(s)}
+                                    title={t("eventEdit")}
+                                    style={{ padding: "8px 10px" }}
+                                  >
+                                    ⚙︎
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => onDeleteSession(s.id)}
+                                    style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
+                                  >
+                                    {t("delete").toLowerCase()}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {!participantsCollapsed && (
+                              <>
+                                <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
+
+                                <div style={{ display: "grid", gap: 6 }}>
+                                  {(s.participants ?? []).map((pid) => {
+                                    const p = playerById.get(pid);
+                                    if (!p) return null;
+                                    return (
+                                      <ParticipantCard
+                                        key={pid}
+                                        player={p}
+                                        onRemove={() => removePlayerFromSession(s.id, pid)}
+                                        groupBg={groupBg}
+                                        isBirthday={birthdayPlayerIds.has(pid)}
+                                        t={t}
+                                      />
+                                    );
+                                  })}
+                                  {(s.participants ?? []).length === 0 && (
+                                    <div style={{ color: "var(--ui-muted)", fontSize: 13, fontWeight: 800 }}>
+                                      {t("dropPlayersHere")}
+                                    </div>
+                                  )}
+                                </div>
+                              </>
                             )}
-                          </div>
-                        </>
-                      )}
-                      </>
-                    );
+                          </>
+                        );
                       })()}
                     </DroppableSessionShell>
                   ))}
@@ -4293,11 +4300,11 @@ const holOnlyPlayers = useMemo(() => {
                                 yearLocked
                                   ? [{ value: String(y), label: String(y) }]
                                   : [
-                                      { value: "2007", label: "2007" },
-                                      { value: "2008", label: "2008" },
-                                      { value: "2009", label: "2009" },
-                                      { value: "Herren", label: "Herren" },
-                                    ]
+                                    { value: "2007", label: "2007" },
+                                    { value: "2008", label: "2008" },
+                                    { value: "2009", label: "2009" },
+                                    { value: "Herren", label: "Herren" },
+                                  ]
                               }
                               disabled={yearLocked}
                             />
@@ -4405,182 +4412,182 @@ const holOnlyPlayers = useMemo(() => {
     - defaultTeams sind Metadaten (Zugehörigkeit), NICHT die Session-Zuteilung.
     - nutzt du für: Gruppierung Herren, Filter, spätere Exports/Reports.
    ============================================================ */}
-<div
-  style={{
-    border: `1px solid var(--ui-border)`,
-    borderRadius: 14,
-    background: "var(--ui-card)",
-    padding: 12,
-  }}
->
-  <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("defaultTeams")}</div>
+                  <div
+                    style={{
+                      border: `1px solid var(--ui-border)`,
+                      borderRadius: 14,
+                      background: "var(--ui-card)",
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("defaultTeams")}</div>
 
-  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-    {TEAM_OPTIONS.map((t) => {
-      const current = selectedPlayer.defaultTeams ?? [];
-      const active = current.includes(t);
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {TEAM_OPTIONS.map((t) => {
+                        const current = selectedPlayer.defaultTeams ?? [];
+                        const active = current.includes(t);
 
-      return (
-        <Button
-          key={t}
-          variant={active ? "solid" : "outline"}
-          onClick={() => {
-            const next = active ? current.filter((x) => x !== t) : [...current, t];
-            updatePlayer(selectedPlayer.id, { defaultTeams: next });
-          }}
-          style={{ padding: "8px 10px" }}
-        >
-          {t}
-        </Button>
-      );
-    })}
-  </div>
+                        return (
+                          <Button
+                            key={t}
+                            variant={active ? "solid" : "outline"}
+                            onClick={() => {
+                              const next = active ? current.filter((x) => x !== t) : [...current, t];
+                              updatePlayer(selectedPlayer.id, { defaultTeams: next });
+                            }}
+                            style={{ padding: "8px 10px" }}
+                          >
+                            {t}
+                          </Button>
+                        );
+                      })}
+                    </div>
 
-  <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-    {t("defaultTeamsHint")}
-  </div>
-</div>
+                    <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                      {t("defaultTeamsHint")}
+                    </div>
+                  </div>
 
-{/* ============================================================
+                  {/* ============================================================
     ANCHOR:ROSTER_JERSEY_BY_TEAM
     Zweck:
     - Trikotnummer pro Team (z.B. NBBL vs 1RLH unterschiedlich möglich)
     - wird im PrintView Spiel-Export genutzt (Sortierung & Tabelle)
    ============================================================ */}
-<div
-  style={{
-    border: `1px solid var(--ui-border)`,
-    borderRadius: 14,
-    background: "var(--ui-card)",
-    padding: 12,
-  }}
->
-  <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("jerseyNumbersByTeam")}</div>
+                  <div
+                    style={{
+                      border: `1px solid var(--ui-border)`,
+                      borderRadius: 14,
+                      background: "var(--ui-card)",
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("jerseyNumbersByTeam")}</div>
 
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "140px 1fr",
-      gap: 10,
-      alignItems: "center",
-    }}
-  >
-    {TEAM_OPTIONS.map((teamCode) => {
-      const current = selectedPlayer.jerseyByTeam ?? {};
-      const value = current[teamCode];
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "140px 1fr",
+                        gap: 10,
+                        alignItems: "center",
+                      }}
+                    >
+                      {TEAM_OPTIONS.map((teamCode) => {
+                        const current = selectedPlayer.jerseyByTeam ?? {};
+                        const value = current[teamCode];
 
-      return (
-        <div key={teamCode} style={{ display: "contents" }}>
-          <div style={{ fontWeight: 900 }}>{teamCode}</div>
-          <Input
-            type="number"
-            value={value === null || value === undefined ? "" : String(value)}
-            onChange={(v) => {
-              const next = { ...(selectedPlayer.jerseyByTeam ?? {}) } as Record<string, number | null>;
-              const trimmed = (v ?? "").trim();
-              next[teamCode] = trimmed ? parseInt(trimmed, 10) : null;
-              updatePlayer(selectedPlayer.id, { jerseyByTeam: next });
-            }}
-            placeholder={t("jerseyExample")}
-          />
-        </div>
-      );
-    })}
-  </div>
+                        return (
+                          <div key={teamCode} style={{ display: "contents" }}>
+                            <div style={{ fontWeight: 900 }}>{teamCode}</div>
+                            <Input
+                              type="number"
+                              value={value === null || value === undefined ? "" : String(value)}
+                              onChange={(v) => {
+                                const next = { ...(selectedPlayer.jerseyByTeam ?? {}) } as Record<string, number | null>;
+                                const trimmed = (v ?? "").trim();
+                                next[teamCode] = trimmed ? parseInt(trimmed, 10) : null;
+                                updatePlayer(selectedPlayer.id, { jerseyByTeam: next });
+                              }}
+                              placeholder={t("jerseyExample")}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
 
-  <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-    {t("jerseyHint")}
-  </div>
-</div>
+                    <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                      {t("jerseyHint")}
+                    </div>
+                  </div>
 
-{/* ============================================================
+                  {/* ============================================================
     ANCHOR:ROSTER_HISTORY_LAST6
     Zweck:
     - optionale Notizen (letzte 6 Spiele)
     - aktuell nur Editor-Feature (später Tooltip/Export möglich)
    ============================================================ */}
-<div
-  style={{
-    border: `1px solid var(--ui-border)`,
-    borderRadius: 14,
-    background: "var(--ui-card)",
-    padding: 12,
-  }}
->
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "baseline",
-      gap: 10,
-    }}
-  >
-    <div style={{ fontWeight: 900 }}>{t("historyLast6")}</div>
+                  <div
+                    style={{
+                      border: `1px solid var(--ui-border)`,
+                      borderRadius: 14,
+                      background: "var(--ui-card)",
+                      padding: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 900 }}>{t("historyLast6")}</div>
 
-    <Button
-      variant="outline"
-      onClick={() => {
-        const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
-        if (cur.length >= 6) return;
-        cur.push({ date: "", opponent: "", note: "" });
-        updatePlayer(selectedPlayer.id, { historyLast6: cur });
-      }}
-      style={{ padding: "8px 10px" }}
-    >
-      + {t("entry")}
-    </Button>
-  </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
+                          if (cur.length >= 6) return;
+                          cur.push({ date: "", opponent: "", note: "" });
+                          updatePlayer(selectedPlayer.id, { historyLast6: cur });
+                        }}
+                        style={{ padding: "8px 10px" }}
+                      >
+                        + {t("entry")}
+                      </Button>
+                    </div>
 
-  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-    {(selectedPlayer.historyLast6 ?? []).slice(0, 6).map((h, idx) => (
-      <div
-        key={idx}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "140px 1fr 120px",
-          gap: 10,
-          alignItems: "center",
-        }}
-      >
-        <Input
-          type="date"
-          value={h.date ?? ""}
-          onChange={(v) => {
-            const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
-            cur[idx] = { ...cur[idx], date: v };
-            updatePlayer(selectedPlayer.id, { historyLast6: cur });
-          }}
-        />
+                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                      {(selectedPlayer.historyLast6 ?? []).slice(0, 6).map((h, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "140px 1fr 120px",
+                            gap: 10,
+                            alignItems: "center",
+                          }}
+                        >
+                          <Input
+                            type="date"
+                            value={h.date ?? ""}
+                            onChange={(v) => {
+                              const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
+                              cur[idx] = { ...cur[idx], date: v };
+                              updatePlayer(selectedPlayer.id, { historyLast6: cur });
+                            }}
+                          />
 
-        <Input
-          value={h.opponent ?? ""}
-          onChange={(v) => {
-            const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
-            cur[idx] = { ...cur[idx], opponent: v };
-            updatePlayer(selectedPlayer.id, { historyLast6: cur });
-          }}
-          placeholder={t("opponentExample")}
-        />
+                          <Input
+                            value={h.opponent ?? ""}
+                            onChange={(v) => {
+                              const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
+                              cur[idx] = { ...cur[idx], opponent: v };
+                              updatePlayer(selectedPlayer.id, { historyLast6: cur });
+                            }}
+                            placeholder={t("opponentExample")}
+                          />
 
-        <Button
-          variant="outline"
-          onClick={() => {
-            const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
-            cur.splice(idx, 1);
-            updatePlayer(selectedPlayer.id, { historyLast6: cur });
-          }}
-          style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
-        >
-          {t("delete").toLowerCase()}
-        </Button>
-      </div>
-    ))}
-  </div>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              const cur = (selectedPlayer.historyLast6 ?? []).slice(0, 6);
+                              cur.splice(idx, 1);
+                              updatePlayer(selectedPlayer.id, { historyLast6: cur });
+                            }}
+                            style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
+                          >
+                            {t("delete").toLowerCase()}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
 
-  <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-    {t("historyLast6Hint")}
-  </div>
-</div>
+                    <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                      {t("historyLast6Hint")}
+                    </div>
+                  </div>
 
 /* --- Ende Roster-Editor (im Modal) --- */
                 </>
