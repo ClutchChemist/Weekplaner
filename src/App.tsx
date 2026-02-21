@@ -83,6 +83,7 @@ import {
   type SavedProfile,
 } from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
+import { safeParseWeekArchive, WEEK_ARCHIVE_STORAGE_KEY, type WeekArchiveEntry } from "./state/weekArchive";
 import { DEFAULT_THEME } from "./state/themeDefaults";
 import { applyThemeToCssVars } from "./themes/cssVars";
 import {
@@ -1123,6 +1124,7 @@ export default function App() {
   );
   const [profileHydratedId, setProfileHydratedId] = useState<string | null>(null);
   const [profilesOpen, setProfilesOpen] = useState(false);
+  const [weekArchiveOpen, setWeekArchiveOpen] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState("");
   const [logoUploadError, setLogoUploadError] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -1149,6 +1151,21 @@ export default function App() {
     [profiles, activeProfileId]
   );
   const activeProfileSync = activeProfile?.sync ?? DEFAULT_PROFILE_SYNC;
+
+  const [weekArchiveByProfile, setWeekArchiveByProfile] = usePersistedState<Record<string, WeekArchiveEntry[]>>(
+    WEEK_ARCHIVE_STORAGE_KEY,
+    {},
+    (savedRaw) => safeParseWeekArchive(savedRaw)
+  );
+
+  const [archiveTemplateStart, setArchiveTemplateStart] = useState<string>(() =>
+    isoWeekMonday(new Date().toISOString().slice(0, 10))
+  );
+
+  const activeArchiveEntries = useMemo(() => {
+    if (!activeProfileId) return [] as WeekArchiveEntry[];
+    return (weekArchiveByProfile[activeProfileId] ?? []).filter((entry) => entry.profileId === activeProfileId);
+  }, [activeProfileId, weekArchiveByProfile]);
 
   useEffect(() => {
     if (!profileMenuOpen) return;
@@ -2344,7 +2361,102 @@ const holOnlyPlayers = useMemo(() => {
       });
   }
 
-  function createNewWeek(mode: NewWeekMode, keepParticipants: boolean, weekStartMondayISO: string) {
+  function cloneWeekPlan(src: WeekPlan): WeekPlan {
+    return JSON.parse(JSON.stringify(src)) as WeekPlan;
+  }
+
+  function savePlanToArchive(targetPlan: WeekPlan, profileId: string, reason: "manual" | "auto" = "manual"): WeekArchiveEntry {
+    const reasonLabel = reason === "auto" ? t("weekArchiveLabelAuto") : t("weekArchiveLabelManual");
+    const weekLabel = kwLabelFromPlan(targetPlan);
+    const firstDate = targetPlan.sessions?.[0]?.date ?? "";
+    const firstDateLabel = firstDate ? dateToShortDE(firstDate) : "—";
+    const sessionCount = (targetPlan.sessions ?? []).length;
+    const label = `${reasonLabel} • ${weekLabel} • ${t("weekArchiveLabelStart")} ${firstDateLabel} • ${sessionCount} ${t("weekArchiveLabelEvents")}`;
+
+    const entry: WeekArchiveEntry = {
+      id: randomId("wk_arch_"),
+      savedAt: new Date().toISOString(),
+      label,
+      profileId,
+      plan: cloneWeekPlan(targetPlan),
+    };
+
+    setWeekArchiveByProfile((prev) => {
+      const cur = prev[profileId] ?? [];
+      const next = [entry, ...cur].slice(0, 30);
+      return { ...prev, [profileId]: next };
+    });
+
+    return entry;
+  }
+
+  function handleSaveCurrentWeekToArchive() {
+    if (!activeProfileId) {
+      return;
+    }
+    savePlanToArchive(plan, activeProfileId, "manual");
+  }
+
+  function handleLoadArchiveEntry(entry: WeekArchiveEntry) {
+    if (!activeProfileId || entry.profileId !== activeProfileId) return;
+    setPlan(cloneWeekPlan(entry.plan));
+    setWeekArchiveOpen(false);
+  }
+
+  function handleDeleteArchiveEntry(entry: WeekArchiveEntry) {
+    if (!activeProfileId || entry.profileId !== activeProfileId) return;
+    setWeekArchiveByProfile((prev) => {
+      const cur = prev[activeProfileId] ?? [];
+      return {
+        ...prev,
+        [activeProfileId]: cur.filter((e) => e.id !== entry.id),
+      };
+    });
+  }
+
+  function handleUseArchiveAsTemplate(entry: WeekArchiveEntry) {
+    if (!activeProfileId || entry.profileId !== activeProfileId) return;
+    const copied = (entry.plan.sessions ?? []).map((s) => ({
+      ...s,
+      id: randomId("sess_"),
+      participants: [...(s.participants ?? [])],
+    }));
+
+    const shifted = applyWeekDatesToSessions(copied, archiveTemplateStart);
+    setPlan({
+      weekId: `WEEK_${archiveTemplateStart}_tpl`,
+      sessions: shifted,
+    });
+    setWeekArchiveOpen(false);
+  }
+
+  async function createNewWeek(mode: NewWeekMode, keepParticipants: boolean, weekStartMondayISO: string) {
+    const hasDraft = (plan.sessions ?? []).length > 0;
+    if (hasDraft) {
+      if (!activeProfileId) {
+        const proceedNoProfile = await askConfirm(
+          t("profiles"),
+          t("weekArchiveNeedsProfile")
+        );
+        if (!proceedNoProfile) return;
+      } else {
+        const saveDraft = await askConfirm(
+          t("weekArchiveCreateQuestionTitle"),
+          t("weekArchiveCreateQuestionBody")
+        );
+
+        if (saveDraft) {
+          savePlanToArchive(plan, activeProfileId, "auto");
+        } else {
+          const discardDraft = await askConfirm(
+            t("weekArchiveDiscardTitle"),
+            t("weekArchiveDiscardBody")
+          );
+          if (!discardDraft) return;
+        }
+      }
+    }
+
     if (mode === "MASTER") {
       setPlan(() => {
         const sessionsWithDates = applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO);
@@ -3094,6 +3206,23 @@ const holOnlyPlayers = useMemo(() => {
                       </div>
                     )}
                   </div>
+
+                  <Button
+                    className="touchBtn"
+                    variant="outline"
+                    onClick={() => setWeekArchiveOpen(true)}
+                    disabled={!activeProfileId}
+                    title={!activeProfileId ? t("cloudProfilePickFirst") : t("weekArchiveButton")}
+                    style={{
+                      padding: "8px 10px",
+                      maxWidth: 200,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    🗂 {t("weekArchiveButton")}
+                  </Button>
                 </div>
 
                 {/* Right: Other Buttons */}
@@ -3938,6 +4067,68 @@ const holOnlyPlayers = useMemo(() => {
                 void signOutFromCloud();
               }}
             />
+          </div>
+        </Modal>
+      )}
+
+      {weekArchiveOpen && (
+        <Modal title={t("weekArchiveTitle")} onClose={() => setWeekArchiveOpen(false)} closeLabel={t("close")}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                {activeProfileName ? `${t("cloudProfileCurrent")}: ${activeProfileName}` : t("profileNone")}
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleSaveCurrentWeekToArchive}
+                disabled={!activeProfileId || (plan.sessions ?? []).length === 0}
+              >
+                {t("weekArchiveSaveCurrent")}
+              </Button>
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 900 }}>{t("weekArchiveTemplateDate")}</div>
+              <Input type="date" value={archiveTemplateStart} onChange={setArchiveTemplateStart} />
+            </div>
+
+            {activeArchiveEntries.length === 0 ? (
+              <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                {t("weekArchiveEmpty")}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 8, maxHeight: "55vh", overflow: "auto" }}>
+                {activeArchiveEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    style={{
+                      border: "1px solid var(--ui-border)",
+                      borderRadius: 12,
+                      background: "var(--ui-card)",
+                      padding: 10,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>{entry.label}</div>
+                    <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                      {new Date(entry.savedAt).toLocaleString(lang === "de" ? "de-DE" : "en-GB")}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <Button variant="outline" onClick={() => handleLoadArchiveEntry(entry)}>
+                        {t("weekArchiveLoadDraft")}
+                      </Button>
+                      <Button variant="outline" onClick={() => handleUseArchiveAsTemplate(entry)}>
+                        {t("weekArchiveUseTemplate")}
+                      </Button>
+                      <Button variant="danger" onClick={() => handleDeleteArchiveEntry(entry)}>
+                        {t("delete")}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Modal>
       )}
