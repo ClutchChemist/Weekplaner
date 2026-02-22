@@ -6,20 +6,35 @@ type Props = {
   t: (k: string) => string;
 };
 
-// DIN A4 Maße in px bei 96dpi: 794 x 1123
+// DIN A4 bei 96 dpi = 794 × 1123 px
 const A4_W = 794;
 const A4_H = 1123;
 
 export function ExportPreview({ pages, t }: Props) {
   const [currentPage, setCurrentPage] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
   const page = pages[currentPage] ?? null;
   const canPrev = currentPage > 0;
   const canNext = currentPage < pages.length - 1;
 
-  // Seite in iframe schreiben (kein Cross-Origin, alles lokal)
+  // Skalierung: iframe wird auf Panelbreite skaliert
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const available = el.clientWidth - 32; // 16px Padding links+rechts
+      setScale(Math.min(1, available / A4_W));
+    };
+    update();
+    const obs = new ResizeObserver(update);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Seite in iframe schreiben
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !page) return;
@@ -28,13 +43,13 @@ export function ExportPreview({ pages, t }: Props) {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
+        html, body {
           font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
           background: white;
           color: #111;
-          padding: 10mm;
           width: ${A4_W}px;
         }
+        body { padding: 10mm; }
         table { border-collapse: collapse; width: 100%; table-layout: auto; }
         th, td {
           border: 1px solid #ccc;
@@ -42,35 +57,39 @@ export function ExportPreview({ pages, t }: Props) {
           font-size: 9px;
           vertical-align: middle;
           white-space: nowrap;
+          width: 1px;
         }
         th { background: #f3f4f6; font-weight: 700; text-align: center; }
         td { text-align: center; }
+        /* letzte Datenspalte (Info) */
         td:last-child {
           white-space: normal;
           word-break: break-word;
           text-align: left;
+          width: auto;
         }
-        img { max-width: 100%; }
+        img { max-height: 48px; object-fit: contain; }
       </style>
     </head><body>${page.html}</body></html>`;
     doc.open();
     doc.write(html);
     doc.close();
-    // iframe Höhe dynamisch an Inhalt anpassen
+    // iframe Höhe anpassen
     const resize = () => {
       const body = iframe.contentDocument?.body;
       if (body) {
-        const h = Math.max(A4_H, body.scrollHeight + 20);
-        iframe.style.height = `${h}px`;
+        iframe.style.height = `${Math.max(A4_H, body.scrollHeight + 20)}px`;
       }
     };
     iframe.onload = resize;
-    setTimeout(resize, 150);
+    setTimeout(resize, 200);
   }, [page, currentPage]);
 
   if (pages.length === 0) {
     return <div style={{ padding: 16, color: "#aaa", fontSize: 13 }}>{t("previewNoPages")}</div>;
   }
+
+  const scaledH = A4_H * scale;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#1e1e1e" }}>
@@ -120,25 +139,25 @@ export function ExportPreview({ pages, t }: Props) {
         </button>
       </div>
 
-      {/* A4-Seitenrahmen auf grauem Hintergrund, vertikal scrollbar */}
+      {/* Scrollbarer Seitencontainer */}
       <div
-        ref={containerRef}
+        ref={wrapRef}
         style={{
           flex: 1,
           overflow: "auto",
-          background: "#666",
-          display: "flex",
-          justifyContent: "center",
-          padding: "16px 8px",
+          background: "#555",
+          padding: "16px",
         }}
       >
+        {/* A4-Seite: skaliert damit sie in das Panel passt */}
         <div
           style={{
-            width: A4_W,
-            minHeight: A4_H,
-            background: "white",
+            width: A4_W * scale,
+            height: scaledH,
+            margin: "0 auto",
+            transformOrigin: "top left",
+            position: "relative",
             boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
-            flexShrink: 0,
           }}
         >
           <iframe
@@ -150,6 +169,9 @@ export function ExportPreview({ pages, t }: Props) {
               width: A4_W,
               height: A4_H,
               display: "block",
+              background: "white",
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
             }}
           />
         </div>
