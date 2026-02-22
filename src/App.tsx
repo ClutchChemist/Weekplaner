@@ -819,9 +819,6 @@ export default function App() {
      Export HTML (Source of Truth)
      ---------------------- */
   const exportPages = useMemo(() => {
-    const groupColors = Object.fromEntries(
-      Object.entries(theme.groups).map(([k, v]) => [k, v.bg])
-    );
     return buildPrintPages({
       sessions: plan?.sessions ?? [],
       players,
@@ -830,7 +827,8 @@ export default function App() {
       locale: theme.locale,
       locations: theme.locations ?? DEFAULT_THEME.locations!,
       logoUrl: clubLogoDataUrl ?? undefined,
-      groupColors,
+      groupColors: theme.groups ? Object.fromEntries(Object.entries(theme.groups).map(([k, v]) => [k, v.bg])) : undefined,
+      kwText: kwLabelFromPlan(plan),
     });
   }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
@@ -847,6 +845,7 @@ export default function App() {
       locations: theme.locations ?? DEFAULT_THEME.locations!,
       logoUrl: clubLogoDataUrl ?? undefined,
       groupColors,
+      kwText: kwLabelFromPlan(plan),
     });
   }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
@@ -954,6 +953,7 @@ export default function App() {
     formOpponent: string;
     formWarmupMin: number;
     formTravelMin: number;
+    formExcludeFromRoster: boolean;
   };
 
   const [editorState, setEditorState] = useState<EditorState>({
@@ -967,6 +967,7 @@ export default function App() {
     formOpponent: "",
     formWarmupMin: 30,
     formTravelMin: 0,
+    formExcludeFromRoster: false,
   });
 
   const {
@@ -980,6 +981,7 @@ export default function App() {
     formOpponent,
     formWarmupMin,
     formTravelMin,
+    formExcludeFromRoster,
   } = editorState;
 
   function setEditorField<K extends keyof EditorState>(key: K, value: React.SetStateAction<EditorState[K]>) {
@@ -999,6 +1001,7 @@ export default function App() {
   const setFormOpponent = (value: React.SetStateAction<string>) => setEditorField("formOpponent", value);
   const setFormWarmupMin = (value: React.SetStateAction<number>) => setEditorField("formWarmupMin", value);
   const setFormTravelMin = (value: React.SetStateAction<number>) => setEditorField("formTravelMin", value);
+  const setFormExcludeFromRoster = (value: React.SetStateAction<boolean>) => setEditorField("formExcludeFromRoster", value);
 
   const editorRef = useRef<HTMLDivElement | null>(null);
   const opponentInputRef = useRef<HTMLInputElement | null>(null);
@@ -1097,6 +1100,7 @@ export default function App() {
     setFormOpponent("");
     setFormWarmupMin(30);
     setFormTravelMin(0);
+    setFormExcludeFromRoster(false);
   }
 
   function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
@@ -1117,6 +1121,7 @@ export default function App() {
       warmupMin: isGame ? Math.max(0, Math.floor(formWarmupMin)) : null,
       travelMin: isGame ? Math.max(0, Math.floor(formTravelMin)) : null,
       participants: keepParticipants ?? [],
+      excludeFromRoster: formExcludeFromRoster,
     };
   }
 
@@ -1183,6 +1188,7 @@ export default function App() {
     const game = isGameInfo(s.info ?? "");
     setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
     setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
+    setFormExcludeFromRoster(s.excludeFromRoster === true);
   }
 
   async function onDeleteSession(sessionId: string) {
@@ -2787,6 +2793,19 @@ export default function App() {
                         );
                       })()}
                     </div>
+                  </div>
+
+                  {/* Options */}
+                  <div style={{ padding: "0 12px", marginBottom: 16 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={formExcludeFromRoster}
+                        onChange={(e) => setFormExcludeFromRoster(e.target.checked)}
+                        style={{ width: 16, height: 16, accentColor: "var(--ui-accent)" }}
+                      />
+                      <span style={{ fontSize: 13, fontWeight: 900 }}>{t("excludeFromRoster") || "Aus Kaderübersicht verbergen"}</span>
+                    </label>
                   </div>
 
                   <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>

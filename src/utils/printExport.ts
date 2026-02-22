@@ -29,18 +29,30 @@ function isGameSession(s: Session): boolean {
   return info.includes("vs") || info.includes("@");
 }
 
-function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: string }): string {
-  const { title, clubName, logoUrl } = opts;
+function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: string; locationsLegendHtml?: string; kwText?: string }): string {
+  const { title, clubName, logoUrl, locationsLegendHtml, kwText } = opts;
   const logoHtml = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="width: 80px; height: 80px; object-fit: contain;" />`
-    : `<div style="width: 80px; height: 80px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999;">Logo</div>`;
+    ? `<img src="${escapeHtml(logoUrl)}" alt="Logo" style="height: 48px; object-fit: contain;" />`
+    : `<div style="width: 48px; height: 48px; background: #eee;"></div>`;
+
   return `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-      <div style="flex: 1;">
-        <h1 style="margin: 0; font-size: 24px; font-weight: bold;">${escapeHtml(title)}</h1>
-        <div style="font-size: 14px; color: #666; margin-top: 4px;">${escapeHtml(clubName)}</div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 12px;">
+      <!-- LINKS: LOGO -->
+      <div style="flex: 1; display: flex; align-items: center;">
+        ${logoHtml}
       </div>
-      ${logoHtml}
+
+      <!-- MITTE: TITEL & KW -->
+      <div style="flex: 1; text-align: center; display: flex; flex-direction: column; justify-content: center;">
+        <div style="font-size: 18px; font-weight: 900;">${escapeHtml(title)}</div>
+        <div style="font-size: 14px; font-weight: 800;">- Trainingswoche ${escapeHtml(kwText || "")} -</div>
+      </div>
+
+      <!-- RECHTS: VEREIN & ORTE -->
+      <div style="flex: 1; text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
+        <div style="font-size: 14px; font-weight: 900; margin-bottom: 2px;">${escapeHtml(clubName)}</div>
+        ${locationsLegendHtml ? `<div style="font-size: 10px; color: #374151; font-weight: 700;">${locationsLegendHtml}</div>` : ""}
+      </div>
     </div>
   `;
 }
@@ -168,15 +180,16 @@ export function renderWeekOverviewHtml(opts: {
   locale: Lang;
   locations: ThemeLocations;
   logoUrl?: string;
+  kwText?: string;
 }): string {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, kwText } = opts;
 
   const trainingSessions = sessions.filter((s) => !isGameSession(s));
   const games = sessions.filter((s) => isGameSession(s));
 
   const t = locale === "de"
-    ? { training: "Training", trainingShort: "Tr", game: "Spiel", gameShort: "Sp", roster: "Kader", legend: "Legende" }
-    : { training: "Training", trainingShort: "Tr", game: "Game", gameShort: "Gm", roster: "Roster", legend: "Legend" };
+    ? { training: "Training", trainingShort: "Tr", game: "Spiel", gameShort: "Sp", roster: "Kader", legend: "Legende", date: "Datum", day: "Tag", teams: "Teams", time: "Zeit" }
+    : { training: "Training", trainingShort: "Tr", game: "Game", gameShort: "Gm", roster: "Roster", legend: "Legend", date: "Date", day: "Day", teams: "Teams", time: "Time" };
 
   const locationsLegendHtml = (() => {
     const defs = locations?.definitions || {};
@@ -194,31 +207,12 @@ export function renderWeekOverviewHtml(opts: {
     const legendItems: string[] = [];
     for (const name of Array.from(allLocNames).sort()) {
       const def = defs[name];
-      const customAddr = customLocs[name];
-      const newLoc = newLocs[name];
-      const abbr = def?.abbr || "";
-      const hallNo = def?.hallNo || "";
-      const addr = newLoc?.address || customAddr || "";
-
-      const parts: string[] = [];
-      if (abbr) parts.push(`Abk.: ${escapeHtml(abbr)}`);
-      if (hallNo) parts.push(`Halle: ${escapeHtml(hallNo)}`);
-      if (addr) parts.push(escapeHtml(addr));
-
-      const detail = parts.length > 0 ? ` (${parts.join(" · ")})` : "";
-      legendItems.push(`<li style="margin: 4px 0;"><strong>${escapeHtml(name)}</strong>${detail}</li>`);
+      const abbr = (def?.abbr ?? "").trim() || name.substring(0, 3).toUpperCase();
+      legendItems.push(`<strong>${escapeHtml(abbr)}</strong> = ${escapeHtml(name)}`);
     }
 
     if (legendItems.length === 0) return "";
-
-    return `
-      <div style="margin-bottom: 24px; padding: 12px; border: 1px solid #ddd; background: #fafafa;">
-        <h3 style="margin: 0 0 8px 0; font-size: 16px;">${t.legend}</h3>
-        <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.5;">
-          ${legendItems.join("")}
-        </ul>
-      </div>
-    `;
+    return legendItems.join(" &middot; ");
   })();
 
   const buildRosterTable = (session: Session): string => {
@@ -272,20 +266,24 @@ export function renderWeekOverviewHtml(opts: {
   };
 
   let sessionsTableRows = "";
-  [...trainingSessions, ...games].forEach((s) => {
-    const typeLabel = isGameSession(s) ? t.gameShort : t.trainingShort;
+  [...trainingSessions, ...games].forEach((s, i, arr) => {
+    const prev = arr[i - 1];
+    const sameDayAsPrev = prev ? prev.date === s.date : false;
+    // const typeLabel = isGameSession(s) ? t.gameShort : t.trainingShort;
+
+    const topBorder = !sameDayAsPrev ? "border-top: 2px solid #aaa;" : "border-top: 1px solid #ddd;";
+
     sessionsTableRows += `
       <tr>
-        <td style="${tdCss()}">${escapeHtml(s.date)}</td>
-        <td style="${tdCss()}">${escapeHtml(s.day)}</td>
-        <td style="${tdCss()}">${typeLabel}</td>
-        <td style="${tdCss()}">${escapeHtml(s.teams.join(", "))}</td>
-        <td style="${tdCss()}">${escapeHtml(s.time)}</td>
-        <td style="${tdCss()}">${escapeHtml(s.location)}</td>
-        <td style="${tdCss()}">${escapeHtml(s.info || "")}</td>
+        <td style="${tdCss()} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.date)}</td>
+        <td style="${tdCss()} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.day)}</td>
+        <td style="${tdCss()} ${topBorder}">${escapeHtml(s.teams.join(", "))}</td>
+        <td style="${tdCss()} ${topBorder}">${escapeHtml(s.time)}</td>
+        <td style="${tdCss()} ${topBorder}">${escapeHtml(s.location)}</td>
+        <td style="${tdCss()} ${topBorder} width: auto;">${escapeHtml(s.info || "")}</td>
       </tr>
       <tr>
-        <td colspan="7" style="padding: 12px; border: 1px solid #ccc; background: #fcfcfc;">
+        <td colspan="6" style="padding: 12px; border: 1px solid #ccc; background: #fcfcfc;">
           <strong>${t.roster}:</strong>
           ${buildRosterTable(s)}
         </td>
@@ -295,18 +293,16 @@ export function renderWeekOverviewHtml(opts: {
 
   return `
     <div class="page">
-      ${pageHeaderHtml({ title: "Trainingsübersicht", clubName, logoUrl })}
-      ${locationsLegendHtml}
-      <table>
+      ${pageHeaderHtml({ title: "Trainingsübersicht", clubName, logoUrl, locationsLegendHtml, kwText: opts.kwText })}
+      <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
-            <th style="${thCss()}">Datum</th>
-            <th style="${thCss()}">Tag</th>
-            <th style="${thCss()}">Typ</th>
-            <th style="${thCss()}">Teams</th>
-            <th style="${thCss()}">Zeit</th>
-            <th style="${thCss()}">Ort</th>
-            <th style="${thCss()}">Info</th>
+            <th style="${thCss()}">${t.date}</th>
+            <th style="${thCss()}">${t.day}</th>
+            <th style="${thCss()}">${t.teams}</th>
+            <th style="${thCss()}">${t.time}</th>
+            <th style="${thCss()}">Ort/Halle</th>
+            <th style="${thCss()} width: auto;">Info</th>
           </tr>
         </thead>
         <tbody>
@@ -324,17 +320,16 @@ function renderWeekScheduleOnlyHtml(opts: {
   locale: Lang;
   locations: ThemeLocations;
   logoUrl?: string;
+  kwText?: string;
 }): string {
-  const { sessions, clubName, locale, locations, logoUrl } = opts;
+  const { sessions, clubName, locale, locations, logoUrl, kwText } = opts;
 
   const t = locale === "de"
     ? {
-      title: "Trainingswoche", date: "Datum", day: "Tag", type: "Typ", teams: "Teams", time: "Zeit", loc: "Ort", info: "Info",
-      trainingShort: "Tr", gameShort: "Sp"
+      title: "Trainingswoche", date: "Datum", day: "Tag", teams: "Teams", time: "Zeit", loc: "Ort", info: "Info"
     }
     : {
-      title: "Training week", date: "Date", day: "Day", type: "Type", teams: "Teams", time: "Time", loc: "Location", info: "Info",
-      trainingShort: "Tr", gameShort: "Gm"
+      title: "Training week", date: "Date", day: "Day", teams: "Teams", time: "Time", loc: "Location", info: "Info"
     };
 
   const locationsLegendHtml = (() => {
@@ -389,18 +384,20 @@ function renderWeekScheduleOnlyHtml(opts: {
   })();
 
   const rows = sessions
-    .map((s) => {
+    .map((s, i, arr) => {
       const isGame = isGameSession(s);
-      const typeLabel = isGame ? t.gameShort : t.trainingShort;
+      const prev = arr[i - 1];
+      const sameDayAsPrev = prev ? prev.date === s.date : false;
+      const topBorder = !sameDayAsPrev ? "border-top: 2px solid #aaa;" : "border-top: 1px solid #ddd;";
+
       return `
         <tr style="${isGame ? "background:#F59E0B; color:#111;" : ""}">
-          <td style="${tdCss()}">${escapeHtml(s.date)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.day)}</td>
-          <td style="${tdCss()}">${escapeHtml(typeLabel)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.teams.join(", "))}</td>
-          <td style="${tdCss()}">${escapeHtml(s.time)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.location)}</td>
-          <td style="${tdCss()}">${escapeHtml(s.info || "")}</td>
+          <td style="${tdCss()} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.date)}</td>
+          <td style="${tdCss()} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.day)}</td>
+          <td style="${tdCss()} ${topBorder}">${escapeHtml(s.teams.join(", "))}</td>
+          <td style="${tdCss()} ${topBorder}">${escapeHtml(s.time)}</td>
+          <td style="${tdCss()} ${topBorder}">${escapeHtml(s.location)}</td>
+          <td style="${tdCss()} ${topBorder} width: auto;">${escapeHtml(s.info || "")}</td>
         </tr>
       `;
     })
@@ -408,18 +405,16 @@ function renderWeekScheduleOnlyHtml(opts: {
 
   return `
     <div class="page">
-      ${pageHeaderHtml({ title: t.title, clubName, logoUrl })}
-      ${locationsLegendHtml}
-      <table>
+      ${pageHeaderHtml({ title: t.title, clubName, logoUrl, locationsLegendHtml, kwText })}
+      <table style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr>
             <th style="${thCss()}">${t.date}</th>
             <th style="${thCss()}">${t.day}</th>
-            <th style="${thCss()}">${t.type}</th>
             <th style="${thCss()}">${t.teams}</th>
             <th style="${thCss()}">${t.time}</th>
             <th style="${thCss()}">${t.loc}</th>
-            <th style="${thCss()}">${t.info}</th>
+            <th style="${thCss()} width: auto;">${t.info}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -500,26 +495,40 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   groupColors?: Record<string, string>;
+  kwText?: string;
 }): string {
-  const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {} } = opts;
+  const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {}, kwText } = opts;
 
-  const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl });
+  const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl, kwText });
   const scheduleInner = scheduleHtml
     .replace(/^\s*<div class="page">/, "")
     .replace(/<\/div>\s*$/, "")
     .replace(new RegExp(pageFooterHtml({ clubName, locale }).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "");
 
   const t = locale === "de"
-    ? { rosterTitle: "Kader-Listen" }
-    : { rosterTitle: "Roster lists" };
+    ? { rosterTitle: "Kader-Listen", trainingMoFr: "Training (Mo-Fr)", gamesWeekends: "Spiele / Weekend" }
+    : { rosterTitle: "Roster lists", trainingMoFr: "Practice (Mon-Fri)", gamesWeekends: "Games / Weekend" };
 
-  const kaderColumns = renderKaderColumnLayoutHtml({ sessions, players, groupColors });
+  const rosterSessions = sessions.filter(s => !s.excludeFromRoster);
+  const isGameOrWeekend = (s: Session) => isGameSession(s) || /^(sa|so)/i.test(s.day || "");
+
+  const trainingRoster = rosterSessions.filter(s => !isGameOrWeekend(s));
+  const gameRoster = rosterSessions.filter(s => isGameOrWeekend(s));
+
+  const kaderColumnsTraining = renderKaderColumnLayoutHtml({ sessions: trainingRoster, players, groupColors });
+  const kaderColumnsGames = renderKaderColumnLayoutHtml({ sessions: gameRoster, players, groupColors });
 
   const rosterSection = `
     <div style="margin-top: 14px;">
-      <div style="font-weight:900; font-size:13px; margin-bottom:8px;">${escapeHtml(t.rosterTitle)}:</div>
-      ${kaderColumns}
+      <div style="font-weight:900; font-size:13px; margin-bottom:8px;">${escapeHtml(t.rosterTitle)} &middot; ${escapeHtml(t.trainingMoFr)}:</div>
+      ${kaderColumnsTraining || '<div style="font-size:11px; color:#666;">Keine Termine</div>'}
     </div>
+    ${gameRoster.length > 0 ? `
+    <div style="margin-top: 14px; padding-top: 14px; border-top: 2px dashed #eee;">
+      <div style="font-weight:900; font-size:13px; margin-bottom:8px;">${escapeHtml(t.rosterTitle)} &middot; ${escapeHtml(t.gamesWeekends)}:</div>
+      ${kaderColumnsGames}
+    </div>
+    ` : ""}
   `;
 
   return `
@@ -654,8 +663,9 @@ export function buildPrintPages(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   groupColors?: Record<string, string>;
+  kwText?: string;
 }): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors, kwText } = opts;
   const pages: PrintPage[] = [];
 
   const firstPageHtml = renderWeekSummaryAndRostersFirstPageHtml({
@@ -666,6 +676,7 @@ export function buildPrintPages(opts: {
     locations,
     logoUrl,
     groupColors,
+    kwText,
   });
   pages.push({
     type: "overview",
@@ -692,14 +703,15 @@ export function buildPreviewPages(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   groupColors?: Record<string, string>;
+  kwText?: string;
 }): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors, kwText } = opts;
 
   const pages: PrintPage[] = [];
 
   pages.push({
     type: "overview",
-    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl, groupColors }),
+    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl, groupColors, kwText }),
     title: locale === "de" ? "Trainingswoche + Kaderlisten" : "Training week + roster lists",
   });
 

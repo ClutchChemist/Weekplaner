@@ -61,6 +61,7 @@ export type CalendarEvent = {
   travelMin?: number | null;
   participants: string[];
   kaderLabel?: string;
+  excludeFromRoster?: boolean;
 };
 
 export type Session = CalendarEvent;

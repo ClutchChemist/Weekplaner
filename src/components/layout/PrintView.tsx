@@ -47,10 +47,6 @@ export function PrintView({
   t,
 }: Props) {
 
-  const mondayDate =
-    plan.sessions.find((s) => (s.day || "").toLowerCase().startsWith("mo"))?.date ??
-    plan.sessions[0]?.date ??
-    new Date().toISOString().slice(0, 10);
 
   const kwText = kwLabelFromPlan(plan);
 
@@ -60,15 +56,14 @@ export function PrintView({
     const rows = namesInPlan
       .map((name) => {
         const def = defs[name];
-        const full = (def?.name ?? name).trim();
-        const abbr = (def?.abbr ?? "").trim();
-        if (!full) return null;
-        if (!abbr || abbr.toLowerCase() === full.toLowerCase()) return full;
-        return `${abbr} = ${full}`;
+        const abbr = (def?.abbr ?? "").trim() || name.substring(0, 3).toUpperCase();
+        return `<strong>${abbr}</strong> = ${name}`;
       })
       .filter((v): v is string => Boolean(v));
 
-    return rows.join("; ");
+    return rows.length > 0 ? (
+      <div dangerouslySetInnerHTML={{ __html: rows.join(" &middot; ") }} />
+    ) : null;
   })();
 
   function sessionLabel(s: Session) {
@@ -145,19 +140,20 @@ export function PrintView({
       </style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {logoUrl ? <img src={logoUrl} alt={clubName} style={{ height: 38 }} /> : null}
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 900 }}>{clubName}</div>
-            <div style={{ fontSize: 11, fontWeight: 800 }}>{t("seasonTrainingOverview")}</div>
-          </div>
+        {/* LINKS: LOGO */}
+        <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
+          {logoUrl ? <img src={logoUrl} alt={clubName} style={{ height: 48, objectFit: "contain" }} /> : <div style={{ width: 48, height: 48, background: "#eee" }} />}
         </div>
 
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, fontWeight: 900 }}>{dateToDDMMYYYY_DOTS(mondayDate)}</div>
-          <div style={{ fontSize: 11, fontWeight: 900 }}>
-            {t("trainingWeek")}: {kwText}
-          </div>
+        {/* MITTE: TITEL & KW */}
+        <div style={{ flex: 1, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <div style={{ fontSize: 18, fontWeight: 900 }}>{t("seasonTrainingOverview")}</div>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>- {t("trainingWeek")} {kwText} -</div>
+        </div>
+
+        {/* RECHTS: VEREIN & ORTE */}
+        <div style={{ flex: 1, textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 2 }}>{clubName}</div>
           {locationLegend ? (
             <div style={{ fontSize: 10, color: "#374151", fontWeight: 700 }}>{locationLegend}</div>
           ) : null}
