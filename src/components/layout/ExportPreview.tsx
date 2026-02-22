@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PrintPage } from "@/utils/printExport";
 
 type Props = {
@@ -6,70 +6,74 @@ type Props = {
   t: (k: string) => string;
 };
 
+// DIN A4 Maße in px bei 96dpi: 794 x 1123
+const A4_W = 794;
+const A4_H = 1123;
+
 export function ExportPreview({ pages, t }: Props) {
   const [currentPage, setCurrentPage] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-
-  if (pages.length === 0) {
-    return <div style={{ padding: 16, color: "#222" }}>{t("previewNoPages")}</div>;
-  }
-
-  const page = pages[currentPage];
+  const page = pages[currentPage] ?? null;
   const canPrev = currentPage > 0;
   const canNext = currentPage < pages.length - 1;
 
+  // Seite in iframe schreiben (kein Cross-Origin, alles lokal)
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !page) return;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+          background: white;
+          color: #111;
+          padding: 10mm;
+          width: ${A4_W}px;
+        }
+        table { border-collapse: collapse; width: 100%; table-layout: auto; }
+        th, td {
+          border: 1px solid #ccc;
+          padding: 3px 5px;
+          font-size: 9px;
+          vertical-align: middle;
+          white-space: nowrap;
+        }
+        th { background: #f3f4f6; font-weight: 700; text-align: center; }
+        td { text-align: center; }
+        td:last-child {
+          white-space: normal;
+          word-break: break-word;
+          text-align: left;
+        }
+        img { max-width: 100%; }
+      </style>
+    </head><body>${page.html}</body></html>`;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    // iframe Höhe dynamisch an Inhalt anpassen
+    const resize = () => {
+      const body = iframe.contentDocument?.body;
+      if (body) {
+        const h = Math.max(A4_H, body.scrollHeight + 20);
+        iframe.style.height = `${h}px`;
+      }
+    };
+    iframe.onload = resize;
+    setTimeout(resize, 150);
+  }, [page, currentPage]);
+
+  if (pages.length === 0) {
+    return <div style={{ padding: 16, color: "#aaa", fontSize: 13 }}>{t("previewNoPages")}</div>;
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Preview-Styles: alles auf dunklem Hintergrund gut lesbar machen */}
-      <style>{`
-        .export-preview-content {
-          color: #111 !important;
-        }
-        .export-preview-content h1,
-        .export-preview-content h2,
-        .export-preview-content h3,
-        .export-preview-content h4,
-        .export-preview-content h5,
-        .export-preview-content h6 {
-          color: #111 !important;
-        }
-        .export-preview-content table {
-          color: #111 !important;
-        }
-        .export-preview-content th {
-          background: #dde1e7 !important;
-          color: #111 !important;
-        }
-        .export-preview-content td {
-          color: #111 !important;
-        }
-        .export-preview-content div,
-        .export-preview-content span,
-        .export-preview-content li,
-        .export-preview-content p,
-        .export-preview-content strong {
-          color: #111 !important;
-        }
-        /* Alle hellen Grautöne die im PDF-HTML als inline-style vorkommen überschreiben */
-        .export-preview-content [style*="color:#999"],
-        .export-preview-content [style*="color: #999"],
-        .export-preview-content [style*="color:#666"],
-        .export-preview-content [style*="color: #666"],
-        .export-preview-content [style*="color:#555"],
-        .export-preview-content [style*="color: #555"],
-        .export-preview-content [style*="color:#b4b4b4"],
-        .export-preview-content [style*="color: #b4b4b4"],
-        .export-preview-content [style*="color:#374151"],
-        .export-preview-content [style*="color: #374151"] {
-          color: #1a1a1a !important;
-        }
-        .export-preview-content [style*="background:#fafafa"],
-        .export-preview-content [style*="background: #fafafa"],
-        .export-preview-content [style*="background:#f5f5f5"],
-        .export-preview-content [style*="background: #f5f5f5"] {
-          background: #e8eaed !important;
-        }
-      `}</style>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#1e1e1e" }}>
       {/* Navigationsleiste */}
       <div
         style={{
@@ -96,9 +100,9 @@ export function ExportPreview({ pages, t }: Props) {
         >
           ◀
         </button>
-        <span style={{ color: "#e8e8e8", fontSize: 14, fontWeight: 600 }}>
-          {t("previewPageLabel")} {currentPage + 1} {t("previewOfLabel")} {pages.length}
-          {page.title ? <> · <span style={{ color: "#bbb", fontWeight: 400 }}>{page.title}</span></> : null}
+        <span style={{ color: "#e8e8e8", fontSize: 13, fontWeight: 600 }}>
+          {t("previewPageLabel")} {currentPage + 1} / {pages.length}
+          {page?.title ? <> · <span style={{ color: "#bbb", fontWeight: 400 }}>{page.title}</span></> : null}
         </span>
         <button
           onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}
@@ -116,18 +120,40 @@ export function ExportPreview({ pages, t }: Props) {
         </button>
       </div>
 
-      {/* Seiteninhalt */}
+      {/* A4-Seitenrahmen auf grauem Hintergrund, vertikal scrollbar */}
       <div
-        className="export-preview-content"
+        ref={containerRef}
         style={{
           flex: 1,
           overflow: "auto",
-          backgroundColor: "#fff",
-          padding: 16,
-          color: "#111",
+          background: "#666",
+          display: "flex",
+          justifyContent: "center",
+          padding: "16px 8px",
         }}
-        dangerouslySetInnerHTML={{ __html: page.html }}
-      />
+      >
+        <div
+          style={{
+            width: A4_W,
+            minHeight: A4_H,
+            background: "white",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
+            flexShrink: 0,
+          }}
+        >
+          <iframe
+            ref={iframeRef}
+            title="PDF Vorschau"
+            scrolling="no"
+            style={{
+              border: "none",
+              width: A4_W,
+              height: A4_H,
+              display: "block",
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

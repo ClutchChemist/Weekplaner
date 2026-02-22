@@ -136,6 +136,7 @@ export function PrintView({
             vertical-align: middle;
             text-align: center;
             white-space: nowrap;
+            width: 1%;
           }
           th { background: #f3f4f6; font-weight: 900; }
 
@@ -143,6 +144,7 @@ export function PrintView({
             white-space: normal !important;
             word-break: break-word;
             text-align: left !important;
+            width: 100% !important;
           }
         `}
       </style>
