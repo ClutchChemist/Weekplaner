@@ -620,6 +620,7 @@ export default function App() {
   const openLocationName = appUiState.openLocationName;
   const rosterOpen = appUiState.rosterOpen;
   const autoTravelLoading = appUiState.autoTravelLoading;
+  const [autoTravelError, setAutoTravelError] = useState<string | null>(null);
   const confirmDialog = appUiState.confirmDialog;
   const rosterSearch = appUiState.rosterSearch;
   const selectedPlayerId = appUiState.selectedPlayerId;
@@ -2390,7 +2391,7 @@ export default function App() {
                       textOverflow: "ellipsis",
                     }}
                   >
-                    🗂 {t("weekArchiveButton")}
+                    🗃️ {t("weekArchiveButton")}
                   </Button>
                 </div>
 
@@ -2414,7 +2415,7 @@ export default function App() {
                     title={t("toggleRightSidebar")}
                     style={{ padding: "8px 10px" }}
                   >
-                    📌 {t("right")}
+                    🗓 {t("right")}
                   </Button>
                   <Button
                     className="touchBtn"
@@ -2746,6 +2747,7 @@ export default function App() {
                                       if (!canAutoTravel || autoTravelLoading) return;
 
                                       setAutoTravelLoading(true);
+                                      setAutoTravelError(null);
                                       try {
                                         // Cache nur nutzen, wenn PlaceIds vorhanden
                                         if (homePid && destPid) {
@@ -2763,9 +2765,17 @@ export default function App() {
                                           if (homePid && destPid) {
                                             setCachedTravelMinutes(homePid, destPid, minutes, theme, setTheme);
                                           }
+                                        } else {
+                                          setAutoTravelError(lang === "de" ? "Keine Route gefunden." : "No route found.");
                                         }
-                                      } catch {
-                                        // ignore travel API errors and keep manual entry
+                                      } catch (err) {
+                                        const msg = err instanceof Error ? err.message : String(err);
+                                        const isNetwork = msg.includes("fetch") || msg.includes("Failed") || msg.includes("NetworkError");
+                                        setAutoTravelError(
+                                          isNetwork
+                                            ? (lang === "de" ? "🔌 Maps-Proxy nicht erreichbar (Port 5055). Proxy starten?" : "🔌 Maps proxy not reachable (port 5055). Start proxy?")
+                                            : (lang === "de" ? `Fehler: ${msg}` : `Error: ${msg}`)
+                                        );
                                       } finally {
                                         setAutoTravelLoading(false);
                                       }
@@ -2793,6 +2803,11 @@ export default function App() {
                                       </button>
                                     );
                                   })()}
+                                  {autoTravelError && (
+                                    <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 800, marginTop: 4 }}>
+                                      {autoTravelError}
+                                    </div>
+                                  )}
                                 </div>
                               </>
                             )}

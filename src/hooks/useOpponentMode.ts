@@ -18,10 +18,11 @@ export function getOpponentName(raw: string): string {
 }
 
 export function composeOpponentInfo(mode: OpponentMode, name: string): string {
-  const trimmed = name.trim();
-  if (mode === "away") return trimmed ? `@ ${trimmed}` : "@";
-  if (mode === "home") return trimmed ? `vs ${trimmed}` : "vs";
-  return trimmed;
+  // Kein .trim() hier – der User tippt gerade, Leerzeichen müssen erhalten bleiben.
+  // Normalisierung (trim) geschieht beim Speichern via normalizeOpponentInfo.
+  if (mode === "away") return name !== "" ? `@ ${name}` : "@";
+  if (mode === "home") return name !== "" ? `vs ${name}` : "vs";
+  return name;
 }
 
 export function useOpponentMode(raw: string) {

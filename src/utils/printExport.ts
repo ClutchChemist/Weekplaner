@@ -390,11 +390,11 @@ function renderWeekScheduleOnlyHtml(opts: {
       const prev = arr[i - 1];
       const sameDayAsPrev = prev ? prev.date === s.date : false;
       const topBorder = !sameDayAsPrev ? "border-top: 2px solid #aaa;" : "border-top: 1px solid #ddd;";
-      const shrinkCell = "border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; white-space: nowrap; width: 1px;";
+      const baseCell = "border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; overflow: hidden; text-overflow: ellipsis;";
       const cellBg = s.rowColor ? `background: ${escapeHtml(s.rowColor)};` : (isGame ? "background: #F59E0B;" : "");
-      const dateTdCss = `${shrinkCell} ${topBorder}`;
-      const dataCellCss = `${shrinkCell} ${cellBg} color: #111; ${topBorder}`;
-      const infoCellCss = `border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; white-space: normal; word-break: break-word; text-align: left; ${cellBg} color: #111; ${topBorder}`;
+      const dateTdCss = `${baseCell} white-space: nowrap; ${topBorder}`;
+      const dataCellCss = `${baseCell} white-space: nowrap; ${cellBg} color: #111; ${topBorder}`;
+      const infoCellCss = `${baseCell} white-space: normal; word-break: break-word; text-align: left; ${cellBg} color: #111; ${topBorder}`;
 
       return `
         <tr>
@@ -409,18 +409,28 @@ function renderWeekScheduleOnlyHtml(opts: {
     })
     .join("");
 
+  const thBase = "border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; overflow: hidden;";
+
   return `
     <div class="page">
       ${pageHeaderHtml({ title: t.title, clubName, logoUrl, locationsLegendHtml, kwText })}
-      <table style="width: 100%; border-collapse: collapse; table-layout: auto;">
+      <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+        <colgroup>
+          <col style="width: 10%;" />
+          <col style="width: 10%;" />
+          <col style="width: 10%;" />
+          <col style="width: 10%;" />
+          <col style="width: 10%;" />
+          <col style="width: 50%;" />
+        </colgroup>
         <thead>
           <tr>
-            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; width: 1px;">${t.date}</th>
-            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; width: 1px;">${t.day}</th>
-            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; width: 1px;">${t.teams}</th>
-            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; width: 1px;">${t.time}</th>
-            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; width: 1px;">${t.loc}</th>
-            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.info}</th>
+            <th style="${thBase}">${t.date}</th>
+            <th style="${thBase}">${t.day}</th>
+            <th style="${thBase}">${t.teams}</th>
+            <th style="${thBase}">${t.time}</th>
+            <th style="${thBase}">${t.loc}</th>
+            <th style="${thBase} text-align: left; white-space: normal;">${t.info}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>

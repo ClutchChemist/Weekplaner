@@ -136,15 +136,23 @@ export function PrintView({
             vertical-align: middle;
             text-align: center;
             white-space: nowrap;
-            width: 1%;
+            overflow: hidden;
           }
           th { background: #f3f4f6; font-weight: 900; }
+
+          /* Wochenplan-Tabelle: linke 5 Spalten je 10% = 50%, Info 50% */
+          .weekTable { table-layout: fixed; }
+          .weekTable .colDate  { width: 10%; }
+          .weekTable .colDay   { width: 10%; }
+          .weekTable .colTime  { width: 10%; }
+          .weekTable .colTeam  { width: 10%; }
+          .weekTable .colHall  { width: 10%; }
+          .weekTable .colInfo  { width: 50%; white-space: normal !important; word-break: break-word; text-align: left !important; }
 
           .infoCol {
             white-space: normal !important;
             word-break: break-word;
             text-align: left !important;
-            width: 100% !important;
           }
         `}
       </style>
@@ -176,15 +184,23 @@ export function PrintView({
 
       <div style={{ marginTop: 8, fontWeight: 900, fontSize: 11 }}>{t("weekOverview")}</div>
       <div style={{ marginTop: 4 }}>
-        <table style={{ tableLayout: "auto" }}>
+        <table className="weekTable">
+          <colgroup>
+            <col className="colDate" />
+            <col className="colDay" />
+            <col className="colTime" />
+            <col className="colTeam" />
+            <col className="colHall" />
+            <col className="colInfo" />
+          </colgroup>
           <thead>
             <tr>
-              <th style={{ whiteSpace: "nowrap" }}>{t("date")}</th>
-              <th style={{ whiteSpace: "nowrap" }}>{t("day")}</th>
-              <th style={{ whiteSpace: "nowrap" }}>{t("time")}</th>
-              <th style={{ whiteSpace: "nowrap" }}>{t("teams")}</th>
-              <th style={{ whiteSpace: "nowrap" }}>{t("hall")}</th>
-              <th className="infoCol">{t("info")}</th>
+              <th className="colDate">{t("date")}</th>
+              <th className="colDay">{t("day")}</th>
+              <th className="colTime">{t("time")}</th>
+              <th className="colTeam">{t("teams")}</th>
+              <th className="colHall">{t("hall")}</th>
+              <th className="colInfo">{t("info")}</th>
             </tr>
           </thead>
           <tbody>
@@ -199,17 +215,16 @@ export function PrintView({
               const isGame = infoText.toLowerCase().startsWith("vs") || infoText.startsWith("@");
 
               const topBorder = !sameDayAsPrev ? (isWeekend ? "2px solid #111" : "1px solid #bbb") : "1px solid #ddd";
-              // rowColor definiert Hintergrund für Datenzellen (Team, Zeit, Ort, Info)
               const rowBg = s.rowColor || (isGame ? "#F59E0B" : "transparent");
 
               return (
                 <tr key={s.id}>
-                  <td style={{ borderTop: topBorder, whiteSpace: "nowrap" }}>{sameDayAsPrev ? "" : exportDateCell(s)}</td>
-                  <td style={{ borderTop: topBorder, whiteSpace: "nowrap" }}>{sameDayAsPrev ? "" : s.day}</td>
-                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111", whiteSpace: "nowrap" }}>{s.time}</td>
-                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111", whiteSpace: "nowrap" }}>{(s.teams ?? []).join(" / ")}</td>
-                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111", whiteSpace: "nowrap" }}>{s.location}</td>
-                  <td className="infoCol" style={{ borderTop: topBorder, background: rowBg, color: "#111" }}>
+                  <td style={{ borderTop: topBorder }}>{sameDayAsPrev ? "" : exportDateCell(s)}</td>
+                  <td style={{ borderTop: topBorder }}>{sameDayAsPrev ? "" : s.day}</td>
+                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111" }}>{s.time}</td>
+                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111" }}>{(s.teams ?? []).join(" / ")}</td>
+                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111" }}>{s.location}</td>
+                  <td className="colInfo" style={{ borderTop: topBorder, background: rowBg, color: "#111" }}>
                     {s.info ?? ""}
                   </td>
                 </tr>

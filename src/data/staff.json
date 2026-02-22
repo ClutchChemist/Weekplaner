@@ -1,0 +1,26 @@
+[
+  {
+    "id": "c_andrej",
+    "name": "Andrej König",
+    "role": "Coach",
+    "license": "B-23273"
+  },
+  {
+    "id": "c_edgars",
+    "name": "Edgars Ikstens",
+    "role": "Coach",
+    "license": ""
+  },
+  {
+    "id": "c_mardin",
+    "name": "Mardin Ahmedin",
+    "role": "Coach",
+    "license": ""
+  },
+  {
+    "id": "c_4a4d66ae-5cf2-4f9a-89cb-faf0c1a78b6e",
+    "name": "Felix Engel",
+    "role": "Coach",
+    "license": ""
+  }
+]
