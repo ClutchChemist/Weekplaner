@@ -954,6 +954,7 @@ export default function App() {
     formWarmupMin: number;
     formTravelMin: number;
     formExcludeFromRoster: boolean;
+    formRowColor: string;
   };
 
   const [editorState, setEditorState] = useState<EditorState>({
@@ -968,6 +969,7 @@ export default function App() {
     formWarmupMin: 30,
     formTravelMin: 0,
     formExcludeFromRoster: false,
+    formRowColor: "",
   });
 
   const {
@@ -982,6 +984,7 @@ export default function App() {
     formWarmupMin,
     formTravelMin,
     formExcludeFromRoster,
+    formRowColor,
   } = editorState;
 
   function setEditorField<K extends keyof EditorState>(key: K, value: React.SetStateAction<EditorState[K]>) {
@@ -1002,6 +1005,7 @@ export default function App() {
   const setFormWarmupMin = (value: React.SetStateAction<number>) => setEditorField("formWarmupMin", value);
   const setFormTravelMin = (value: React.SetStateAction<number>) => setEditorField("formTravelMin", value);
   const setFormExcludeFromRoster = (value: React.SetStateAction<boolean>) => setEditorField("formExcludeFromRoster", value);
+  const setFormRowColor = (value: React.SetStateAction<string>) => setEditorField("formRowColor", value);
 
   const editorRef = useRef<HTMLDivElement | null>(null);
   const opponentInputRef = useRef<HTMLInputElement | null>(null);
@@ -1101,6 +1105,7 @@ export default function App() {
     setFormWarmupMin(30);
     setFormTravelMin(0);
     setFormExcludeFromRoster(false);
+    setFormRowColor("");
   }
 
   function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
@@ -1122,6 +1127,7 @@ export default function App() {
       travelMin: isGame ? Math.max(0, Math.floor(formTravelMin)) : null,
       participants: keepParticipants ?? [],
       excludeFromRoster: formExcludeFromRoster,
+      rowColor: formRowColor || undefined,
     };
   }
 
@@ -1189,6 +1195,7 @@ export default function App() {
     setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
     setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
     setFormExcludeFromRoster(s.excludeFromRoster === true);
+    setFormRowColor(s.rowColor ?? "");
   }
 
   async function onDeleteSession(sessionId: string) {
@@ -2796,7 +2803,7 @@ export default function App() {
                   </div>
 
                   {/* Options */}
-                  <div style={{ padding: "0 12px", marginBottom: 16 }}>
+                  <div style={{ padding: "0 12px", marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                       <input
                         type="checkbox"
@@ -2806,6 +2813,25 @@ export default function App() {
                       />
                       <span style={{ fontSize: 13, fontWeight: 900 }}>{t("excludeFromRoster") || "Aus Kaderübersicht verbergen"}</span>
                     </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 900 }}>Zeilenfarbe im Zeitplan:</span>
+                      <input
+                        type="color"
+                        value={formRowColor || "#ffffff"}
+                        onChange={(e) => setFormRowColor(e.target.value === "#ffffff" ? "" : e.target.value)}
+                        style={{ width: 36, height: 28, padding: 2, border: "1px solid var(--ui-border)", borderRadius: 6, cursor: "pointer" }}
+                        title="Hintergrundfarbe für Datenzellen im Zeitplan (nur Preview/Export)"
+                      />
+                      {formRowColor ? (
+                        <button
+                          type="button"
+                          onClick={() => setFormRowColor("")}
+                          style={{ fontSize: 11, color: "var(--ui-muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                        >
+                          Farbe entfernen ✕
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>

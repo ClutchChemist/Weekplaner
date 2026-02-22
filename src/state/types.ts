@@ -62,6 +62,7 @@ export type CalendarEvent = {
   participants: string[];
   kaderLabel?: string;
   excludeFromRoster?: boolean;
+  rowColor?: string;
 };
 
 export type Session = CalendarEvent;

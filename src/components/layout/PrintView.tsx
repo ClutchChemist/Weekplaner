@@ -1,6 +1,6 @@
 import type { CalendarEvent as Session, Coach, GroupId, Player, ThemeLocations, WeekPlan } from "@/types";
 import { PRINT_GROUP_ORDER, getPlayerGroup } from "@/state/playerGrouping";
-import { dateToDDMMYYYY_DOTS, dateToShortDE, kwLabelFromPlan, weekdayShortDE } from "@/utils/date";
+import { dateToShortDE, kwLabelFromPlan, weekdayShortDE } from "@/utils/date";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
 
 type Props = {
@@ -78,9 +78,14 @@ export function PrintView({
   }
 
   function exportDateCell(s: Session) {
-    const day = (s.day || "").toLowerCase();
-    if (day.startsWith("mo")) return dateToDDMMYYYY_DOTS(s.date);
-    return dateToShortDE(s.date);
+    // Format: DD-Mon (z.B. 22-Feb)
+    const raw = s.date || "";
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return raw;
+    const day = String(d.getDate()).padStart(2, "0");
+    const monthNames = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+    const mon = monthNames[d.getMonth()] ?? "";
+    return `${day}-${mon}`;
   }
 
   function sortedParticipantsForSession(s: Session): Player[] {
@@ -169,22 +174,14 @@ export function PrintView({
 
       <div style={{ marginTop: 8, fontWeight: 900, fontSize: 11 }}>{t("weekOverview")}</div>
       <div style={{ marginTop: 4 }}>
-        <table style={{ tableLayout: "fixed" }}>
-          <colgroup>
-            <col style={{ width: 58 }} />
-            <col style={{ width: 26 }} />
-            <col style={{ width: 58 }} />
-            <col style={{ width: 56 }} />
-            <col style={{ width: 46 }} />
-            <col />
-          </colgroup>
+        <table style={{ tableLayout: "auto" }}>
           <thead>
             <tr>
-              <th>{t("date")}</th>
-              <th>{t("day")}</th>
-              <th>{t("time")}</th>
-              <th>{t("teams")}</th>
-              <th>{t("hall")}</th>
+              <th style={{ whiteSpace: "nowrap" }}>{t("date")}</th>
+              <th style={{ whiteSpace: "nowrap" }}>{t("day")}</th>
+              <th style={{ whiteSpace: "nowrap" }}>{t("time")}</th>
+              <th style={{ whiteSpace: "nowrap" }}>{t("teams")}</th>
+              <th style={{ whiteSpace: "nowrap" }}>{t("hall")}</th>
               <th className="infoCol">{t("info")}</th>
             </tr>
           </thead>
@@ -200,15 +197,17 @@ export function PrintView({
               const isGame = infoText.toLowerCase().startsWith("vs") || infoText.startsWith("@");
 
               const topBorder = !sameDayAsPrev ? (isWeekend ? "2px solid #111" : "1px solid #bbb") : "1px solid #ddd";
+              // rowColor definiert Hintergrund für Datenzellen (Team, Zeit, Ort, Info)
+              const rowBg = s.rowColor || (isGame ? "#F59E0B" : "transparent");
 
               return (
-                <tr key={s.id} style={{ background: isGame ? "#F59E0B" : "transparent", color: "#111" }}>
-                  <td style={{ borderTop: topBorder }}>{sameDayAsPrev ? "" : exportDateCell(s)}</td>
-                  <td style={{ borderTop: topBorder }}>{sameDayAsPrev ? "" : s.day}</td>
-                  <td style={{ borderTop: topBorder }}>{s.time}</td>
-                  <td style={{ borderTop: topBorder }}>{(s.teams ?? []).join(" / ")}</td>
-                  <td style={{ borderTop: topBorder }}>{s.location}</td>
-                  <td className="infoCol" style={{ borderTop: topBorder }}>
+                <tr key={s.id}>
+                  <td style={{ borderTop: topBorder, whiteSpace: "nowrap" }}>{sameDayAsPrev ? "" : exportDateCell(s)}</td>
+                  <td style={{ borderTop: topBorder, whiteSpace: "nowrap" }}>{sameDayAsPrev ? "" : s.day}</td>
+                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111", whiteSpace: "nowrap" }}>{s.time}</td>
+                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111", whiteSpace: "nowrap" }}>{(s.teams ?? []).join(" / ")}</td>
+                  <td style={{ borderTop: topBorder, background: rowBg, color: "#111", whiteSpace: "nowrap" }}>{s.location}</td>
+                  <td className="infoCol" style={{ borderTop: topBorder, background: rowBg, color: "#111" }}>
                     {s.info ?? ""}
                   </td>
                 </tr>

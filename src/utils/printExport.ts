@@ -24,6 +24,14 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/'/g, "&#039;");
 }
 
+function dateToDDMon(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, "0");
+  const monthNames = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  return `${day}-${monthNames[d.getMonth()] ?? ""}`;
+}
+
 function isGameSession(s: Session): boolean {
   const info = s.info || "";
   return info.includes("vs") || info.includes("@");
@@ -382,16 +390,20 @@ function renderWeekScheduleOnlyHtml(opts: {
       const prev = arr[i - 1];
       const sameDayAsPrev = prev ? prev.date === s.date : false;
       const topBorder = !sameDayAsPrev ? "border-top: 2px solid #aaa;" : "border-top: 1px solid #ddd;";
-      const tdSmall = "border: 1px solid #ccc; padding: 3px 5px; font-size: 9px;";
+      const noWrap = "white-space: nowrap;";
+      const tdSmall = `border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; ${noWrap}`;
+      const cellBg = s.rowColor ? `background: ${escapeHtml(s.rowColor)};` : (isGame ? "background: #F59E0B;" : "");
+      const dateTdCss = `border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; ${noWrap}`;
+      const dataCellCss = `${tdSmall} ${cellBg} color: #111;`;
 
       return `
-        <tr style="${isGame ? "background:#F59E0B; color:#111;" : ""}">
-          <td style="${tdSmall} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.date)}</td>
-          <td style="${tdSmall} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.day)}</td>
-          <td style="${tdSmall} ${topBorder}">${escapeHtml(s.teams.join(", "))}</td>
-          <td style="${tdSmall} ${topBorder}">${escapeHtml(s.time)}</td>
-          <td style="${tdSmall} ${topBorder}">${escapeHtml(s.location)}</td>
-          <td style="${tdSmall} ${topBorder} width: auto;">${escapeHtml(s.info || "")}</td>
+        <tr>
+          <td style="${dateTdCss} ${topBorder}">${sameDayAsPrev ? "" : dateToDDMon(s.date)}</td>
+          <td style="${dateTdCss} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.day)}</td>
+          <td style="${dataCellCss} ${topBorder}">${escapeHtml(s.teams.join(", "))}</td>
+          <td style="${dataCellCss} ${topBorder}">${escapeHtml(s.time)}</td>
+          <td style="${dataCellCss} ${topBorder}">${escapeHtml(s.location)}</td>
+          <td style="border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; ${cellBg} color: #111; ${topBorder} word-break: break-word;">${escapeHtml(s.info || "")}</td>
         </tr>
       `;
     })
