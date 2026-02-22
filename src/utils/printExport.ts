@@ -182,7 +182,7 @@ export function renderWeekOverviewHtml(opts: {
   logoUrl?: string;
   kwText?: string;
 }): string {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl, kwText } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl } = opts;
 
   const trainingSessions = sessions.filter((s) => !isGameSession(s));
   const games = sessions.filter((s) => isGameSession(s));
@@ -193,8 +193,8 @@ export function renderWeekOverviewHtml(opts: {
 
   const locationsLegendHtml = (() => {
     const defs = locations?.definitions || {};
-    const customLocs = locations?.custom || {};
     const newLocs = locations?.locations || {};
+    const customLocs = locations?.custom || {};
     const allLocNames = new Set<string>();
 
     sessions.forEach((s) => {
@@ -208,11 +208,16 @@ export function renderWeekOverviewHtml(opts: {
     for (const name of Array.from(allLocNames).sort()) {
       const def = defs[name];
       const abbr = (def?.abbr ?? "").trim() || name.substring(0, 3).toUpperCase();
-      legendItems.push(`<strong>${escapeHtml(abbr)}</strong> = ${escapeHtml(name)}`);
+      const fullName = (def?.name ?? name).trim();
+      const resolvedAddr = (newLocs[name]?.address) || customLocs[name] || "";
+      const addrShort = resolvedAddr ? resolvedAddr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ") : "";
+      let text = `<strong>${escapeHtml(abbr)}</strong> = ${escapeHtml(fullName)}`;
+      if (addrShort) text += ` | ${escapeHtml(addrShort)}`;
+      legendItems.push(text);
     }
 
     if (legendItems.length === 0) return "";
-    return legendItems.join(" &middot; ");
+    return legendItems.map((line) => `<div style="font-size:9px; line-height:1.5; color:#444;">${line}</div>`).join("");
   })();
 
   const buildRosterTable = (session: Session): string => {
@@ -352,35 +357,23 @@ function renderWeekScheduleOnlyHtml(opts: {
       return customLocs?.[name] || "";
     };
 
-    const items = Array.from(allLocNames)
+    const lines = Array.from(allLocNames)
       .sort((a, b) => a.localeCompare(b))
       .map((name) => {
         const d = defs[name] ?? { abbr: name, name, hallNo: "" };
-        const hall = d.hallNo ? ` · Halle ${d.hallNo}` : "";
+        const abbr = d.abbr || name;
+        const fullName = d.name || name;
         const addr = resolveAddr(name);
         const addrShort = addr
-          ? addr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 3).join(", ")
+          ? addr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ")
           : "";
-        return `
-          <div style="border:1px solid #eee; padding:6px 8px; border-radius:8px;">
-            <div style="font-weight:900; font-size:11px;">${escapeHtml(d.abbr || name)} — ${escapeHtml(d.name || name)}${escapeHtml(hall)}</div>
-            ${addrShort
-            ? `<div style="font-size:10px; color:#555; margin-top:2px;">${escapeHtml(addrShort)}</div>`
-            : `<div style="font-size:10px; color:#999; margin-top:2px;">(no address)</div>`
-          }
-          </div>
-        `;
+        let text = `<strong>${escapeHtml(abbr)}</strong> = ${escapeHtml(fullName)}`;
+        if (addrShort) text += ` | ${escapeHtml(addrShort)}`;
+        return `<div style="font-size:9px; line-height:1.5; color:#444;">${text}</div>`;
       })
       .join("");
 
-    return `
-      <div style="margin: 8px 0 14px 0;">
-        <div style="font-weight:900; font-size:11px; margin-bottom:6px;">Orte (im Plan)</div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          ${items}
-        </div>
-      </div>
-    `;
+    return lines;
   })();
 
   const rows = sessions
@@ -389,15 +382,16 @@ function renderWeekScheduleOnlyHtml(opts: {
       const prev = arr[i - 1];
       const sameDayAsPrev = prev ? prev.date === s.date : false;
       const topBorder = !sameDayAsPrev ? "border-top: 2px solid #aaa;" : "border-top: 1px solid #ddd;";
+      const tdSmall = "border: 1px solid #ccc; padding: 3px 5px; font-size: 9px;";
 
       return `
         <tr style="${isGame ? "background:#F59E0B; color:#111;" : ""}">
-          <td style="${tdCss()} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.date)}</td>
-          <td style="${tdCss()} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.day)}</td>
-          <td style="${tdCss()} ${topBorder}">${escapeHtml(s.teams.join(", "))}</td>
-          <td style="${tdCss()} ${topBorder}">${escapeHtml(s.time)}</td>
-          <td style="${tdCss()} ${topBorder}">${escapeHtml(s.location)}</td>
-          <td style="${tdCss()} ${topBorder} width: auto;">${escapeHtml(s.info || "")}</td>
+          <td style="${tdSmall} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.date)}</td>
+          <td style="${tdSmall} ${topBorder}">${sameDayAsPrev ? "" : escapeHtml(s.day)}</td>
+          <td style="${tdSmall} ${topBorder}">${escapeHtml(s.teams.join(", "))}</td>
+          <td style="${tdSmall} ${topBorder}">${escapeHtml(s.time)}</td>
+          <td style="${tdSmall} ${topBorder}">${escapeHtml(s.location)}</td>
+          <td style="${tdSmall} ${topBorder} width: auto;">${escapeHtml(s.info || "")}</td>
         </tr>
       `;
     })
@@ -406,15 +400,23 @@ function renderWeekScheduleOnlyHtml(opts: {
   return `
     <div class="page">
       ${pageHeaderHtml({ title: t.title, clubName, logoUrl, locationsLegendHtml, kwText })}
-      <table style="width: 100%; border-collapse: collapse;">
+      <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px;">
+        <colgroup>
+          <col style="width: 58px;" />
+          <col style="width: 26px;" />
+          <col style="width: 56px;" />
+          <col style="width: 58px;" />
+          <col style="width: 46px;" />
+          <col />
+        </colgroup>
         <thead>
           <tr>
-            <th style="${thCss()}">${t.date}</th>
-            <th style="${thCss()}">${t.day}</th>
-            <th style="${thCss()}">${t.teams}</th>
-            <th style="${thCss()}">${t.time}</th>
-            <th style="${thCss()}">${t.loc}</th>
-            <th style="${thCss()} width: auto;">${t.info}</th>
+            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.date}</th>
+            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.day}</th>
+            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.teams}</th>
+            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.time}</th>
+            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.loc}</th>
+            <th style="border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold;">${t.info}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>

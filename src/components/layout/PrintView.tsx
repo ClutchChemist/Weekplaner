@@ -52,18 +52,22 @@ export function PrintView({
 
   const locationLegend = (() => {
     const defs = locations?.definitions ?? {};
+    const newLocs = locations?.locations ?? {};
     const namesInPlan = Array.from(new Set((plan.sessions ?? []).map((s) => String(s.location ?? "").trim()).filter(Boolean)));
     const rows = namesInPlan
       .map((name) => {
         const def = defs[name];
         const abbr = (def?.abbr ?? "").trim() || name.substring(0, 3).toUpperCase();
-        return `<strong>${abbr}</strong> = ${name}`;
+        const fullName = (def?.name ?? name).trim();
+        const addr = (newLocs[name]?.address ?? locations?.bsh ?? "").trim();
+        const addrShort = addr ? addr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ") : "";
+        let text = `<strong>${abbr}</strong> = ${fullName}`;
+        if (addrShort) text += ` | ${addrShort}`;
+        return text;
       })
-      .filter((v): v is string => Boolean(v));
+      .filter(Boolean);
 
-    return rows.length > 0 ? (
-      <div dangerouslySetInnerHTML={{ __html: rows.join(" &middot; ") }} />
-    ) : null;
+    return rows.length > 0 ? rows : null;
   })();
 
   function sessionLabel(s: Session) {
@@ -122,8 +126,8 @@ export function PrintView({
           table { border-collapse: collapse; width: 100%; table-layout: auto; }
           th, td {
             border: 1px solid #ddd;
-            padding: 6px 8px;
-            font-size: 11px;
+            padding: 3px 5px;
+            font-size: 9px;
             vertical-align: middle;
             text-align: center;
             white-space: nowrap;
@@ -134,7 +138,6 @@ export function PrintView({
             white-space: normal !important;
             word-break: break-word;
             text-align: left !important;
-            min-width: 260px;
           }
         `}
       </style>
@@ -153,16 +156,28 @@ export function PrintView({
 
         {/* RECHTS: VEREIN & ORTE */}
         <div style={{ flex: 1, textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-          <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 2 }}>{clubName}</div>
+          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 2 }}>{clubName}</div>
           {locationLegend ? (
-            <div style={{ fontSize: 10, color: "#374151", fontWeight: 700 }}>{locationLegend}</div>
+            <div style={{ textAlign: "right" }}>
+              {locationLegend.map((line, i) => (
+                <div key={i} style={{ fontSize: 8, color: "#444", lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: line }} />
+              ))}
+            </div>
           ) : null}
         </div>
       </div>
 
-      <div style={{ marginTop: 12, fontWeight: 900, fontSize: 12 }}>{t("weekOverview")}</div>
-      <div style={{ marginTop: 6 }}>
-        <table>
+      <div style={{ marginTop: 8, fontWeight: 900, fontSize: 11 }}>{t("weekOverview")}</div>
+      <div style={{ marginTop: 4 }}>
+        <table style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            <col style={{ width: 58 }} />
+            <col style={{ width: 26 }} />
+            <col style={{ width: 58 }} />
+            <col style={{ width: 56 }} />
+            <col style={{ width: 46 }} />
+            <col />
+          </colgroup>
           <thead>
             <tr>
               <th>{t("date")}</th>
@@ -170,7 +185,6 @@ export function PrintView({
               <th>{t("time")}</th>
               <th>{t("teams")}</th>
               <th>{t("hall")}</th>
-              <th>{t("roster")}</th>
               <th className="infoCol">{t("info")}</th>
             </tr>
           </thead>
@@ -194,7 +208,6 @@ export function PrintView({
                   <td style={{ borderTop: topBorder }}>{s.time}</td>
                   <td style={{ borderTop: topBorder }}>{(s.teams ?? []).join(" / ")}</td>
                   <td style={{ borderTop: topBorder }}>{s.location}</td>
-                  <td style={{ borderTop: topBorder }}>{sessionLabel(s)}</td>
                   <td className="infoCol" style={{ borderTop: topBorder }}>
                     {s.info ?? ""}
                   </td>
