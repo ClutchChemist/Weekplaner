@@ -5,14 +5,12 @@ import React, {
   useRef,
   useState,
   type CSSProperties,
-  type ReactNode,
 } from "react";
 import {
   DndContext,
   MouseSensor,
   TouchSensor,
   useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -345,49 +343,7 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
 
 DraggablePlayerRow.displayName = "DraggablePlayerRow";
 
-function DroppableSessionShell({
-  session,
-  children,
-  hasHistoryFlag = false,
-  isEditing = false,
-  isSelected = false,
-  onSelect,
-}: {
-  session: Session;
-  children: ReactNode;
-  hasHistoryFlag?: boolean;
-  isEditing?: boolean;
-  isSelected?: boolean;
-  onSelect?: (session: Session) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `session:${session.id}`,
-    data: { type: "session", sessionId: session.id },
-  });
 
-  const emphasize = isEditing || isSelected;
-  const baseBorder = emphasize ? "2px solid var(--ui-accent)" : (hasHistoryFlag ? "1px solid #ef4444" : `1px solid var(--ui-border)`);
-  const baseBg = emphasize ? "rgba(59,130,246,0.25)" : (hasHistoryFlag ? "rgba(239,68,68,0.08)" : "var(--ui-card)");
-
-  return (
-    <div
-      id={`session_card_${session.id}`}
-      ref={setNodeRef}
-      style={{
-        border: isOver ? `2px dashed var(--ui-soft)` : baseBorder,
-        borderRadius: 14,
-        padding: 12,
-        background: baseBg,
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (onSelect) onSelect(session);
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 /* ============================================================
    Optional right pane: Calendar week view (DnD)
