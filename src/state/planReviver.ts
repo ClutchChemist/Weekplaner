@@ -1,5 +1,7 @@
 import type { Session, WeekPlan } from "./types";
 import { normalizeDash } from "../utils/date";
+import { domainSessionToLegacySession, legacySessionToDomainSession } from "@/shared/domain/sessionAdapter";
+import { sortSessions } from "@/features/week-planning/selectors/sessionSelectors";
 
 export function reviveWeekPlan(raw: string): WeekPlan | null {
   const parsed = JSON.parse(raw);
@@ -13,7 +15,7 @@ export function reviveWeekPlan(raw: string): WeekPlan | null {
       ? (rawSession as Record<string, unknown>)
       : {};
 
-    return {
+    const normalizedSession: Session = {
       id: String(s.id ?? ""),
       date: String(s.date ?? ""),
       day: String(s.day ?? ""),
@@ -26,16 +28,13 @@ export function reviveWeekPlan(raw: string): WeekPlan | null {
       participants: Array.isArray(s.participants) ? s.participants.map((x) => String(x)) : [],
       kaderLabel: s.kaderLabel ? String(s.kaderLabel) : undefined,
     };
+    return domainSessionToLegacySession(legacySessionToDomainSession(normalizedSession));
   });
 
-  sessions.sort((a, b) => {
-    const ad = a.date.localeCompare(b.date);
-    if (ad !== 0) return ad;
-    return a.time.localeCompare(b.time);
-  });
+  const sortedSessions = sortSessions(sessions);
 
   return {
     weekId: String(root.weekId ?? "LAST"),
-    sessions,
+    sessions: sortedSessions,
   };
 }

@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { CalendarEvent as Session, WeekPlan } from "@/types";
+import { sortSessions } from "@/features/week-planning/selectors/sessionSelectors";
 
 export function useSessionEditor(
   setPlan: Dispatch<SetStateAction<WeekPlan>>,
@@ -19,13 +20,7 @@ export function useSessionEditor(
           ? prev.sessions.map((s) => (s.id === session.id ? nextSession : s))
           : [...prev.sessions, nextSession];
 
-        sessions.sort((a, b) => {
-          const byDate = a.date.localeCompare(b.date);
-          if (byDate !== 0) return byDate;
-          return a.time.localeCompare(b.time);
-        });
-
-        return { ...prev, sessions };
+        return { ...prev, sessions: sortSessions(sessions) };
       });
     },
     [setPlan, sortParticipants]

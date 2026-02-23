@@ -121,6 +121,7 @@ import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
 import { normalizeYearColor, pickTextColor } from "./utils/color";
 import { downloadJson } from "./utils/json";
 import { randomId } from "./utils/id";
+import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
 
@@ -771,7 +772,7 @@ export default function App() {
     masterPlan,
     reviveWeekPlan
   );
-  const scheduleSessions = plan.sessions;
+  const scheduleSessions = useMemo(() => selectScheduleSessions(plan), [plan]);
 
   /* ----------------------
      Export HTML (Source of Truth)
