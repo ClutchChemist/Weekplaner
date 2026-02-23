@@ -5,7 +5,25 @@ import { WEEK_ARCHIVE_STORAGE_KEY } from "../src/state/weekArchive";
 
 describe("useWeekArchiveManager", () => {
   beforeEach(() => {
-    localStorage.removeItem(WEEK_ARCHIVE_STORAGE_KEY);
+    const store = new Map<string, string>();
+    const mockedStorage = {
+      getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (_index: number) => null,
+      get length() {
+        return store.size;
+      },
+    };
+    (globalThis as { localStorage: typeof mockedStorage }).localStorage = mockedStorage;
+    globalThis.localStorage.removeItem(WEEK_ARCHIVE_STORAGE_KEY);
   });
 
   it("saves current week into archive for active profile", () => {
@@ -79,4 +97,3 @@ describe("useWeekArchiveManager", () => {
     expect(createWeekFromMode).not.toHaveBeenCalled();
   });
 });
-
