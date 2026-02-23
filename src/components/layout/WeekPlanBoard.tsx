@@ -172,6 +172,7 @@ export function WeekPlanBoard({
             {(() => {
               const dayLabel = weekdayShortLocalized(s.date, lang) || s.day;
               const participantsCollapsed = collapsedParticipantsBySession[s.id] === true;
+              const rosterHidden = s.excludeFromRoster === true;
               return (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -250,16 +251,18 @@ export function WeekPlanBoard({
 
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 12, color: "var(--ui-text)", fontWeight: 900 }}>
-                        {(s.participants ?? []).length} {t("players")}
+                        {rosterHidden ? (t("excludeFromRoster") || "Aus Kaderübersicht verborgen") : `${(s.participants ?? []).length} ${t("players")}`}
                       </div>
                       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8, flexWrap: "wrap" }}>
-                        <Button
-                          variant="outline"
-                          onClick={() => onToggleParticipantsCollapse(s.id)}
-                          style={{ padding: "8px 10px" }}
-                        >
-                          {participantsCollapsed ? t("expandPlayers") : t("collapsePlayers")}
-                        </Button>
+                        {!rosterHidden && (
+                          <Button
+                            variant="outline"
+                            onClick={() => onToggleParticipantsCollapse(s.id)}
+                            style={{ padding: "8px 10px" }}
+                          >
+                            {participantsCollapsed ? t("expandPlayers") : t("collapsePlayers")}
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           onClick={() => onEditSession(s)}
@@ -279,7 +282,7 @@ export function WeekPlanBoard({
                     </div>
                   </div>
 
-                  {!participantsCollapsed && (
+                  {!rosterHidden && !participantsCollapsed && (
                     <>
                       <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
 

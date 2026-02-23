@@ -514,8 +514,9 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
   kwText?: string;
 }): string {
   const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {}, kwText } = opts;
+  const scheduleSessions = sessions;
 
-  const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions, clubName, locale, locations, logoUrl, kwText });
+  const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions: scheduleSessions, clubName, locale, locations, logoUrl, kwText });
   const scheduleInner = scheduleHtml
     .replace(/^\s*<div class="page">/, "")
     .replace(/<\/div>\s*$/, "")
@@ -525,7 +526,7 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
     ? { rosterTitle: "Kader-Listen", trainingMoFr: "Training (Mo-Fr)", gamesWeekends: "Spiele / Weekend" }
     : { rosterTitle: "Roster lists", trainingMoFr: "Practice (Mon-Fri)", gamesWeekends: "Games / Weekend" };
 
-  const rosterSessions = sessions.filter(s => !s.excludeFromRoster);
+  const rosterSessions = scheduleSessions.filter((s) => !s.excludeFromRoster);
   const isGameOrWeekend = (s: Session) => isGameSession(s) || /^(sa|so)/i.test(s.day || "");
 
   const trainingRoster = rosterSessions.filter(s => !isGameOrWeekend(s));

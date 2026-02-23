@@ -771,13 +771,14 @@ export default function App() {
     masterPlan,
     reviveWeekPlan
   );
+  const scheduleSessions = plan.sessions;
 
   /* ----------------------
      Export HTML (Source of Truth)
      ---------------------- */
   const exportPages = useMemo(() => {
     return buildPrintPages({
-      sessions: plan?.sessions ?? [],
+      sessions: scheduleSessions,
       players,
       coaches,
       clubName: theme.clubName,
@@ -787,14 +788,14 @@ export default function App() {
       groupColors: theme.groups ? Object.fromEntries(Object.entries(theme.groups).map(([k, v]) => [k, v.bg])) : undefined,
       kwText: kwLabelFromPlan(plan),
     });
-  }, [plan, players, coaches, theme, clubLogoDataUrl]);
+  }, [scheduleSessions, plan, players, coaches, theme, clubLogoDataUrl]);
 
   const previewPages = useMemo(() => {
     const groupColors = Object.fromEntries(
       Object.entries(theme.groups).map(([k, v]) => [k, v.bg])
     );
     return buildPreviewPages({
-      sessions: plan?.sessions ?? [],
+      sessions: scheduleSessions,
       players,
       coaches,
       clubName: theme.clubName,
@@ -804,7 +805,7 @@ export default function App() {
       groupColors,
       kwText: kwLabelFromPlan(plan),
     });
-  }, [plan, players, coaches, theme, clubLogoDataUrl]);
+  }, [scheduleSessions, plan, players, coaches, theme, clubLogoDataUrl]);
 
   /* ----------------------
      Derived
@@ -828,14 +829,14 @@ export default function App() {
 
   const sortParticipants = useMemo(() => makeParticipantSorter(playerById), [playerById]);
   const trainingCounts = useMemo(() => computeTrainingCounts(plan), [plan]);
-  const locationUsageMap = useLocationUsageMap(plan.sessions ?? []);
+  const locationUsageMap = useLocationUsageMap(scheduleSessions);
 
   // Plan date set & birthdays for players present in the plan
   const planDates = useMemo(() => planDateSet(plan), [plan]);
 
   const birthdayPlayerIds = useMemo(() => {
     const res = new Set<string>();
-    for (const s of plan.sessions ?? []) {
+    for (const s of scheduleSessions) {
       for (const pid of s.participants ?? []) {
         const p = playerById.get(pid);
         if (!p) continue;
@@ -843,7 +844,7 @@ export default function App() {
       }
     }
     return res;
-  }, [plan, playerById, planDates]);
+  }, [scheduleSessions, playerById, planDates]);
 
   /* ----------------------
      Sidebar grouping
@@ -2827,7 +2828,7 @@ export default function App() {
 
               {/* Week plan board */}
               <WeekPlanBoard
-                sessions={plan.sessions}
+                sessions={scheduleSessions}
                 lang={lang}
                 t={t}
                 lastDropError={lastDropError}

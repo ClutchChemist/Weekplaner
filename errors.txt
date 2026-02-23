@@ -1,0 +1,27 @@
+src/App.tsx(206,3): error TS1003: Identifier expected.
+src/App.tsx(206,9): error TS1005: ',' expected.
+src/App.tsx(206,22): error TS1005: ',' expected.
+src/App.tsx(206,44): error TS1005: ',' expected.
+src/App.tsx(206,45): error TS1109: Expression expected.
+src/App.tsx(873,3): error TS1128: Declaration or statement expected.
+src/App.tsx(2130,13): error TS17015: Expected corresponding closing tag for JSX fragment.
+src/App.tsx(2131,9): error TS1109: Expression expected.
+src/App.tsx(2132,7): error TS1109: Expression expected.
+src/App.tsx(2132,8): error TS1128: Declaration or statement expected.
+src/App.tsx(2628,12): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+src/App.tsx(2629,16): error TS1005: ';' expected.
+src/App.tsx(2630,7): error TS1128: Declaration or statement expected.
+src/App.tsx(2631,5): error TS1128: Declaration or statement expected.
+src/App.tsx(2631,7): error TS1109: Expression expected.
+src/App.tsx(2632,3): error TS1109: Expression expected.
+src/App.tsx(2633,1): error TS1128: Declaration or statement expected.
+src/components/layout/CalendarPane.tsx(21,18): error TS1011: An element access expression should take an argument.
+src/components/layout/CalendarPane.tsx(22,45): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(23,47): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(25,49): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(29,40): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(30,46): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(31,46): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(32,20): error TS1109: Expression expected.
+src/components/layout/CalendarPane.tsx(34,1): error TS1128: Declaration or statement expected.
+src/hooks/useDndPlan.ts(282,1): error TS1128: Declaration or statement expected.

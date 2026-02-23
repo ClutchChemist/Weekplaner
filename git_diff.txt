@@ -1,0 +1,53 @@
+commit 561803a1b784f7d2704d93931fca2871b64218df
+Author: AndrejK <koenig.andrej@googlemail.com>
+Date:   Mon Feb 23 16:55:10 2026 +0100
+
+    WIP: comment out corrupted event planner block to restore parseability; ready for further cleanup
+
+ src/App.tsx                | 1211 ++++++++++++++++----------------------------
+ src/data/index.ts          |    8 +
+ src/state/playerMeta.ts    |   53 ++
+ src/state/storageKeys.ts   |    7 +
+ src/state/themeDefaults.ts |    3 +
+ src/state/types.ts         |    2 +-
+ src/types/index.ts         |   44 ++
+ 7 files changed, 555 insertions(+), 773 deletions(-)
+
+commit 29378637e470f6925690c2b8fc274185ddc7ee02
+Author: AndrejK <koenig.andrej@googlemail.com>
+Date:   Mon Feb 23 14:25:55 2026 +0100
+
+    refactor: unify date helpers, centralize types, add Vitest tests, fix parseHHMM bug
+    
+    - Unified date helper functions (removed getISOWeek, use isoWeekNumber everywhere)
+    - Centralized type imports via @/types barrel
+    - Evaluated constants (no further action needed)
+    - Added Vitest test suite and sample test for parseHHMM
+    - Fixed parseHHMM to return 0 for invalid input
+    - Updated README with test instructions
+
+ README.md                                    |   18 +
+ package-lock.json                            | 1339 +++++++++++++++++++++++++-
+ package.json                                 |    7 +-
+ src/App.tsx                                  |  831 ++--------------
+ src/components/layout/CalendarPane.tsx       |   24 +-
+ src/components/modals/ThemeSettingsModal.tsx |    5 +-
+ src/config.ts                                |    3 +
+ src/hooks/useConfirmDialog.ts                |    2 +-
+ src/hooks/useDndPlan.ts                      |   79 +-
+ src/hooks/useEventPlannerState.ts            |    3 +
+ src/hooks/usePlanHistory.ts                  |   31 +
+ src/hooks/useRightSidebarPersistence.ts      |    2 +-
+ src/state/playerGrouping.ts                  |    7 +-
+ src/state/themeDefaults.ts                   |    9 +-
+ src/state/themePersistence.ts                |    5 +-
+ src/state/types.ts                           |   17 +-
+ src/themes/cssVars.ts                        |    2 +-
+ src/themes/presets.ts                        |    2 +-
+ src/utils/date.ts                            |   12 +-
+ src/utils/locations.ts                       |    2 +-
+ src/utils/printExport.ts                     |    6 +-
+ src/utils/session.ts                         |   12 +-
+ tests/date.test.ts                           |   16 +
+ vitest.config.ts                             |    9 +
+ 24 files changed, 1596 insertions(+), 847 deletions(-)

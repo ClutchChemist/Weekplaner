@@ -105,14 +105,16 @@ export function PrintView({
     return PRINT_GROUP_ORDER.flatMap((gid) => byGroup[gid]);
   }
 
-  const rosterColumns = plan.sessions.map((s) => ({
+  const rosterSessions = plan.sessions.filter((s) => !s.excludeFromRoster);
+
+  const rosterColumns = rosterSessions.map((s) => ({
     id: s.id,
     label: sessionLabel(s),
     players: sortedParticipantsForSession(s),
   }));
 
   const maxRows = Math.max(0, ...rosterColumns.map((c) => c.players.length));
-  const hasTbd = plan.sessions.some((s) => (s.participants ?? []).includes("TBD"));
+  const hasTbd = rosterSessions.some((s) => (s.participants ?? []).includes("TBD"));
 
   return (
     <div id="print-root" style={{ padding: 18, background: "white", color: "#111" }}>
