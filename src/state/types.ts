@@ -1,7 +1,7 @@
 import type { Lang } from "../i18n/types";
 import type { GroupId } from "../config";
 
-export type { Lang };
+export type { Lang, GroupId };
 export type Position = "PG" | "SG" | "SF" | "PF" | "C";
 
 export type YouthTeam = "U18" | "NBBL" | "";

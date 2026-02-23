@@ -1,3 +1,6 @@
+// Export GROUPS for barrel import
+import type { GroupId } from "./types";
+export const GROUPS: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
 import type { GroupId, ThemeSettings } from "./types";
 import { YEAR_GROUPS, GroupId } from "../config";
 
