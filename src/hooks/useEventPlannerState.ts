@@ -21,6 +21,8 @@ type EditorState = {
   formOpponent: string;
   formWarmupMin: number;
   formTravelMin: number;
+  formExcludeFromRoster: boolean;
+  formRowColor: string;
 };
 
 function resolveStateAction<T>(
@@ -42,6 +44,8 @@ export function useEventPlannerState() {
     formOpponent: "",
     formWarmupMin: 30,
     formTravelMin: 0,
+    formExcludeFromRoster: false,
+    formRowColor: "",
   });
 
   function setEditorField<K extends keyof EditorState>(
@@ -65,6 +69,9 @@ export function useEventPlannerState() {
   const setFormDuration = (value: number | ((prev: number) => number)) => setEditorField("formDuration", value);
   const setFormWarmupMin = (value: number | ((prev: number) => number)) => setEditorField("formWarmupMin", value);
   const setFormTravelMin = (value: number | ((prev: number) => number)) => setEditorField("formTravelMin", value);
+  const setFormExcludeFromRoster = (value: boolean | ((prev: boolean) => boolean)) =>
+    setEditorField("formExcludeFromRoster", value);
+  const setFormRowColor = (value: string | ((prev: string) => string)) => setEditorField("formRowColor", value);
 
   const setFormOpponent = (value: string | ((prev: string) => string)) => {
     setEditorState((prev) => {
@@ -99,7 +106,7 @@ export function useEventPlannerState() {
   };
 
   function currentLocationValue(): string {
-    if (editorState.locationMode === "__CUSTOM__") return (editorState.customLocation || "").trim() || "—";
+    if (editorState.locationMode === "__CUSTOM__") return (editorState.customLocation || "").trim() || "-";
     return editorState.locationMode;
   }
 
@@ -118,6 +125,8 @@ export function useEventPlannerState() {
     setFormOpponent("");
     setFormWarmupMin(30);
     setFormTravelMin(0);
+    setFormExcludeFromRoster(false);
+    setFormRowColor("");
   }
 
   function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
@@ -131,12 +140,14 @@ export function useEventPlannerState() {
       date: editorState.formDate,
       day: weekdayShortDE(editorState.formDate),
       teams: [...editorState.formTeams].sort((a, b) => a.localeCompare(b, "de")),
-      time: `${editorState.formStart}–${end}`,
+      time: `${editorState.formStart}-${end}`,
       location: currentLocationValue(),
       info: info || null,
       warmupMin: game ? Math.max(0, Math.floor(editorState.formWarmupMin)) : null,
       travelMin: game ? Math.max(0, Math.floor(editorState.formTravelMin)) : null,
       participants: keepParticipants ?? [],
+      excludeFromRoster: editorState.formExcludeFromRoster,
+      rowColor: editorState.formRowColor || undefined,
     };
   }
 
@@ -152,9 +163,12 @@ export function useEventPlannerState() {
     setFormOpponent,
     setFormWarmupMin,
     setFormTravelMin,
+    setFormExcludeFromRoster,
+    setFormRowColor,
     currentLocationValue,
     onToggleTeam,
     resetForm,
     buildSessionFromForm,
   };
 }
+

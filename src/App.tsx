@@ -44,10 +44,13 @@ import {
   useConfirmDialog,
   useDndPlan,
   useCloudSync,
+  useEventPlannerState,
   useLocationUsageMap,
   usePersistedState,
   useRightSidebarPersistence,
   useSessionEditor,
+  LOCATION_PRESETS,
+  TEAM_OPTIONS,
 } from "@/hooks";
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
@@ -896,40 +899,26 @@ export default function App() {
      Event planner
      ============================================================ */
 
-  const TEAM_OPTIONS = ["U18", "NBBL", "HOL", "1RLH"];
 
-  const LOCATION_PRESETS = ["BSH", "SHP", "Seminarraum"] as const;
-  type LocationMode = string; // any location name or "__CUSTOM__"
-
-  type EditorState = {
-    editingSessionId: string | null;
-    formDate: string;
-    formTeams: string[];
-    locationMode: LocationMode;
-    customLocation: string;
-    formStart: string;
-    formDuration: number;
-    formOpponent: string;
-    formWarmupMin: number;
-    formTravelMin: number;
-    formExcludeFromRoster: boolean;
-    formRowColor: string;
-  };
-
-  const [editorState, setEditorState] = useState<EditorState>({
-    editingSessionId: null,
-    formDate: new Date().toISOString().slice(0, 10),
-    formTeams: ["NBBL"],
-    locationMode: "BSH",
-    customLocation: "",
-    formStart: "18:00",
-    formDuration: 90,
-    formOpponent: "",
-    formWarmupMin: 30,
-    formTravelMin: 0,
-    formExcludeFromRoster: false,
-    formRowColor: "",
-  });
+  const {
+    editorState,
+    setEditingSessionId,
+    setFormDate,
+    setFormTeams,
+    setLocationMode,
+    setCustomLocation,
+    setFormStart,
+    setFormDuration,
+    setFormOpponent,
+    setFormWarmupMin,
+    setFormTravelMin,
+    setFormExcludeFromRoster,
+    setFormRowColor,
+    currentLocationValue,
+    onToggleTeam,
+    resetForm,
+    buildSessionFromForm,
+  } = useEventPlannerState();
 
   const {
     editingSessionId,
@@ -946,94 +935,16 @@ export default function App() {
     formRowColor,
   } = editorState;
 
-  function setEditorField<K extends keyof EditorState>(key: K, value: React.SetStateAction<EditorState[K]>) {
-    setEditorState((prev) => ({
-      ...prev,
-      [key]: typeof value === "function" ? (value as (p: EditorState[K]) => EditorState[K])(prev[key]) : value,
-    }));
-  }
-
-  const setEditingSessionId = (value: React.SetStateAction<string | null>) => setEditorField("editingSessionId", value);
-  const setFormDate = (value: React.SetStateAction<string>) => setEditorField("formDate", value);
-  const setFormTeams = (value: React.SetStateAction<string[]>) => setEditorField("formTeams", value);
-  const setLocationMode = (value: React.SetStateAction<LocationMode>) => setEditorField("locationMode", value);
-  const setCustomLocation = (value: React.SetStateAction<string>) => setEditorField("customLocation", value);
-  const setFormStart = (value: React.SetStateAction<string>) => setEditorField("formStart", value);
-  const setFormDuration = (value: React.SetStateAction<number>) => setEditorField("formDuration", value);
-  const setFormOpponent = (value: React.SetStateAction<string>) => setEditorField("formOpponent", value);
-  const setFormWarmupMin = (value: React.SetStateAction<number>) => setEditorField("formWarmupMin", value);
-  const setFormTravelMin = (value: React.SetStateAction<number>) => setEditorField("formTravelMin", value);
-  const setFormExcludeFromRoster = (value: React.SetStateAction<boolean>) => setEditorField("formExcludeFromRoster", value);
-  const setFormRowColor = (value: React.SetStateAction<string>) => setEditorField("formRowColor", value);
-
   const editorRef = useRef<HTMLDivElement | null>(null);
   const opponentInputRef = useRef<HTMLInputElement | null>(null);
   const editorTopRef = useRef<HTMLDivElement | null>(null);
-  const prevOpponentModeRef = useRef<{ game: boolean; away: boolean } | null>(null);
-
-  // Default-Logik:
-  // - nur bei Modus-Übergängen defaults setzen:
-  //   * non-game -> game: warmup default 90 (falls bisher 0)
-  //   * home -> away: travel default 90 (falls bisher 0)
-  //   * away -> home: travel = 0
-  //   * game -> non-game: warmup/travel = 0
-  useEffect(() => {
-    const info = normalizeOpponentInfo(formOpponent);
-    const game = isGameInfo(info);
-    const away = info.startsWith("@");
-
-    setEditorState((prev) => {
-      const prevMode = prevOpponentModeRef.current;
-      prevOpponentModeRef.current = { game, away };
-
-      let nextWarmupMin = prev.formWarmupMin;
-      let nextTravelMin = prev.formTravelMin;
-
-      // Bei reinem Gegnernamen-Ändern ohne Moduswechsel keine automatischen Anpassungen.
-      if (prevMode && prevMode.game === game && prevMode.away === away) {
-        return prev;
-      }
-
-      if (game && !prevMode?.game) {
-        if (nextWarmupMin <= 0) nextWarmupMin = 90;
-      }
-
-      if (game && away && prevMode && !prevMode.away) {
-        if (nextTravelMin <= 0) nextTravelMin = 90;
-      }
-
-      if (game && !away && prevMode?.away) {
-        if (nextTravelMin !== 0) nextTravelMin = 0;
-      }
-
-      if (!game && prevMode?.game) {
-        if (nextWarmupMin !== 0) nextWarmupMin = 0;
-        if (nextTravelMin !== 0) nextTravelMin = 0;
-      }
-
-      if (nextWarmupMin === prev.formWarmupMin && nextTravelMin === prev.formTravelMin) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        formWarmupMin: nextWarmupMin,
-        formTravelMin: nextTravelMin,
-      };
-    });
-  }, [formOpponent]);
-
-  function currentLocationValue(): string {
-    if (locationMode === "__CUSTOM__") return (customLocation || "").trim() || "—";
-    return locationMode;
-  }
 
   function handleRecallLocationEdit() {
     const current = currentLocationValue().trim();
     setLeftTab("locations");
     setLeftEditMode(true);
 
-    if (!current || current === "—") {
+    if (!current || current === "-") {
       setOpenLocationName(null);
       return;
     }
@@ -1047,49 +958,6 @@ export default function App() {
 
     setOpenLocationName(current);
   }
-
-  function onToggleTeam(t: string) {
-    setFormTeams((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  }
-
-  function resetForm() {
-    setEditingSessionId(null);
-    setFormDate(new Date().toISOString().slice(0, 10));
-    setFormTeams(["NBBL"]);
-    setLocationMode("BSH");
-    setCustomLocation("");
-    setFormStart("18:00");
-    setFormDuration(90);
-    setFormOpponent("");
-    setFormWarmupMin(30);
-    setFormTravelMin(0);
-    setFormExcludeFromRoster(false);
-    setFormRowColor("");
-  }
-
-  function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
-    const info = normalizeOpponentInfo(formOpponent);
-    const isGame = isGameInfo(info);
-    const dur = isGame ? 120 : formDuration;
-    const end = addMinutesToHHMM(formStart, dur);
-    const time = `${formStart}–${end}`;
-
-    return {
-      id: existingId ?? randomId("sess_"),
-      date: formDate,
-      day: weekdayShortDE(formDate),
-      teams: [...formTeams].sort((a, b) => a.localeCompare(b, "de")),
-      time,
-      location: currentLocationValue(),
-      info: info || null,
-      warmupMin: isGame ? Math.max(0, Math.floor(formWarmupMin)) : null,
-      travelMin: isGame ? Math.max(0, Math.floor(formTravelMin)) : null,
-      participants: keepParticipants ?? [],
-      excludeFromRoster: formExcludeFromRoster,
-      rowColor: formRowColor || undefined,
-    };
-  }
-
   const { upsert: upsertSessionInPlan, remove: removeSessionFromPlan } = useSessionEditor(setPlan, sortParticipants);
 
   function upsertSession() {
