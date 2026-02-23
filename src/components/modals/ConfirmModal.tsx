@@ -19,10 +19,10 @@ export function ConfirmModal({ open, title, message, onConfirm, onCancel, t }: P
         <div style={{ color: "var(--ui-text)", fontWeight: 800, lineHeight: 1.4 }}>{message}</div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <Button variant="outline" onClick={onCancel}>
-            {t("cancel")}
+            {t("no")}
           </Button>
           <Button variant="danger" onClick={onConfirm}>
-            {t("confirm")}
+            {t("yes")}
           </Button>
         </div>
       </div>
