@@ -16,3 +16,4 @@ export { usePlayerActions } from "./usePlayerActions";
 export { usePdfExport } from "./usePdfExport";
 export { useWeekManager } from "./useWeekManager";
 export { useCloudSnapshotHandlers } from "./useCloudSnapshotHandlers";
+export { useWeekArchiveManager } from "./useWeekArchiveManager";
