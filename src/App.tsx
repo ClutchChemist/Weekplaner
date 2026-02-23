@@ -33,7 +33,7 @@ import {
 } from "@/components/layout";
 import { DraggablePlayerRow } from "@/components/roster";
 
-import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
+import { ConfirmModal, EventEditorModal, NewWeekModal, ProfilesModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import {
   composeOpponentInfo,
   getOpponentMode,
@@ -295,8 +295,6 @@ export default function App() {
   const lang: Lang = (theme.locale ?? "de") as Lang;
   const t = useMemo(() => makeT(lang), [lang]);
   const tf = useMemo(() => makeTF(lang), [lang]);
-
-  const logoFileRef = useRef<HTMLInputElement | null>(null);
 
   const {
     appUiState,
@@ -1944,143 +1942,50 @@ export default function App() {
         t={t}
       />
 
-      {profilesOpen && (
-        <Modal title={t("profiles")} onClose={() => setProfilesOpen(false)} closeLabel={t("close")}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 900 }}>{t("profileActive")}</div>
-              <select
-                value={activeProfileId}
-                onChange={(e) => selectProfile(e.target.value)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid var(--ui-border)",
-                  background: "var(--ui-card)",
-                  color: "var(--ui-text)",
-                }}
-              >
-                <option value="">— {t("profileNone")} —</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 900 }}>{t("name")}</div>
-              <Input
-                value={profileNameInput}
-                onChange={setProfileNameInput}
-                placeholder={t("profileNamePlaceholder")}
-              />
-            </div>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 900 }}>Logo</div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <div
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 10,
-                    border: "1px solid var(--ui-border)",
-                    background: "var(--ui-card)",
-                    display: "grid",
-                    placeItems: "center",
-                    overflow: "hidden",
-                  }}
-                >
-                  {clubLogoDataUrl ? (
-                    <img src={clubLogoDataUrl} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                  ) : (
-                    <span style={{ color: "var(--ui-muted)", fontSize: 11, fontWeight: 900 }}>Logo</span>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Button variant="outline" onClick={() => logoFileRef.current?.click()}>
-                    {theme.locale === "de" ? "Logo hochladen" : "Upload logo"}
-                  </Button>
-                  <Button variant="danger" onClick={() => setClubLogoDataUrl(null)} disabled={!clubLogoDataUrl}>
-                    {theme.locale === "de" ? "Logo entfernen" : "Remove logo"}
-                  </Button>
-                </div>
-
-                <input
-                  ref={logoFileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleClubLogoUpload(file);
-                    e.currentTarget.value = "";
-                  }}
-                />
-              </div>
-              <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-                {theme.locale === "de"
-                  ? `Empfohlen: quadratisches Logo, max. ${Math.round(CLUB_LOGO_MAX_BYTES / 1024)} KB.`
-                  : `Recommended: square logo, max ${Math.round(CLUB_LOGO_MAX_BYTES / 1024)} KB.`}
-              </div>
-              {logoUploadError && (
-                <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 800 }}>{logoUploadError}</div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <Button variant="outline" onClick={createProfile}>
-                {t("profileSaveNew")}
-              </Button>
-              <Button variant="outline" onClick={updateActiveProfile} disabled={!activeProfileId}>
-                {t("profileUpdate")}
-              </Button>
-              <Button variant="danger" onClick={deleteActiveProfile} disabled={!activeProfileId}>
-                {t("profileDelete")}
-              </Button>
-            </div>
-
-            <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-              {t("profileHint")}
-            </div>
-
-            <ProfileCloudSyncPanel
-              t={t}
-              lang={lang}
-              hasActiveProfile={Boolean(activeProfileId)}
-              profileName={activeProfileName}
-              syncMode={activeProfileSync.mode}
-              onSyncModeChange={(mode: ProfileSyncMode) => {
-                updateActiveProfileSync({ mode });
-              }}
-              cloudConfigured={cloudConfigured}
-              cloudUserEmail={cloudUserEmail}
-              cloudEmailInput={cloudEmailInput}
-              cloudStatusMsg={cloudStatusMsg}
-              cloudLastSyncAt={cloudLastSyncAt}
-              cloudBusy={cloudBusy}
-              cloudAutoSync={cloudAutoSync}
-              onEmailInputChange={setCloudEmailInput}
-              onSignIn={() => {
-                void signInToCloud();
-              }}
-              onLoad={() => {
-                void loadSnapshotFromCloud();
-              }}
-              onSave={() => {
-                void saveSnapshotToCloud(false);
-              }}
-              onToggleAutoSync={toggleCloudAutoSync}
-              onSignOut={() => {
-                void signOutFromCloud();
-              }}
-            />
-          </div>
-        </Modal>
-      )}
+      <ProfilesModal
+        open={profilesOpen}
+        onClose={() => setProfilesOpen(false)}
+        t={t}
+        tf={tf}
+        lang={lang}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        activeProfileName={activeProfileName}
+        profileNameInput={profileNameInput}
+        onProfileNameInputChange={setProfileNameInput}
+        onSelectProfile={selectProfile}
+        onCreateProfile={createProfile}
+        onUpdateProfile={updateActiveProfile}
+        onDeleteProfile={deleteActiveProfile}
+        clubLogoDataUrl={clubLogoDataUrl}
+        logoUploadError={logoUploadError}
+        logoMaxKb={Math.round(CLUB_LOGO_MAX_BYTES / 1024)}
+        onLogoUpload={handleClubLogoUpload}
+        onLogoRemove={() => setClubLogoDataUrl(null)}
+        syncMode={activeProfileSync.mode}
+        onSyncModeChange={(mode: ProfileSyncMode) => updateActiveProfileSync({ mode })}
+        cloudConfigured={cloudConfigured}
+        cloudUserEmail={cloudUserEmail}
+        cloudEmailInput={cloudEmailInput}
+        cloudStatusMsg={cloudStatusMsg}
+        cloudLastSyncAt={cloudLastSyncAt}
+        cloudBusy={cloudBusy}
+        cloudAutoSync={cloudAutoSync}
+        onEmailInputChange={setCloudEmailInput}
+        onSignIn={() => {
+          void signInToCloud();
+        }}
+        onLoad={() => {
+          void loadSnapshotFromCloud();
+        }}
+        onSave={() => {
+          void saveSnapshotToCloud(false);
+        }}
+        onToggleAutoSync={toggleCloudAutoSync}
+        onSignOut={() => {
+          void signOutFromCloud();
+        }}
+      />
 
       {weekArchiveOpen && (
         <Modal title={t("weekArchiveTitle")} onClose={() => setWeekArchiveOpen(false)} closeLabel={t("close")}>
