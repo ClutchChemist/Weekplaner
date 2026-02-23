@@ -113,7 +113,7 @@ type Props = {
   onSelectSession: (sessionId: string) => void;
   collapsedParticipantsBySession: Record<string, boolean>;
   onToggleParticipantsCollapse: (sessionId: string) => void;
-  onEditSession: (session: Session) => void;
+  onEditSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   playerById: Map<string, Player>;
   removePlayerFromSession: (sessionId: string, playerId: string) => void;
@@ -265,7 +265,7 @@ export function WeekPlanBoard({
                         )}
                         <Button
                           variant="outline"
-                          onClick={() => onEditSession(s)}
+                          onClick={() => onEditSession(s.id)}
                           title={t("eventEdit")}
                           style={{ padding: "8px 10px" }}
                         >

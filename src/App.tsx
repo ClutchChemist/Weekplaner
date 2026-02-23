@@ -2839,7 +2839,7 @@ export default function App() {
                 onSelectSession={setSelectedSessionId}
                 collapsedParticipantsBySession={collapsedParticipantsBySession}
                 onToggleParticipantsCollapse={(sid) => setCollapsedParticipantsBySession((p) => ({ ...p, [sid]: !p[sid] }))}
-                onEditSession={onEditSession}
+                onEditSession={handleOpenEventEditor}
                 onDeleteSession={onDeleteSession}
                 playerById={playerById}
                 removePlayerFromSession={removePlayerFromSession}
