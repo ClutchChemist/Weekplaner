@@ -168,7 +168,7 @@ export function PrintView({
         {/* MITTE: TITEL & KW */}
         <div style={{ flex: 1, textAlign: "center", display: "flex", flexDirection: "column", justifyContent: "center" }}>
           <div style={{ fontSize: 18, fontWeight: 900 }}>{t("seasonTrainingOverview")}</div>
-          <div style={{ fontSize: 14, fontWeight: 800 }}>- {t("trainingWeek")} {kwText} -</div>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>- {kwText} -</div>
         </div>
 
         {/* RECHTS: VEREIN & ORTE */}

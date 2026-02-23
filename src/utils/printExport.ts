@@ -53,7 +53,7 @@ function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: strin
       <!-- MITTE: TITEL & KW -->
       <div style="flex: 1; text-align: center; display: flex; flex-direction: column; justify-content: center;">
         <div style="font-size: 18px; font-weight: 900;">${escapeHtml(title)}</div>
-        <div style="font-size: 14px; font-weight: 800;">- Trainingswoche ${escapeHtml(kwText || "")} -</div>
+        <div style="font-size: 14px; font-weight: 800;">- ${escapeHtml(kwText || "")} -</div>
       </div>
 
       <!-- RECHTS: VEREIN & ORTE -->
