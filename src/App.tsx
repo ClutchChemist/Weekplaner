@@ -49,6 +49,7 @@ import {
   useLocationUsageMap,
   usePersistedState,
   usePlayerActions,
+  usePromptDialog,
   useRightSidebarPersistence,
   useSessionEditor,
   useWeekManager,
@@ -165,14 +166,6 @@ import weekMasterRaw from "./data/weekplan_master.json";
 /* ============================================================
    UI PRIMITIVES (CSS vars)
    ============================================================ */
-
-type PromptDialogState = {
-  open: boolean;
-  title: string;
-  message: string;
-  value: string;
-  placeholder?: string;
-};
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
@@ -587,37 +580,7 @@ export default function App() {
   const rosterSearch = appUiState.rosterSearch;
   const selectedPlayerId = appUiState.selectedPlayerId;
   const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
-  const [promptDialog, setPromptDialog] = useState<PromptDialogState>({
-    open: false,
-    title: "",
-    message: "",
-    value: "",
-    placeholder: "",
-  });
-  const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
-
-  const askPrompt = useCallback(
-    (title: string, message: string, initialValue = "", placeholder = "") => {
-      return new Promise<string | null>((resolve) => {
-        promptResolverRef.current = resolve;
-        setPromptDialog({
-          open: true,
-          title,
-          message,
-          value: initialValue,
-          placeholder,
-        });
-      });
-    },
-    []
-  );
-
-  const resolvePrompt = useCallback((value: string | null) => {
-    setPromptDialog((prev) => ({ ...prev, open: false }));
-    const resolver = promptResolverRef.current;
-    promptResolverRef.current = null;
-    resolver?.(value);
-  }, []);
+  const { promptDialog, setPromptValue, askPrompt, resolvePrompt } = usePromptDialog();
 
   /* ============================================================
     EFFECTS (useEffect...)
@@ -2601,7 +2564,7 @@ export default function App() {
         title={promptDialog.title}
         message={promptDialog.message}
         value={promptDialog.value}
-        onValueChange={(value) => setPromptDialog((prev) => ({ ...prev, value }))}
+        onValueChange={setPromptValue}
         placeholder={promptDialog.placeholder}
         onConfirm={() => resolvePrompt(promptDialog.value.trim())}
         onCancel={() => resolvePrompt(null)}
