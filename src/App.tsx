@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useCallback,
   useEffect,
   useMemo,
@@ -46,6 +46,7 @@ import {
   useCoaches,
   useEventPlannerState,
   useLocationUsageMap,
+  usePdfExport,
   usePersistedState,
   usePlayerActions,
   usePromptDialog,
@@ -667,6 +668,12 @@ export default function App() {
     });
   }, [scheduleSessions, plan, players, coaches, theme, clubLogoDataUrl]);
 
+  const { createPlanPdf, createPlanPngPages } = usePdfExport({
+    exportPages,
+    clubName: theme.clubName,
+    weekId: plan.weekId,
+  });
+
   /* ----------------------
      Derived
      ---------------------- */
@@ -1018,153 +1025,6 @@ export default function App() {
   });
 
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
-
-  /* ============================================================
-     Print / PDF
-     ============================================================ */
-
-  async function createPlanPdf() {
-    if (!exportPages || exportPages.length === 0) {
-      return;
-    }
-
-    const pagesHtml = exportPages
-      .map(
-        (p, i) => `
-          <section class="print-page" data-page-index="${i + 1}">
-            ${p.html}
-          </section>
-        `
-      )
-      .join("\n");
-
-    const html = `
-      <!doctype html>
-      <html lang="de">
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>UBC Weekplan PDF</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 10mm;
-            }
-
-            html, body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              color: #111;
-              font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-
-            .print-root {
-              width: 100%;
-            }
-
-            .print-page {
-              break-after: page;
-              page-break-after: always;
-              box-sizing: border-box;
-            }
-
-            .print-page:last-child {
-              break-after: auto;
-              page-break-after: auto;
-            }
-          </style>
-        </head>
-        <body>
-          <main class="print-root">${pagesHtml}</main>
-        </body>
-      </html>
-    `;
-
-    // Blob URL ist in modernen Browsern deutlich zuverlässiger als document.write()
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const blobUrl = URL.createObjectURL(blob);
-
-    const printWindow = window.open(blobUrl, "_blank");
-    if (!printWindow) {
-      URL.revokeObjectURL(blobUrl);
-      return;
-    }
-
-    printWindow.addEventListener(
-      "load",
-      () => {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-          // Blob URL nach kurzem Delay freigeben (nach dem Drucken)
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-        }, 500);
-      },
-      { once: true }
-    );
-  }
-
-  async function createPlanPngPages() {
-    // lazy import (nur wenn genutzt)
-    const { toPng } = await import("html-to-image");
-
-    // Offscreen container (damit nichts im UI flackert)
-    const host = document.createElement("div");
-    host.style.position = "fixed";
-    host.style.left = "-10000px";
-    host.style.top = "0";
-    host.style.width = "900px";
-    host.style.background = "#ffffff";
-    host.style.padding = "0";
-    host.style.zIndex = "999999";
-    document.body.appendChild(host);
-
-    try {
-      // exportPages existieren bei dir bereits (useMemo)
-      const pages = exportPages ?? [];
-      if (pages.length === 0) return;
-
-      for (let i = 0; i < pages.length; i++) {
-        const p = pages[i];
-
-        // Wrapper pro Seite (A4-ish)
-        const pageEl = document.createElement("div");
-        pageEl.style.width = "820px";
-        pageEl.style.minHeight = "1060px";
-        pageEl.style.background = "#ffffff";
-        pageEl.style.color = "#111";
-        pageEl.style.fontFamily =
-          'system-ui, -apple-system, Segoe UI, Roboto, Arial';
-        pageEl.style.boxSizing = "border-box";
-        pageEl.style.padding = "0";
-        pageEl.innerHTML = p.html;
-
-        host.appendChild(pageEl);
-
-        // Render -> PNG
-        const dataUrl = await toPng(pageEl, {
-          backgroundColor: "#ffffff",
-          pixelRatio: 2, // bessere Schärfe
-        });
-
-        // Download
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `week_${plan.weekId}_page_${String(i + 1).padStart(2, "0")}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        // cleanup per page
-        host.removeChild(pageEl);
-      }
-    } finally {
-      host.remove();
-    }
-  }
 
   /* ============================================================
      New Week
