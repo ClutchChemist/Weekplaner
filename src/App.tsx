@@ -50,6 +50,7 @@ import {
   usePersistedState,
   usePlayerActions,
   usePromptDialog,
+  useProfilesState,
   useRightSidebarPersistence,
   useSessionEditor,
   useWeekManager,
@@ -82,14 +83,9 @@ import {
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
 import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
 import {
-  ACTIVE_PROFILE_STORAGE_KEY,
-  DEFAULT_PROFILE_SYNC,
-  PROFILES_STORAGE_KEY,
   type ProfileSyncMode,
-  safeParseProfiles,
   type CloudSnapshotV1,
   type ProfilePayload,
-  type SavedProfile,
 } from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
 import { safeParseWeekArchive, WEEK_ARCHIVE_STORAGE_KEY, type WeekArchiveEntry } from "./state/weekArchive";
@@ -476,41 +472,8 @@ export default function App() {
   const t = useMemo(() => makeT(lang), [lang]);
   const tf = useMemo(() => makeTF(lang), [lang]);
 
-  const [profiles, setProfiles] = useState<SavedProfile[]>(() =>
-    safeParseProfiles(typeof window !== "undefined" ? localStorage.getItem(PROFILES_STORAGE_KEY) : null)
-  );
-  const [activeProfileId, setActiveProfileId] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY) ?? "" : ""
-  );
-  const [profileHydratedId, setProfileHydratedId] = useState<string | null>(null);
-  const [profilesOpen, setProfilesOpen] = useState(false);
   const [weekArchiveOpen, setWeekArchiveOpen] = useState(false);
-  const [profileNameInput, setProfileNameInput] = useState("");
-  const [logoUploadError, setLogoUploadError] = useState("");
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const profileMenuRef = useRef<HTMLDivElement | null>(null);
   const logoFileRef = useRef<HTMLInputElement | null>(null);
-  const [clubLogoDataUrl, setClubLogoDataUrl] = usePersistedState<string | null>(
-    CLUB_LOGO_STORAGE_KEY,
-    null,
-    (savedRaw) => {
-      try {
-        const parsed = JSON.parse(savedRaw);
-        return typeof parsed === "string" || parsed === null ? parsed : null;
-      } catch {
-        return null;
-      }
-    }
-  );
-  const activeProfileName = useMemo(
-    () => profiles.find((p) => p.id === activeProfileId)?.name ?? null,
-    [profiles, activeProfileId]
-  );
-  const activeProfile = useMemo(
-    () => profiles.find((p) => p.id === activeProfileId) ?? null,
-    [profiles, activeProfileId]
-  );
-  const activeProfileSync = activeProfile?.sync ?? DEFAULT_PROFILE_SYNC;
 
   const [weekArchiveByProfile, setWeekArchiveByProfile] = usePersistedState<Record<string, WeekArchiveEntry[]>>(
     WEEK_ARCHIVE_STORAGE_KEY,
@@ -521,22 +484,6 @@ export default function App() {
   const [archiveTemplateStart, setArchiveTemplateStart] = useState<string>(() =>
     isoWeekMonday(new Date().toISOString().slice(0, 10))
   );
-
-  const activeArchiveEntries = useMemo(() => {
-    if (!activeProfileId) return [] as WeekArchiveEntry[];
-    return (weekArchiveByProfile[activeProfileId] ?? []).filter((entry) => entry.profileId === activeProfileId);
-  }, [activeProfileId, weekArchiveByProfile]);
-
-  useEffect(() => {
-    if (!profileMenuOpen) return;
-    function onDocMouseDown(e: MouseEvent) {
-      const node = profileMenuRef.current;
-      if (!node) return;
-      if (!node.contains(e.target as Node)) setProfileMenuOpen(false);
-    }
-    window.addEventListener("mousedown", onDocMouseDown);
-    return () => window.removeEventListener("mousedown", onDocMouseDown);
-  }, [profileMenuOpen]);
 
   const {
     appUiState,
@@ -663,49 +610,55 @@ export default function App() {
 
   const [players, setPlayers] = useState<Player[]>(() => normalizedRoster.players);
 
-  function handleClubLogoUpload(file: File) {
-    setLogoUploadError("");
+  const applyProfileData = useCallback((payload: ProfilePayload) => {
+    setRosterMeta(payload.rosterMeta);
+    setPlayers(payload.players);
+    setCoaches(payload.coaches);
+    setTheme((prev) => ({
+      ...prev,
+      locations: payload.locations,
+    }));
+  }, [setCoaches]);
 
-    if (!file.type.startsWith("image/")) {
-      setLogoUploadError(theme.locale === "de" ? "Bitte eine Bilddatei auswählen." : "Please choose an image file.");
-      return;
-    }
-    if (file.size > CLUB_LOGO_MAX_BYTES) {
-      const maxKb = Math.round(CLUB_LOGO_MAX_BYTES / 1024);
-      setLogoUploadError(
-        theme.locale === "de"
-          ? `Logo ist zu groß (max. ${maxKb} KB).`
-          : `Logo is too large (max ${maxKb} KB).`
-      );
-      return;
-    }
+  const {
+    profiles,
+    setProfiles,
+    activeProfileId,
+    setActiveProfileId,
+    setProfileHydratedId,
+    profilesOpen,
+    setProfilesOpen,
+    profileNameInput,
+    setProfileNameInput,
+    logoUploadError,
+    profileMenuOpen,
+    setProfileMenuOpen,
+    profileMenuRef,
+    clubLogoDataUrl,
+    setClubLogoDataUrl,
+    activeProfileName,
+    activeProfileSync,
+    handleClubLogoUpload,
+    createProfile,
+    updateActiveProfile,
+    deleteActiveProfile,
+    selectProfile,
+  } = useProfilesState({
+    t,
+    tf,
+    rosterMeta,
+    players,
+    coaches,
+    locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
+    clubLogoStorageKey: CLUB_LOGO_STORAGE_KEY,
+    clubLogoMaxBytes: CLUB_LOGO_MAX_BYTES,
+    onApplyProfileData: applyProfileData,
+  });
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
-        return;
-      }
-      setClubLogoDataUrl(reader.result);
-      setLogoUploadError("");
-    };
-    reader.onerror = () => {
-      setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
-    };
-    reader.readAsDataURL(file);
-  }
-
-  useEffect(() => {
-    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
-  }, [profiles]);
-
-  useEffect(() => {
-    if (!activeProfileId) {
-      localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(ACTIVE_PROFILE_STORAGE_KEY, activeProfileId);
-  }, [activeProfileId]);
+  const activeArchiveEntries = useMemo(() => {
+    if (!activeProfileId) return [] as WeekArchiveEntry[];
+    return (weekArchiveByProfile[activeProfileId] ?? []).filter((entry) => entry.profileId === activeProfileId);
+  }, [activeProfileId, weekArchiveByProfile]);
 
   /* ----------------------
      Ensure TBD placeholder exists
@@ -1052,16 +1005,6 @@ export default function App() {
     prompt: askPrompt,
   });
 
-  const currentProfilePayload = useCallback((): ProfilePayload => {
-    return {
-      rosterMeta,
-      players,
-      coaches,
-      locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
-      clubLogoDataUrl,
-    };
-  }, [rosterMeta, players, coaches, theme.locations, clubLogoDataUrl]);
-
   const {
     buildCloudSnapshot,
     applyCloudSnapshot,
@@ -1086,8 +1029,8 @@ export default function App() {
     setPlan,
     setClubLogoDataUrl,
     setProfiles,
-    setProfileHydratedId,
-    setActiveProfileId,
+    setProfileHydratedId: (id: string) => setProfileHydratedId(id),
+    setActiveProfileId: (id: string) => setActiveProfileId(id),
   });
 
   const {
@@ -1115,99 +1058,6 @@ export default function App() {
     isSnapshot: isCloudSnapshotV1,
     autoSyncSignal: cloudSyncSignal,
   });
-
-  const applyProfile = useCallback((profile: SavedProfile) => {
-    setRosterMeta(profile.payload.rosterMeta);
-    setPlayers(profile.payload.players);
-    setCoaches(profile.payload.coaches);
-    setClubLogoDataUrl(profile.payload.clubLogoDataUrl ?? null);
-    setTheme((prev) => ({
-      ...prev,
-      locations: profile.payload.locations,
-    }));
-  }, [setCoaches, setClubLogoDataUrl]);
-
-  function createProfile() {
-    const name = profileNameInput.trim();
-    if (!name) return;
-    const id = randomId("profile_");
-    const entry: SavedProfile = {
-      id,
-      name,
-      payload: currentProfilePayload(),
-      sync: { ...DEFAULT_PROFILE_SYNC },
-    };
-    setProfiles((prev) => [...prev, entry]);
-    setProfileHydratedId(id);
-    setActiveProfileId(id);
-    setProfileNameInput("");
-  }
-
-  function updateActiveProfile() {
-    if (!activeProfileId) return;
-    setProfiles((prev) =>
-      prev.map((p) =>
-        p.id === activeProfileId
-          ? {
-            ...p,
-            name: profileNameInput.trim() || p.name,
-            payload: currentProfilePayload(),
-          }
-          : p
-      )
-    );
-  }
-
-  function deleteActiveProfile() {
-    if (!activeProfileId) return;
-    setProfiles((prev) => prev.filter((p) => p.id !== activeProfileId));
-    setProfileHydratedId(null);
-    setActiveProfileId("");
-  }
-
-  function selectProfile(id: string) {
-    if (!id) {
-      setProfileHydratedId(null);
-      setActiveProfileId("");
-      return;
-    }
-    setActiveProfileId(id);
-    const hit = profiles.find((p) => p.id === id);
-    if (hit) {
-      applyProfile(hit);
-      setProfileNameInput(hit.name);
-      setProfileHydratedId(id);
-    }
-  }
-
-  useEffect(() => {
-    if (!activeProfileId) {
-      setProfileHydratedId(null);
-      return;
-    }
-    if (profileHydratedId === activeProfileId) return;
-
-    const hit = profiles.find((p) => p.id === activeProfileId);
-    if (!hit) return;
-
-    applyProfile(hit);
-    setProfileNameInput(hit.name);
-    setProfileHydratedId(activeProfileId);
-  }, [activeProfileId, applyProfile, profileHydratedId, profiles]);
-
-  useEffect(() => {
-    if (!activeProfileId || profileHydratedId !== activeProfileId) return;
-    setProfiles((prev) => {
-      const idx = prev.findIndex((p) => p.id === activeProfileId);
-      if (idx < 0) return prev;
-      const nextPayload = currentProfilePayload();
-      const cur = prev[idx];
-      if (JSON.stringify(cur.payload) === JSON.stringify(nextPayload)) return prev;
-      const copy = [...prev];
-      copy[idx] = { ...cur, payload: nextPayload };
-      return copy;
-    });
-  }, [activeProfileId, currentProfilePayload, profileHydratedId]);
 
   /* ============================================================
      Roster editor: import/export roster.json
