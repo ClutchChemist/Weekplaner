@@ -44,8 +44,8 @@ export function useCloudSnapshotHandlers({
   setPlan: Dispatch<SetStateAction<WeekPlan>>;
   setClubLogoDataUrl: (url: string | null) => void;
   setProfiles: Dispatch<SetStateAction<SavedProfile[]>>;
-  setProfileHydratedId: (id: string) => void;
-  setActiveProfileId: (id: string) => void;
+  setProfileHydratedId: Dispatch<SetStateAction<string | null>>;
+  setActiveProfileId: Dispatch<SetStateAction<string>>;
 }) {
   const buildCloudSnapshot = useCallback((): CloudSnapshotV1 => ({
     version: 1,

@@ -973,8 +973,8 @@ export default function App() {
     setPlan,
     setClubLogoDataUrl,
     setProfiles,
-    setProfileHydratedId: (id: string) => setProfileHydratedId(id),
-    setActiveProfileId: (id: string) => setActiveProfileId(id),
+    setProfileHydratedId,
+    setActiveProfileId,
   });
 
   const {
