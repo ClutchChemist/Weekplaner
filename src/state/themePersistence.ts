@@ -1,4 +1,5 @@
-import type { GroupId, ThemeSettings, UiTheme } from "./types";
+import type { ThemeSettings, UiTheme } from "./types";
+import { YEAR_GROUPS, GroupId } from "../config";
 
 export function safeParseTheme(raw: string | null, fallbackTheme: ThemeSettings): ThemeSettings | null {
   if (!raw) return null;
@@ -26,7 +27,7 @@ export function safeParseTheme(raw: string | null, fallbackTheme: ThemeSettings)
       if (typeof ui[k] !== "string" || !ui[k]) return null;
     }
 
-    const gids: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
+    const gids: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
     if (!groups || typeof groups !== "object") return null;
     for (const gid of gids) {
       if (!groups[gid] || typeof groups[gid].bg !== "string" || !groups[gid].bg)

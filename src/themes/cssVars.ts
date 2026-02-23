@@ -1,4 +1,4 @@
-import type { ThemeSettings } from "../state/types";
+import type { ThemeSettings } from "@/types";
 
 export function applyThemeToCssVars(theme: ThemeSettings) {
   const r = document.documentElement;

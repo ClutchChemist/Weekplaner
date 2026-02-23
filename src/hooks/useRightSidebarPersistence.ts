@@ -1,5 +1,5 @@
 import { useEffect, type SetStateAction } from "react";
-import type { RightLayout, RightModule } from "../state/types";
+import type { RightLayout, RightModule } from "@/types";
 
 type Setter<T> = (value: SetStateAction<T>) => void;
 

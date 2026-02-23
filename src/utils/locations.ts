@@ -1,4 +1,4 @@
-import type { ThemeSettings } from "../state/types";
+import type { ThemeSettings } from "@/types";
 
 export type LocationOption = {
   value: string;

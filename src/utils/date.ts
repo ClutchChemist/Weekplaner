@@ -1,3 +1,12 @@
+/**
+ * Wandelt einen "HH:MM"-String in Minuten seit Mitternacht um.
+ * Gibt 0 zurück, wenn das Format ungültig ist.
+ */
+export function parseHHMM(hhmm: string): number {
+  const [h, m] = (hhmm ?? "").split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return (h ?? 0) * 60 + (m ?? 0);
+}
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -130,9 +139,6 @@ export function kwLabelFromPlan(plan: { sessions: Array<{ date: string }> }): st
   return `KW ${weeks.join("+")}`;
 }
 
-export function getISOWeek(dateISO: string): number {
-  return isoWeekNumber(dateISO);
-}
 
 export function kwFromRange(dates: string[]): string {
   const weeks = Array.from(

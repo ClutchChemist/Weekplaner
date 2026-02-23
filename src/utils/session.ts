@@ -1,5 +1,5 @@
-import type { CalendarEvent as Session, WeekPlan } from "../state/types";
-import { splitTimeRange } from "./date";
+import type { CalendarEvent as Session, WeekPlan } from "@/types";
+import { splitTimeRange, parseHHMM } from "./date";
 
 export type SessionConflict = {
   sessionId: string;
@@ -45,10 +45,10 @@ export function sessionsOverlap(a: Session, b: Session): boolean {
 
   if (aStart === aEnd || bStart === bEnd) return false;
 
-  const aS = parseInt(aStart.slice(0, 2), 10) * 60 + parseInt(aStart.slice(3, 5), 10);
-  const aE = parseInt(aEnd.slice(0, 2), 10) * 60 + parseInt(aEnd.slice(3, 5), 10);
-  const bS = parseInt(bStart.slice(0, 2), 10) * 60 + parseInt(bStart.slice(3, 5), 10);
-  const bE = parseInt(bEnd.slice(0, 2), 10) * 60 + parseInt(bEnd.slice(3, 5), 10);
+  const aS = parseHHMM(aStart);
+  const aE = parseHHMM(aEnd);
+  const bS = parseHHMM(bStart);
+  const bE = parseHHMM(bEnd);
 
   return aS < bE && bS < aE;
 }

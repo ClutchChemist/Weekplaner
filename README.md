@@ -231,3 +231,21 @@ Open **Profiles** and use **Cloud sync** section:
 - enter email + send magic link
 - after sign-in: load or save snapshot
 - enable auto-sync for seamless device switching
+
+## Running tests
+
+This project uses [Vitest](https://vitest.dev/) for unit testing.
+
+To run all tests:
+
+```
+npx vitest run
+```
+
+To run tests in watch mode (recommended during development):
+
+```
+npx vitest
+```
+
+Test files are located in the `tests/` directory.

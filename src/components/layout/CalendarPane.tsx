@@ -14,21 +14,17 @@ import type { Player, WeekPlan } from "@/types";
 function clampNumber(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
-
-function snapToStep(v: number, step: number) {
-  return Math.round(v / step) * step;
-}
-
-type Props = {
-  weekDates: string[];
+  // Prefer s.startMin, fallback to legacy time string
+  const getStartMin = (s: Session): number => typeof s.startMin === "number" ? s.startMin : parseStartMin(s.time ?? "00:00");
+  const getDurationMin = (s: Session): number => typeof s.durationMin === "number" ? s.durationMin : sessionDurationMin(s);
   weekPlan: WeekPlan;
   roster: Player[];
   onUpdateWeekPlan: (next: WeekPlan) => void;
   onOpenEventEditor: (eventId: string) => void;
   dnd: {
     onDragStart: (event: DragStartEvent) => void;
-    onDragOver: (event: DragOverEvent) => void;
-    onDragEnd: (event: DragEndEvent) => void;
+    const sM = parseHHMM(st);
+    const eM = parseHHMM(en);
   };
   onDelete: (sessionId: string) => void;
   onToggleTravel: (sessionId: string) => void;
@@ -129,7 +125,9 @@ export function CalendarPane({
     return hh * 60 + mm;
   }, []);
 
+  // Legacy fallback for duration
   const sessionDurationMin = useCallback((s: Session): number => {
+    if (typeof s.durationMin === "number") return s.durationMin;
     const game = String(s.info ?? "").trim().toLowerCase().startsWith("vs") || String(s.info ?? "").trim().startsWith("@");
     if (game) return 120;
     const tr = splitTimeRange(s.time ?? "");
@@ -146,8 +144,8 @@ export function CalendarPane({
 
     for (const day of allDays) {
       for (const s of day) {
-        const st = parseStartMin(s.time ?? "");
-        const dur = sessionDurationMin(s);
+        const st = getStartMin(s);
+        const dur = getDurationMin(s);
         if (!Number.isFinite(st) || !Number.isFinite(dur)) continue;
 
         minStart = Math.min(minStart, st);
@@ -279,8 +277,8 @@ export function CalendarPane({
     const items: Item[] = [];
 
     for (const ss of daySessions) {
-      const st = parseStartMin(ss.time ?? "");
-      const dur = sessionDurationMin(ss);
+      const st = getStartMin(ss);
+      const dur = getDurationMin(ss);
       if (!Number.isFinite(st) || !Number.isFinite(dur)) continue;
 
       items.push({ id: ss.id, start: st, end: st + dur });

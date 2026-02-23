@@ -1,8 +1,7 @@
 import type { Lang } from "../i18n/types";
+import type { GroupId } from "../config";
 
 export type { Lang };
-
-export type GroupId = "Herren" | "2007" | "2008" | "2009" | "TBD";
 export type Position = "PG" | "SG" | "SF" | "PF" | "C";
 
 export type YouthTeam = "U18" | "NBBL" | "";
@@ -54,7 +53,19 @@ export type CalendarEvent = {
   date: string;
   day: string;
   teams: string[];
-  time: string;
+  /**
+   * Legacy string time range (e.g. "18:00–19:30").
+   * Use startMin/durationMin for all new logic.
+   */
+  time?: string;
+  /**
+   * Minutes since midnight for session start (e.g. 18:00 → 1080)
+   */
+  startMin: number;
+  /**
+   * Duration in minutes (e.g. 90)
+   */
+  durationMin: number;
   location: string;
   info?: string | null;
   warmupMin?: number | null;

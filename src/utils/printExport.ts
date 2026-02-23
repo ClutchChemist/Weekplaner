@@ -2,10 +2,10 @@ import type { Lang } from "../i18n/types";
 import type {
   CalendarEvent as Session,
   Coach,
-  GroupId,
   Player,
   ThemeLocations,
-} from "../state/types";
+} from "@/types";
+import { YEAR_GROUPS, GroupId } from "../config";
 import { pickTextColor } from "./color";
 
 export interface PrintPage {
@@ -106,7 +106,7 @@ function abbrevEventHeader(s: Session): string {
   return `${day}-${teams}`;
 }
 
-const GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
+const GROUP_ORDER: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
 
 function groupSortKey(group: GroupId | undefined): number {
   if (!group) return GROUP_ORDER.length;

@@ -1,406 +1,12 @@
 import React, {
   useCallback,
+  useRef,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type CSSProperties,
+  useRef as reactUseRef,
 } from "react";
-import {
-  DndContext,
-  MouseSensor,
-  TouchSensor,
-  useDraggable,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-
-import type { Lang } from "./i18n/types";
-import type {
-  CalendarEvent as Session,
-  Coach,
-  GroupId,
-  Player,
-  Position,
-  ThemeSettings,
-  WeekPlan,
-} from "@/types";
-import { makeT, makeTF } from "./i18n/translate";
-import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
-import {
-  CalendarPane,
-  LeftSidebar,
-  PrintView,
-  RightSidebar,
-  WeekPlanBoard,
-} from "@/components/layout";
-
-import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
-import type { NewWeekMode } from "./components/modals/NewWeekModal";
-import {
-  composeOpponentInfo,
-  getOpponentMode,
-  getOpponentName,
-  useConfirmDialog,
-  useDndPlan,
-  useCloudSync,
-  useLocationUsageMap,
-  usePersistedState,
-  useRightSidebarPersistence,
-  useSessionEditor,
-} from "@/hooks";
-import { useAppUiState } from "./state/useAppUiState";
-import { reviveWeekPlan } from "./state/planReviver";
-import {
-  computeHistoryFlagsBySession,
-  computeTrainingCounts,
-  isBirthdayOnAnyPlanDate,
-  planDateSet,
-} from "./state/planDerived";
-import { normalizeMasterWeek, normalizeRoster } from "./state/normalizers";
-import {
-  birthYearOf,
-  getPlayerGroup,
-  GROUPS,
-  isCorePlayer,
-  isHolOnly,
-  isU18Only,
-  makeParticipantSorter,
-} from "./state/playerGrouping";
-import {
-  dbbDobMatchesBirthDate,
-  enrichPlayersWithBirthFromDBBTA,
-  hasAnyTna,
-  primaryTna,
-} from "./state/playerMeta";
-import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
-import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
-import {
-  ACTIVE_PROFILE_STORAGE_KEY,
-  DEFAULT_PROFILE_SYNC,
-  PROFILES_STORAGE_KEY,
-  type ProfileSyncMode,
-  safeParseProfiles,
-  type CloudSnapshotV1,
-  type ProfilePayload,
-  type SavedProfile,
-} from "./state/profileTypes";
-import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
-import { safeParseWeekArchive, WEEK_ARCHIVE_STORAGE_KEY, type WeekArchiveEntry } from "./state/weekArchive";
-import { DEFAULT_THEME } from "./state/themeDefaults";
-import { applyThemeToCssVars } from "./themes/cssVars";
-import {
-  addDaysISO,
-  addMinutesToHHMM,
-  dateToShortDE,
-  isoWeekMonday,
-  kwLabelFromPlan,
-  normalizeDash,
-  splitTimeRange,
-  weekdayOffsetFromDEShort,
-  weekdayShortLocalized,
-  weekdayShortDE,
-} from "./utils/date";
-import {
-  computeConflictsBySession,
-  isGameInfo,
-  isGameSession,
-  normalizeOpponentInfo,
-  sessionsOverlap,
-} from "./utils/session";
-import {
-  ensureLocationSaved,
-  getCachedTravelMinutes,
-  getLocationOptions,
-  resolveLocationAddress,
-  resolveLocationPlaceId,
-  setCachedTravelMinutes,
-} from "./utils/locations";
-import { fetchTravelMinutes } from "./utils/mapsApi";
-import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
-import { normalizeYearColor, pickTextColor } from "./utils/color";
-import { downloadJson } from "./utils/json";
-import { randomId } from "./utils/id";
-import rosterRaw from "./data/roster.json";
-import weekMasterRaw from "./data/weekplan_master.json";
-
-/* ============================================================
-   TYPES
-   ============================================================ */
-
-/* ============================================================
-   CONSTANTS / PRESETS
-   ============================================================ */
-
-/* ============================================================
-  UTILS (date/color/json/...)
-  ============================================================ */
-
-/* ============================================================
-   HELPERS (colors / contrast)
-   ============================================================ */
-
-/* ============================================================
-   ISO WEEK
-   ============================================================ */
-
-/* ============================================================
-  DOWNLOAD JSON
-  ============================================================ */
-
-/* ============================================================
-   ROSTER helpers (TA badge + grouping)
-   ============================================================ */
-
-/* ============================================================
-  COMPONENTS (Modal..., Button..., Row..., Pane...)
-  ============================================================ */
-
-/* ============================================================
-   UI PRIMITIVES (CSS vars)
-   ============================================================ */
-
-type PromptDialogState = {
-  open: boolean;
-  title: string;
-  message: string;
-  value: string;
-  placeholder?: string;
-};
-
-const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
-const CLUB_LOGO_MAX_BYTES = 600 * 1024;
-
-function MinutePicker({
-  value,
-  onChange,
-  presets,
-  allowZero = true,
-  placeholder = "Minuten",
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  presets: number[];
-  allowZero?: boolean;
-  placeholder?: string;
-}) {
-  const items = allowZero ? [0, ...presets] : presets;
-
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      {items.map((m) => {
-        const active = value === m;
-        return (
-          <button
-            key={m}
-            type="button"
-            onClick={() => onChange(m)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 999,
-              border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
-              background: active ? "rgba(59,130,246,.18)" : "transparent",
-              color: "var(--ui-text)",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            {m}
-          </button>
-        );
-      })}
-
-      <Input
-        type="number"
-        value={String(value)}
-        onChange={(v) => onChange(Math.max(allowZero ? 0 : 1, Math.floor(Number(v || "0"))))}
-        placeholder={placeholder}
-        style={{ maxWidth: 80 }}
-      />
-    </div>
-  );
-}
-
-
-/* ============================================================
-   LOCATIONS PANEL
-   ============================================================ */
-
-/* Locations UI moved to src/components/locations/LeftLocationsView.tsx */
-
-
-/* ============================================================
-   SETTINGS MODAL (Theme)
-   ============================================================ */
-
-/* ============================================================
-   DND COMPONENTS
-   ============================================================ */
-
-export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
-  player,
-  trainingCount,
-  groupBg,
-  isBirthday,
-  t,
-}: {
-  player: Player;
-  trainingCount: number;
-  groupBg: Record<GroupId, string>;
-  isBirthday: boolean;
-  t: (k: string) => string;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `player:${player.id}`,
-    data: { type: "player", playerId: player.id },
-  });
-
-  const style: CSSProperties = {
-    cursor: "grab",
-    opacity: isDragging ? 0.6 : 1,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    boxShadow: isDragging
-      ? "0 10px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)"
-      : "none",
-    zIndex: isDragging ? 40 : undefined,
-    touchAction: "none",
-    userSelect: "none",
-    WebkitUserSelect: "none",
-  };
-
-  const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
-  const text = pickTextColor(bg);
-  const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
-
-  const pos = (player.positions ?? []).join("/") || "—";
-  const isTbd = player.id === "TBD";
-
-  const taOk = hasAnyTna(player);
-  const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <div
-        style={{
-          border: "1px solid rgba(0,0,0,0.15)",
-          borderRadius: 12,
-          padding: 10,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          background: bg,
-        }}
-        title={
-          isTbd
-            ? t("placeholder")
-            : (player.lizenzen ?? [])
-              .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
-              .join(" | ") || t("noTaTnaSaved")
-        }
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              color: text,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={!taDobCheck.ok ? taDobCheck.reason : undefined}
-          >
-            {player.name}{isBirthday ? " 🎂" : ""}{!taDobCheck.ok ? " ⚠️" : ""}
-          </div>
-          <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
-            {isTbd
-              ? t("placeholder")
-              : `${player.primaryYouthTeam || ""}${player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
-              }`}
-          </div>
-        </div>
-
-        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-          {isTbd ? (
-            <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>TBD</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{t("groupTbdLong")}</div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{pos}</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{trainingCount}x</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>
-                TA {taOk ? "✓" : "—"}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-DraggablePlayerRow.displayName = "DraggablePlayerRow";
-
-
-
-/* ============================================================
-   Optional right pane: Calendar week view (DnD)
-   ============================================================ */
-
-const ParticipantCard = React.memo(function ParticipantCard({
-  player,
-  onRemove,
-  groupBg,
-  isBirthday,
-  t,
-}: {
-  player: Player;
-  onRemove: () => void;
-  groupBg: Record<GroupId, string>;
-  isBirthday: boolean;
-  t: (k: string) => string;
-}) {
-  const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
-  const text = pickTextColor(bg);
-
-  return (
-    <div
-      style={{
-        border: "1px solid rgba(0,0,0,0.15)",
-        borderRadius: 12,
-        padding: "8px 10px",
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 10,
-        background: bg,
-        alignItems: "center",
-      }}
-    >
-      <div style={{ fontWeight: 900, color: text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {player.name}{isBirthday ? " 🎂" : ""}
-      </div>
-      <button
-        onClick={onRemove}
-        style={{
-          border: "1px solid rgba(255,255,255,0.6)",
-          background: "rgba(255,255,255,0.25)",
-          color: text,
-          borderRadius: 10,
-          padding: "6px 10px",
-          cursor: "pointer",
-          fontWeight: 900,
-        }}
-      >
-        {t("remove")}
-      </button>
-    </div>
-  );
-});
-
-ParticipantCard.displayName = "ParticipantCard";
+import { usePlanHistory } from "./hooks/usePlanHistory";
 
 /* ============================================================
    PRINT VIEW → src/components/layout/PrintView.tsx
@@ -771,6 +377,8 @@ export default function App() {
     masterPlan,
     reviveWeekPlan
   );
+  // --- Undo/Redo plan history ---
+  const planHistory = usePlanHistory(plan, setPlan);
 
   /* ----------------------
      Export HTML (Source of Truth)
@@ -879,14 +487,14 @@ export default function App() {
      DnD: add/remove participants
      ============================================================ */
   function removePlayerFromSession(sessionId: string, playerId: string) {
-    setPlan((prev) => ({
-      ...prev,
-      sessions: prev.sessions.map((s) => {
+    planHistory.push({
+      ...plan,
+      sessions: plan.sessions.map((s) => {
         if (s.id !== sessionId) return s;
         const next = (s.participants ?? []).filter((id) => id !== playerId).sort(sortParticipants);
         return { ...s, participants: next };
       }),
-    }));
+    });
   }
 
 
@@ -897,37 +505,28 @@ export default function App() {
   const TEAM_OPTIONS = ["U18", "NBBL", "HOL", "1RLH"];
 
   const LOCATION_PRESETS = ["BSH", "SHP", "Seminarraum"] as const;
-  type LocationMode = string; // any location name or "__CUSTOM__"
 
-  type EditorState = {
-    editingSessionId: string | null;
-    formDate: string;
-    formTeams: string[];
-    locationMode: LocationMode;
-    customLocation: string;
-    formStart: string;
-    formDuration: number;
-    formOpponent: string;
-    formWarmupMin: number;
-    formTravelMin: number;
-    formExcludeFromRoster: boolean;
-    formRowColor: string;
-  };
+  // Event-Editor-Logik jetzt über useEventPlannerState
+  const eventPlanner = useEventPlannerState();
 
-  const [editorState, setEditorState] = useState<EditorState>({
-    editingSessionId: null,
-    formDate: new Date().toISOString().slice(0, 10),
-    formTeams: ["NBBL"],
-    locationMode: "BSH",
-    customLocation: "",
-    formStart: "18:00",
-    formDuration: 90,
-    formOpponent: "",
-    formWarmupMin: 30,
-    formTravelMin: 0,
-    formExcludeFromRoster: false,
-    formRowColor: "",
-  });
+  // Alias für Kompatibilität mit bestehendem Code
+  const {
+    editorState,
+    setEditingSessionId,
+    setFormDate,
+    setFormTeams,
+    setLocationMode,
+    setCustomLocation,
+    setFormStart,
+    setFormDuration,
+    setFormOpponent,
+    setFormWarmupMin,
+    setFormTravelMin,
+    currentLocationValue,
+    onToggleTeam,
+    resetForm,
+    buildSessionFromForm,
+  } = eventPlanner;
 
   const {
     editingSessionId,
@@ -940,220 +539,9 @@ export default function App() {
     formOpponent,
     formWarmupMin,
     formTravelMin,
-    formExcludeFromRoster,
-    formRowColor,
   } = editorState;
 
-  function setEditorField<K extends keyof EditorState>(key: K, value: React.SetStateAction<EditorState[K]>) {
-    setEditorState((prev) => ({
-      ...prev,
-      [key]: typeof value === "function" ? (value as (p: EditorState[K]) => EditorState[K])(prev[key]) : value,
-    }));
-  }
-
-  const setEditingSessionId = (value: React.SetStateAction<string | null>) => setEditorField("editingSessionId", value);
-  const setFormDate = (value: React.SetStateAction<string>) => setEditorField("formDate", value);
-  const setFormTeams = (value: React.SetStateAction<string[]>) => setEditorField("formTeams", value);
-  const setLocationMode = (value: React.SetStateAction<LocationMode>) => setEditorField("locationMode", value);
-  const setCustomLocation = (value: React.SetStateAction<string>) => setEditorField("customLocation", value);
-  const setFormStart = (value: React.SetStateAction<string>) => setEditorField("formStart", value);
-  const setFormDuration = (value: React.SetStateAction<number>) => setEditorField("formDuration", value);
-  const setFormOpponent = (value: React.SetStateAction<string>) => setEditorField("formOpponent", value);
-  const setFormWarmupMin = (value: React.SetStateAction<number>) => setEditorField("formWarmupMin", value);
-  const setFormTravelMin = (value: React.SetStateAction<number>) => setEditorField("formTravelMin", value);
-  const setFormExcludeFromRoster = (value: React.SetStateAction<boolean>) => setEditorField("formExcludeFromRoster", value);
-  const setFormRowColor = (value: React.SetStateAction<string>) => setEditorField("formRowColor", value);
-
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const opponentInputRef = useRef<HTMLInputElement | null>(null);
-  const editorTopRef = useRef<HTMLDivElement | null>(null);
-  const prevOpponentModeRef = useRef<{ game: boolean; away: boolean } | null>(null);
-
-  // Default-Logik:
-  // - nur bei Modus-Übergängen defaults setzen:
-  //   * non-game -> game: warmup default 90 (falls bisher 0)
-  //   * home -> away: travel default 90 (falls bisher 0)
-  //   * away -> home: travel = 0
-  //   * game -> non-game: warmup/travel = 0
-  useEffect(() => {
-    const info = normalizeOpponentInfo(formOpponent);
-    const game = isGameInfo(info);
-    const away = info.startsWith("@");
-
-    setEditorState((prev) => {
-      const prevMode = prevOpponentModeRef.current;
-      prevOpponentModeRef.current = { game, away };
-
-      let nextWarmupMin = prev.formWarmupMin;
-      let nextTravelMin = prev.formTravelMin;
-
-      // Bei reinem Gegnernamen-Ändern ohne Moduswechsel keine automatischen Anpassungen.
-      if (prevMode && prevMode.game === game && prevMode.away === away) {
-        return prev;
-      }
-
-      if (game && !prevMode?.game) {
-        if (nextWarmupMin <= 0) nextWarmupMin = 90;
-      }
-
-      if (game && away && prevMode && !prevMode.away) {
-        if (nextTravelMin <= 0) nextTravelMin = 90;
-      }
-
-      if (game && !away && prevMode?.away) {
-        if (nextTravelMin !== 0) nextTravelMin = 0;
-      }
-
-      if (!game && prevMode?.game) {
-        if (nextWarmupMin !== 0) nextWarmupMin = 0;
-        if (nextTravelMin !== 0) nextTravelMin = 0;
-      }
-
-      if (nextWarmupMin === prev.formWarmupMin && nextTravelMin === prev.formTravelMin) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        formWarmupMin: nextWarmupMin,
-        formTravelMin: nextTravelMin,
-      };
-    });
-  }, [formOpponent]);
-
-  function currentLocationValue(): string {
-    if (locationMode === "__CUSTOM__") return (customLocation || "").trim() || "—";
-    return locationMode;
-  }
-
-  function handleRecallLocationEdit() {
-    const current = currentLocationValue().trim();
-    setLeftTab("locations");
-    setLeftEditMode(true);
-
-    if (!current || current === "—") {
-      setOpenLocationName(null);
-      return;
-    }
-
-    const known = Object.prototype.hasOwnProperty.call(theme.locations?.locations ?? {}, current);
-    const isPreset = LOCATION_PRESETS.includes(current as (typeof LOCATION_PRESETS)[number]);
-
-    if (!known && !isPreset) {
-      ensureLocationSaved(theme, setTheme, current);
-    }
-
-    setOpenLocationName(current);
-  }
-
-  function onToggleTeam(t: string) {
-    setFormTeams((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  }
-
-  function resetForm() {
-    setEditingSessionId(null);
-    setFormDate(new Date().toISOString().slice(0, 10));
-    setFormTeams(["NBBL"]);
-    setLocationMode("BSH");
-    setCustomLocation("");
-    setFormStart("18:00");
-    setFormDuration(90);
-    setFormOpponent("");
-    setFormWarmupMin(30);
-    setFormTravelMin(0);
-    setFormExcludeFromRoster(false);
-    setFormRowColor("");
-  }
-
-  function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
-    const info = normalizeOpponentInfo(formOpponent);
-    const isGame = isGameInfo(info);
-    const dur = isGame ? 120 : formDuration;
-    const end = addMinutesToHHMM(formStart, dur);
-    const time = `${formStart}–${end}`;
-
-    return {
-      id: existingId ?? randomId("sess_"),
-      date: formDate,
-      day: weekdayShortDE(formDate),
-      teams: [...formTeams].sort((a, b) => a.localeCompare(b, "de")),
-      time,
-      location: currentLocationValue(),
-      info: info || null,
-      warmupMin: isGame ? Math.max(0, Math.floor(formWarmupMin)) : null,
-      travelMin: isGame ? Math.max(0, Math.floor(formTravelMin)) : null,
-      participants: keepParticipants ?? [],
-      excludeFromRoster: formExcludeFromRoster,
-      rowColor: formRowColor || undefined,
-    };
-  }
-
-  const { upsert: upsertSessionInPlan, remove: removeSessionFromPlan } = useSessionEditor(setPlan, sortParticipants);
-
-  function upsertSession() {
-    if (!formDate || formTeams.length === 0) return;
-
-    if (editingSessionId) {
-      const old = plan.sessions.find((s) => s.id === editingSessionId);
-      if (old) upsertSessionInPlan(buildSessionFromForm(old.id, old.participants ?? []));
-    } else {
-      upsertSessionInPlan(buildSessionFromForm());
-    }
-
-    resetForm();
-  }
-
-  function onEditSession(s: Session) {
-    setEventEditorOpen(true);
-    setEditingSessionId(s.id);
-    setFormDate(s.date);
-    setFormTeams(Array.isArray(s.teams) ? s.teams : []);
-
-    // Scroll to editor and focus opponent field
-    requestAnimationFrame(() => {
-      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      // Focus nach einer kurzen Verzögerung, damit das Scroll abgeschlossen ist
-      setTimeout(() => {
-        opponentInputRef.current?.focus();
-        opponentInputRef.current?.select();
-      }, 500);
-    });
-
-    const loc = (s.location ?? "").trim();
-    // Check if location is a preset or saved location
-    const savedLocations = Object.keys(theme.locations?.locations ?? {});
-    const isKnownLocation = LOCATION_PRESETS.includes(loc as (typeof LOCATION_PRESETS)[number]) || savedLocations.includes(loc);
-
-    if (isKnownLocation) {
-      setLocationMode(loc);
-      setCustomLocation("");
-    } else {
-      setLocationMode("__CUSTOM__");
-      setCustomLocation(loc);
-    }
-
-    const tr = splitTimeRange(s.time ?? "");
-    const start = tr ? tr[0] : "18:00";
-    setFormStart(start);
-
-    if (tr) {
-      const [st, en] = tr;
-      const startMin = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
-      const endMin = parseInt(en.slice(0, 2), 10) * 60 + parseInt(en.slice(3, 5), 10);
-      const dur = Math.max(0, endMin - startMin);
-      setFormDuration(dur || 90);
-    } else {
-      setFormDuration(90);
-    }
-
-    setFormOpponent(s.info ?? "");
-
-    const game = isGameInfo(s.info ?? "");
-    setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
-    setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
-    setFormExcludeFromRoster(s.excludeFromRoster === true);
-    setFormRowColor(s.rowColor ?? "");
-  }
+  // Die Felder formExcludeFromRoster, formRowColor ggf. separat weiterreichen, falls benötigt
 
   async function onDeleteSession(sessionId: string) {
     const s = plan.sessions.find((x) => x.id === sessionId);
@@ -1165,27 +553,27 @@ export default function App() {
   }
 
   function toggleSessionTravel(sessionId: string) {
-    setPlan((prev) => ({
-      ...prev,
-      sessions: prev.sessions.map((s) => {
+    planHistory.push({
+      ...plan,
+      sessions: plan.sessions.map((s) => {
         if (s.id !== sessionId) return s;
         const cur = Math.max(0, Math.floor(Number(s.travelMin ?? 0)));
         const next = cur > 0 ? 0 : 30;
         return { ...s, travelMin: next };
       }),
-    }));
+    });
   }
 
   function toggleSessionWarmup(sessionId: string) {
-    setPlan((prev) => ({
-      ...prev,
-      sessions: prev.sessions.map((s) => {
+    planHistory.push({
+      ...plan,
+      sessions: plan.sessions.map((s) => {
         if (s.id !== sessionId) return s;
         const cur = Math.max(0, Math.floor(Number(s.warmupMin ?? 0)));
         const next = cur > 0 ? 0 : 30;
         return { ...s, warmupMin: next };
       }),
-    }));
+    });
   }
 
   function handleOpenEventEditor(eventId: string) {
@@ -1486,13 +874,13 @@ export default function App() {
     if (id === "TBD") return;
 
     setPlayers((prev) => prev.filter((p) => p.id !== id));
-    setPlan((prev) => ({
-      ...prev,
-      sessions: prev.sessions.map((s) => ({
+    planHistory.push({
+      ...plan,
+      sessions: plan.sessions.map((s) => ({
         ...s,
         participants: (s.participants ?? []).filter((pid) => pid !== id),
       })),
-    }));
+    });
     setSelectedPlayerId((prev) => (prev === id ? null : prev));
   }
 
@@ -1800,7 +1188,7 @@ export default function App() {
     }));
 
     const shifted = applyWeekDatesToSessions(copied, archiveTemplateStart);
-    setPlan({
+    planHistory.push({
       weekId: `WEEK_${archiveTemplateStart}_tpl`,
       sessions: shifted,
     });
@@ -1835,30 +1223,24 @@ export default function App() {
     }
 
     if (mode === "MASTER") {
-      setPlan(() => {
-        const sessionsWithDates = applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO);
-        return {
-          weekId: `WEEK_${weekStartMondayISO}`,
-          sessions: sessionsWithDates.map((s) => ({ ...s, participants: [] })), // master = without participants
-        };
+      planHistory.push({
+        weekId: `WEEK_${weekStartMondayISO}`,
+        sessions: applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO).map((s) => ({ ...s, participants: [] })),
       });
     } else if (mode === "EMPTY") {
-      setPlan({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });
+      planHistory.push({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });
     } else {
       // COPY_CURRENT
-      setPlan((prev) => {
-        const copied = prev.sessions.map((s) => ({
-          ...s,
-          id: randomId("sess_"),
-          participants: keepParticipants ? [...(s.participants ?? [])] : [],
-        }));
-
-        const shifted = applyWeekDatesToSessions(copied, weekStartMondayISO);
-
-        return {
-          weekId: `WEEK_${weekStartMondayISO}_copy`,
-          sessions: shifted,
-        };
+      planHistory.push({
+        weekId: `WEEK_${weekStartMondayISO}_copy`,
+        sessions: applyWeekDatesToSessions(
+          plan.sessions.map((s) => ({
+            ...s,
+            id: randomId("sess_"),
+            participants: keepParticipants ? [...(s.participants ?? [])] : [],
+          })),
+          weekStartMondayISO
+        ),
       });
     }
     setNewWeekOpen(false);
@@ -2162,7 +1544,6 @@ export default function App() {
 
   return (
     <>
-      <style>{responsiveCss}</style>
 
       <PrintView
         plan={plan}
@@ -2353,6 +1734,26 @@ export default function App() {
 
                 {/* Right: Other Buttons */}
                 <div className="topBarRight">
+                  <Button
+                    className="touchBtn"
+                    variant="outline"
+                    onClick={planHistory.undo}
+                    disabled={!planHistory.canUndo}
+                    title={t("undo")}
+                    style={{ padding: "8px 10px", borderRadius: 12 }}
+                  >
+                    ↶ {t("undo")}
+                  </Button>
+                  <Button
+                    className="touchBtn"
+                    variant="outline"
+                    onClick={planHistory.redo}
+                    disabled={!planHistory.canRedo}
+                    title={t("redo")}
+                    style={{ padding: "8px 10px", borderRadius: 12 }}
+                  >
+                    ↷ {t("redo")}
+                  </Button>
                   <Button
                     className="touchBtn"
                     variant={eventEditorOpen ? "solid" : "outline"}
@@ -3144,62 +2545,24 @@ export default function App() {
 
       {/* Roster Editor Modal */}
       {rosterOpen && (
-        <Modal title={`${t("rosterEdit")} (roster.json)`} onClose={() => setRosterOpen(false)} closeLabel={t("close")}>
-          <div className="rosterGrid">
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
-                <div className="flexRow">
-                  <Button onClick={addNewPlayer} style={{ padding: "8px 10px" }}>+ {t("playersSingle")}</Button>
-                  <Button variant="outline" onClick={exportRoster} style={{ padding: "8px 10px" }}>
-                    {t("export")} roster.json
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => rosterFileRef.current?.click()}
-                    style={{ padding: "8px 10px" }}
-                  >
-                    {t("import")} roster.json
-                  </Button>
-                  <input
-                    ref={rosterFileRef}
-                    type="file"
-                    accept="application/json"
-                    style={{ display: "none" }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) importRosterFile(f);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                </div>
-
-                <div style={{ marginTop: 10, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-                  {t("rosterHintTbd")}
-                </div>
-              </div>
-
-              <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 10 }}>
-                <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("players")}</div>
-                <Input
-                  value={rosterSearch}
-                  onChange={setRosterSearch}
-                  placeholder={t("rosterSearchPlaceholder")}
-                  style={{ marginBottom: 8 }}
-                />
-                <div style={{ fontSize: 12, color: "var(--ui-muted)", fontWeight: 800, marginBottom: 8 }}>
-                  {t("filter")}: {rosterSearch.trim() ? `"${rosterSearch.trim()}"` : "—"}
-                </div>
-                <div style={{ display: "grid", gap: 6, maxHeight: "60vh", overflow: "auto" }}>
-                  {(() => {
-                    const q = rosterSearch.trim().toLowerCase();
-
-                    const list = players
-                      .filter((p) => p.id !== "TBD")
-                      .filter((p) => {
-                        if (!q) return true;
-                        const hay = [
-                          p.name,
-                          p.firstName,
+        <RosterEditorModal
+          open={rosterOpen}
+          onClose={() => setRosterOpen(false)}
+          t={t}
+          players={players}
+          selectedPlayerId={selectedPlayerId}
+          onSelectPlayer={setSelectedPlayerId}
+          rosterSearch={rosterSearch}
+          onRosterSearchChange={setRosterSearch}
+          addNewPlayer={addNewPlayer}
+          exportRoster={exportRoster}
+          importRosterFile={importRosterFile}
+          deletePlayer={deletePlayer}
+          updatePlayer={updatePlayer}
+          teamOptions={teamOptions}
+          clubName={theme.clubName}
+        />
+      )}
                           p.lastName,
                           String(p.birthYear ?? ""),
                           String(p.birthDate ?? ""),

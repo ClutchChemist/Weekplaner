@@ -1,5 +1,5 @@
 import { useRef, type SetStateAction } from "react";
-import type { ConfirmDialogState } from "../state/types";
+import type { ConfirmDialogState } from "@/types";
 
 export function useConfirmDialog(
   setConfirmDialog: (value: SetStateAction<ConfirmDialogState>) => void

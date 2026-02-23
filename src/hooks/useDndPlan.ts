@@ -2,7 +2,7 @@ import type { DragEndEvent, DragOverEvent, DragStartEvent } from "@dnd-kit/core"
 import type { Dispatch, SetStateAction } from "react";
 import { addMinutesToHHMM, splitTimeRange, weekdayShortDE } from "../utils/date";
 import { isGameInfo } from "../utils/session";
-import type { CalendarEvent as Session, Player, WeekPlan } from "../state/types";
+import type { CalendarEvent as Session, Player, WeekPlan } from "@/types";
 
 export type DndPlanHandlers = {
 	onDragStart: (event: DragStartEvent) => void;
@@ -62,8 +62,8 @@ export function useDndPlan(params: {
 		void event;
 		// reserved for future hover/preview behavior; kept for parity hook contract
 	}
-
-	function onDragOver(event: DragOverEvent) {
+			const sM = parseHHMM(st);
+			const eM = parseHHMM(en);
 		void event;
 		// reserved for future hover/preview behavior; kept for parity hook contract
 	}
@@ -109,7 +109,7 @@ export function useDndPlan(params: {
 					if (input === null) return;
 					if (input.trim() === "") {
 						const remove = await confirm(t("confirmRemovePlayerTitle"), t("confirmRemovePlayerFromGame"));
-						if (!remove) return;
+		const startMin = parseHHMM(st);
 						removePlayerFromSession(sessionId, playerId);
 						return;
 					}
@@ -134,19 +134,22 @@ export function useDndPlan(params: {
 			const session = weekPlan.sessions.find((s) => s.id === sessionId);
 			if (!session) return;
 
+			// Use startMin/durationMin as source of truth
 			const info = (session.info ?? "").trim();
 			const game = isGameInfo(info);
-			const tr = splitTimeRange(session.time ?? "");
-			let duration = 90;
-			if (game) {
-				duration = 120;
-			} else if (tr) {
-				const [st, en] = tr;
-				const sM = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
-				const eM = parseInt(en.slice(0, 2), 10) * 60 + parseInt(en.slice(3, 5), 10);
-				duration = Math.max(0, eM - sM) || 90;
+			let duration = typeof session.durationMin === "number" ? session.durationMin : (game ? 120 : 90);
+			// fallback to legacy string if needed
+			if (typeof session.durationMin !== "number" && session.time) {
+				const tr = splitTimeRange(session.time);
+				if (tr) {
+					const [st, en] = tr;
+					const sM = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
+					const eM = parseInt(en.slice(0, 2), 10) * 60 + parseInt(en.slice(3, 5), 10);
+					duration = Math.max(0, eM - sM) || duration;
+				}
 			}
 
+			// Compose new time string for legacy compatibility
 			const hh = String(Math.floor(startMin / 60)).padStart(2, "0");
 			const mm = String(startMin % 60).padStart(2, "0");
 			const newStart = `${hh}:${mm}`;
@@ -161,12 +164,17 @@ export function useDndPlan(params: {
 						date,
 						day: weekdayShortDE(date),
 						time: newTime,
+						startMin,
+						durationMin: duration,
 					};
 				});
 				nextSessions.sort((a, b) => {
 					const ad = a.date.localeCompare(b.date);
 					if (ad !== 0) return ad;
-					return a.time.localeCompare(b.time);
+					// Prefer startMin if available, else fallback to time string
+					const aStart = typeof a.startMin === "number" ? a.startMin : (a.time ? parseInt(a.time, 10) : 0);
+					const bStart = typeof b.startMin === "number" ? b.startMin : (b.time ? parseInt(b.time, 10) : 0);
+					return aStart - bStart;
 				});
 				return { ...prev, sessions: nextSessions };
 			});
@@ -186,24 +194,38 @@ export function useDndPlan(params: {
 			const info = (session.info ?? "").trim();
 			if (isGameInfo(info)) return;
 
-			const tr = splitTimeRange(session.time ?? "");
-			if (!tr) return;
-			const [st] = tr;
-			const startMin = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
+			// Use startMin/durationMin as source of truth
+			const startMin = typeof session.startMin === "number" ? session.startMin : (() => {
+				if (session.time) {
+					const tr = splitTimeRange(session.time);
+					if (tr) {
+						const [st] = tr;
+						return parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
+					}
+				}
+				return 0;
+			})();
 
 			const newEndMin = Math.max(startMin + 30, endMin);
+			const duration = newEndMin - startMin;
 			const hh = String(Math.floor(startMin / 60)).padStart(2, "0");
 			const mm = String(startMin % 60).padStart(2, "0");
 			const newStart = `${hh}:${mm}`;
-			const newEnd = addMinutesToHHMM(newStart, newEndMin - startMin);
+			const newEnd = addMinutesToHHMM(newStart, duration);
 			const newTime = `${newStart}–${newEnd}`;
 
 			setWeekPlan((prev) => {
-				const nextSessions = prev.sessions.map((s) => (s.id === sessionId ? { ...s, time: newTime } : s));
+				const nextSessions = prev.sessions.map((s) =>
+					s.id === sessionId
+						? { ...s, time: newTime, startMin, durationMin: duration }
+						: s
+				);
 				nextSessions.sort((a, b) => {
 					const ad = a.date.localeCompare(b.date);
 					if (ad !== 0) return ad;
-					return a.time.localeCompare(b.time);
+					const aStart = typeof a.startMin === "number" ? a.startMin : (a.time ? parseInt(a.time, 10) : 0);
+					const bStart = typeof b.startMin === "number" ? b.startMin : (b.time ? parseInt(b.time, 10) : 0);
+					return aStart - bStart;
 				});
 				return { ...prev, sessions: nextSessions };
 			});
@@ -221,10 +243,17 @@ export function useDndPlan(params: {
 			if (!session) return;
 			if (session.date !== date) return;
 
-			const tr = splitTimeRange(session.time ?? "");
-			if (!tr) return;
-			const [st] = tr;
-			const sessStartMin = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
+			// Use startMin/durationMin as source of truth
+			const sessStartMin = typeof session.startMin === "number" ? session.startMin : (() => {
+				if (session.time) {
+					const tr = splitTimeRange(session.time);
+					if (tr) {
+						const [st] = tr;
+						return parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
+					}
+				}
+				return 0;
+			})();
 
 			let minutes = 0;
 			if (kind === "TRAVEL") {
