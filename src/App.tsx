@@ -1,105 +1,780 @@
-// (removed duplicate import React)
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  useDraggable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+
 import type { Lang } from "./i18n/types";
-import { kwLabelFromPlan } from "./utils/date";
-// --- STUBS for required app state (replace with real state management as needed) ---
-const masterPlan: WeekPlan = { weekId: "WEEK_2024-01-01", sessions: [] };
-const players: Player[] = [];
-const coaches: Coach[] = [];
-const theme = {
-  clubName: "Demo Club",
-  locale: "de" as Lang,
-  groups: { "2007": { bg: "#eee" }, "2008": { bg: "#eee" }, "2009": { bg: "#eee" }, Herren: { bg: "#eee" }, TBD: { bg: "#eee" } },
-  locations: undefined,
-};
-const t = (k: string) => k;
-const groupBg: Record<GroupId, string> = { "2007": "#eee", "2008": "#eee", "2009": "#eee", Herren: "#eee", TBD: "#eee" };
-const clubLogoDataUrl: string | null = null;
+import type {
+  CalendarEvent as Session,
+  Coach,
+  GroupId,
+  Player,
+  Position,
+  ThemeSettings,
+  WeekPlan,
+} from "@/types";
+import { makeT, makeTF } from "./i18n/translate";
+import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
 import {
+  CalendarPane,
+  LeftSidebar,
+  PrintView,
+  RightSidebar,
+  WeekPlanBoard,
+} from "@/components/layout";
+
+import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
+import type { NewWeekMode } from "./components/modals/NewWeekModal";
+import {
+  composeOpponentInfo,
+  getOpponentMode,
+  getOpponentName,
+  useConfirmDialog,
+  useDndPlan,
+  useCloudSync,
+  useLocationUsageMap,
   usePersistedState,
-  useLocationUsageMap
-} from "./hooks";
+  useRightSidebarPersistence,
+  useSessionEditor,
+} from "@/hooks";
+import { useAppUiState } from "./state/useAppUiState";
+import { reviveWeekPlan } from "./state/planReviver";
 import {
-  buildPrintPages,
-  buildPreviewPages
-} from "./utils/printExport";
-import {
-  computeTrainingCounts,
   computeHistoryFlagsBySession,
+  computeTrainingCounts,
   isBirthdayOnAnyPlanDate,
-  planDateSet
-} from "./state";
+  planDateSet,
+} from "./state/planDerived";
+import { normalizeMasterWeek, normalizeRoster } from "./state/normalizers";
 import {
+  birthYearOf,
+  getPlayerGroup,
   GROUPS,
   isCorePlayer,
-  getPlayerGroup,
-  isU18Only,
   isHolOnly,
-  makeParticipantSorter
-} from "./state";
-import type { Player, GroupId, WeekPlan } from "./types";
-import { DEFAULT_THEME, LAST_PLAN_STORAGE_KEY } from "./state";
-import { reviveWeekPlan } from "./state";
-import type { Coach } from "./types";
-// clubLogoDataUrl, masterPlan, players, coaches, theme, t, groupBg, etc. are assumed to be defined elsewhere in the file or passed as props/context.
-// Stubs for missing modals/components
-const NewWeekModal: React.FC<Record<string, unknown>> = () => null;
-const ConfirmModal: React.FC<Record<string, unknown>> = () => null;
-const PromptModal: React.FC<Record<string, unknown>> = () => null;
-const ProfileCloudSyncPanel: React.FC<Record<string, unknown>> = () => null;
-const RosterEditorModal: React.FC<Record<string, unknown>> = () => null;
-const PrintView: React.FC<any> = () => null;
-const LeftSidebar: React.FC<any> = () => null;
-const Button: React.FC<any> = (props) => <button {...props} />;
-// Additional stubs for missing utilities
-const dbbDobMatchesBirthDate = (_player: unknown) => false;
-const primaryTna = (_player: unknown) => "";
-// Stubs for missing components/utilities
-const WeekPlanBoard: React.FC<Record<string, unknown>> = () => null;
-const RightSidebar: React.FC<Record<string, unknown>> = () => null;
-const CalendarPane: React.FC<Record<string, unknown>> = () => null;
-const ThemeSettingsModal: React.FC<Record<string, unknown>> = () => null;
-const isGameInfo = (_info: unknown) => false;
-const resolveLocationAddress = (..._args: unknown[]) => "";
-const resolveLocationPlaceId = (..._args: unknown[]) => "";
-const getCachedTravelMinutes = (..._args: unknown[]) => 0;
-const fetchTravelMinutes = async (..._args: unknown[]) => 0;
-const addMinutesToHHMM = (_start: string, _minutes: number) => "";
-const upsertSession = () => {};
-// const formExcludeFromRoster = false;
-// const setFormExcludeFromRoster = (_v: boolean) => {};
-// const formRowColor = "";
-// const setFormRowColor = (_v: string) => {};
-// Removed unused buildSessionFromForm and setFormTeams
-import React, {
-  /*
-  const responsiveCss = `
-    ...CSS omitted for TS compatibility...
-    (Full CSS block is commented out for TypeScript compatibility)
-  `;
-  */
+  isU18Only,
+  makeParticipantSorter,
+} from "./state/playerGrouping";
+import {
+  dbbDobMatchesBirthDate,
+  enrichPlayersWithBirthFromDBBTA,
+  hasAnyTna,
+  primaryTna,
+} from "./state/playerMeta";
+import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
+import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
+import {
+  ACTIVE_PROFILE_STORAGE_KEY,
+  DEFAULT_PROFILE_SYNC,
+  PROFILES_STORAGE_KEY,
+  type ProfileSyncMode,
+  safeParseProfiles,
+  type CloudSnapshotV1,
+  type ProfilePayload,
+  type SavedProfile,
+} from "./state/profileTypes";
+import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
+import { safeParseWeekArchive, WEEK_ARCHIVE_STORAGE_KEY, type WeekArchiveEntry } from "./state/weekArchive";
+import { DEFAULT_THEME } from "./state/themeDefaults";
+import { applyThemeToCssVars } from "./themes/cssVars";
+import {
+  addDaysISO,
+  addMinutesToHHMM,
+  dateToShortDE,
+  isoWeekMonday,
+  kwLabelFromPlan,
+  normalizeDash,
+  splitTimeRange,
+  weekdayOffsetFromDEShort,
+  weekdayShortLocalized,
+  weekdayShortDE,
+} from "./utils/date";
+import {
+  computeConflictsBySession,
+  isGameInfo,
+  isGameSession,
+  normalizeOpponentInfo,
+  sessionsOverlap,
+} from "./utils/session";
+import {
+  ensureLocationSaved,
+  getCachedTravelMinutes,
+  getLocationOptions,
+  resolveLocationAddress,
+  resolveLocationPlaceId,
+  setCachedTravelMinutes,
+} from "./utils/locations";
+import { fetchTravelMinutes } from "./utils/mapsApi";
+import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
+import { normalizeYearColor, pickTextColor } from "./utils/color";
+import { downloadJson } from "./utils/json";
+import { randomId } from "./utils/id";
+import rosterRaw from "./data/roster.json";
+import weekMasterRaw from "./data/weekplan_master.json";
 
-  /*
-    (All remaining CSS blocks below are commented out for TS compatibility)
-    flex: 1 1 260px;
-    ...existing code...
-    .profileQuickMenu {
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      top: auto;
-      bottom: 12px;
-      max-width: none;
-      min-width: 0;
-      max-height: 55vh;
-      overflow: auto;
-      z-index: 1000;
+/* ============================================================
+   TYPES
+   ============================================================ */
+
+/* ============================================================
+   CONSTANTS / PRESETS
+   ============================================================ */
+
+/* ============================================================
+  UTILS (date/color/json/...)
+  ============================================================ */
+
+/* ============================================================
+   HELPERS (colors / contrast)
+   ============================================================ */
+
+/* ============================================================
+   ISO WEEK
+   ============================================================ */
+
+/* ============================================================
+  DOWNLOAD JSON
+  ============================================================ */
+
+/* ============================================================
+   ROSTER helpers (TA badge + grouping)
+   ============================================================ */
+
+/* ============================================================
+  COMPONENTS (Modal..., Button..., Row..., Pane...)
+  ============================================================ */
+
+/* ============================================================
+   UI PRIMITIVES (CSS vars)
+   ============================================================ */
+
+type PromptDialogState = {
+  open: boolean;
+  title: string;
+  message: string;
+  value: string;
+  placeholder?: string;
+};
+
+const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
+const CLUB_LOGO_MAX_BYTES = 600 * 1024;
+
+function MinutePicker({
+  value,
+  onChange,
+  presets,
+  allowZero = true,
+  placeholder = "Minuten",
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  presets: number[];
+  allowZero?: boolean;
+  placeholder?: string;
+}) {
+  const items = allowZero ? [0, ...presets] : presets;
+
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      {items.map((m) => {
+        const active = value === m;
+        return (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onChange(m)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
+              background: active ? "rgba(59,130,246,.18)" : "transparent",
+              color: "var(--ui-text)",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            {m}
+          </button>
+        );
+      })}
+
+      <Input
+        type="number"
+        value={String(value)}
+        onChange={(v) => onChange(Math.max(allowZero ? 0 : 1, Math.floor(Number(v || "0"))))}
+        placeholder={placeholder}
+        style={{ maxWidth: 80 }}
+      />
+    </div>
+  );
+}
+
+
+/* ============================================================
+   LOCATIONS PANEL
+   ============================================================ */
+
+/* Locations UI moved to src/components/locations/LeftLocationsView.tsx */
+
+
+/* ============================================================
+   SETTINGS MODAL (Theme)
+   ============================================================ */
+
+/* ============================================================
+   DND COMPONENTS
+   ============================================================ */
+
+export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
+  player,
+  trainingCount,
+  groupBg,
+  isBirthday,
+  t,
+}: {
+  player: Player;
+  trainingCount: number;
+  groupBg: Record<GroupId, string>;
+  isBirthday: boolean;
+  t: (k: string) => string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `player:${player.id}`,
+    data: { type: "player", playerId: player.id },
+  });
+
+  const style: CSSProperties = {
+    cursor: "grab",
+    opacity: isDragging ? 0.6 : 1,
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    boxShadow: isDragging
+      ? "0 10px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)"
+      : "none",
+    zIndex: isDragging ? 40 : undefined,
+    touchAction: "none",
+    userSelect: "none",
+    WebkitUserSelect: "none",
+  };
+
+  const group = getPlayerGroup(player);
+  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
+  const text = pickTextColor(bg);
+  const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
+
+  const pos = (player.positions ?? []).join("/") || "—";
+  const isTbd = player.id === "TBD";
+
+  const taOk = hasAnyTna(player);
+  const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      <div
+        style={{
+          border: "1px solid rgba(0,0,0,0.15)",
+          borderRadius: 12,
+          padding: 10,
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          background: bg,
+        }}
+        title={
+          isTbd
+            ? t("placeholder")
+            : (player.lizenzen ?? [])
+              .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
+              .join(" | ") || t("noTaTnaSaved")
+        }
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              fontWeight: 900,
+              color: text,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+            title={!taDobCheck.ok ? taDobCheck.reason : undefined}
+          >
+            {player.name}{isBirthday ? " 🎂" : ""}{!taDobCheck.ok ? " ⚠️" : ""}
+          </div>
+          <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
+            {isTbd
+              ? t("placeholder")
+              : `${player.primaryYouthTeam || ""}${player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
+              }`}
+          </div>
+        </div>
+
+        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
+          {isTbd ? (
+            <>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>TBD</div>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{t("groupTbdLong")}</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{pos}</div>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{trainingCount}x</div>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>
+                TA {taOk ? "✓" : "—"}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+DraggablePlayerRow.displayName = "DraggablePlayerRow";
+
+
+
+/* ============================================================
+   Optional right pane: Calendar week view (DnD)
+   ============================================================ */
+
+const ParticipantCard = React.memo(function ParticipantCard({
+  player,
+  onRemove,
+  groupBg,
+  isBirthday,
+  t,
+}: {
+  player: Player;
+  onRemove: () => void;
+  groupBg: Record<GroupId, string>;
+  isBirthday: boolean;
+  t: (k: string) => string;
+}) {
+  const group = getPlayerGroup(player);
+  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
+  const text = pickTextColor(bg);
+
+  return (
+    <div
+      style={{
+        border: "1px solid rgba(0,0,0,0.15)",
+        borderRadius: 12,
+        padding: "8px 10px",
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 10,
+        background: bg,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ fontWeight: 900, color: text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {player.name}{isBirthday ? " 🎂" : ""}
+      </div>
+      <button
+        onClick={onRemove}
+        style={{
+          border: "1px solid rgba(255,255,255,0.6)",
+          background: "rgba(255,255,255,0.25)",
+          color: text,
+          borderRadius: 10,
+          padding: "6px 10px",
+          cursor: "pointer",
+          fontWeight: 900,
+        }}
+      >
+        {t("remove")}
+      </button>
+    </div>
+  );
+});
+
+ParticipantCard.displayName = "ParticipantCard";
+
+/* ============================================================
+   PRINT VIEW → src/components/layout/PrintView.tsx
+   ============================================================ */
+
+/* ============================================================
+   COACHES: persistence + defaults
+   ============================================================ */
+
+/* ============================================================
+   NEW WEEK MODAL
+   ============================================================ */
+
+/* ============================================================
+   GOOGLE MAPS HELPERS
+   ============================================================ */
+
+/* ============================================================
+   APP
+   ============================================================ */
+
+export default function App() {
+  /* ============================================================
+    STATE (useState...)
+    ============================================================ */
+
+  /* ----------------------
+     Theme
+     ---------------------- */
+  const [theme, setTheme] = useState<ThemeSettings>(() => {
+    const saved = safeParseTheme(typeof window !== "undefined" ? localStorage.getItem(THEME_STORAGE_KEY) : null, DEFAULT_THEME);
+    return saved ? migrateLegacyBlueTheme(saved, DEFAULT_THEME) : DEFAULT_THEME;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("reset") !== "1") return;
+
+    localStorage.removeItem(THEME_STORAGE_KEY);
+    localStorage.removeItem(LAST_PLAN_STORAGE_KEY);
+    localStorage.removeItem(STAFF_STORAGE_KEY);
+    localStorage.removeItem("right_sidebar_v1");
+
+    url.searchParams.delete("reset");
+    window.history.replaceState({}, "", url.toString());
+    window.location.reload();
+  }, []);
+
+  useEffect(() => {
+    setTheme((prev) => {
+      const next = migrateLegacyBlueTheme(prev, DEFAULT_THEME);
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, []);
+
+  useEffect(() => {
+    applyThemeToCssVars(theme);
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(theme));
+  }, [theme]);
+
+  const groupBg = useMemo(() => {
+    return {
+      "2007": theme.groups["2007"].bg,
+      "2008": theme.groups["2008"].bg,
+      "2009": theme.groups["2009"].bg,
+      Herren: theme.groups["Herren"].bg,
+      TBD: theme.groups["TBD"].bg,
+    } as Record<GroupId, string>;
+  }, [theme]);
+
+  // Initialize i18n early so it's available for all functions
+  const lang: Lang = (theme.locale ?? "de") as Lang;
+  const t = useMemo(() => makeT(lang), [lang]);
+  const tf = useMemo(() => makeTF(lang), [lang]);
+
+  const [profiles, setProfiles] = useState<SavedProfile[]>(() =>
+    safeParseProfiles(typeof window !== "undefined" ? localStorage.getItem(PROFILES_STORAGE_KEY) : null)
+  );
+  const [activeProfileId, setActiveProfileId] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY) ?? "" : ""
+  );
+  const [profileHydratedId, setProfileHydratedId] = useState<string | null>(null);
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [weekArchiveOpen, setWeekArchiveOpen] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState("");
+  const [logoUploadError, setLogoUploadError] = useState("");
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const logoFileRef = useRef<HTMLInputElement | null>(null);
+  const [clubLogoDataUrl, setClubLogoDataUrl] = usePersistedState<string | null>(
+    CLUB_LOGO_STORAGE_KEY,
+    null,
+    (savedRaw) => {
+      try {
+        const parsed = JSON.parse(savedRaw);
+        return typeof parsed === "string" || parsed === null ? parsed : null;
+      } catch {
+        return null;
+      }
     }
+  );
+  const activeProfileName = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId)?.name ?? null,
+    [profiles, activeProfileId]
+  );
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) ?? null,
+    [profiles, activeProfileId]
+  );
+  const activeProfileSync = activeProfile?.sync ?? DEFAULT_PROFILE_SYNC;
+
+  const [weekArchiveByProfile, setWeekArchiveByProfile] = usePersistedState<Record<string, WeekArchiveEntry[]>>(
+    WEEK_ARCHIVE_STORAGE_KEY,
+    {},
+    (savedRaw) => safeParseWeekArchive(savedRaw)
+  );
+
+  const [archiveTemplateStart, setArchiveTemplateStart] = useState<string>(() =>
+    isoWeekMonday(new Date().toISOString().slice(0, 10))
+  );
+
+  const activeArchiveEntries = useMemo(() => {
+    if (!activeProfileId) return [] as WeekArchiveEntry[];
+    return (weekArchiveByProfile[activeProfileId] ?? []).filter((entry) => entry.profileId === activeProfileId);
+  }, [activeProfileId, weekArchiveByProfile]);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    function onDocMouseDown(e: MouseEvent) {
+      const node = profileMenuRef.current;
+      if (!node) return;
+      if (!node.contains(e.target as Node)) setProfileMenuOpen(false);
+    }
+    window.addEventListener("mousedown", onDocMouseDown);
+    return () => window.removeEventListener("mousedown", onDocMouseDown);
+  }, [profileMenuOpen]);
+
+  const {
+    appUiState,
+    setSettingsOpen,
+    setEventEditorOpen,
+    setRightOpen,
+    setNewWeekOpen,
+    setRightLayout,
+    setRightTop,
+    setRightBottom,
+    setRightSplitPct,
+    setOpenGroup,
+    setOpenExtra,
+    setLeftTab,
+    setLeftEditMode,
+    setOpenLocationName,
+    setRosterOpen,
+    setAutoTravelLoading,
+    setConfirmDialog,
+    setRosterSearch,
+    setSelectedPlayerId,
+  } = useAppUiState();
+
+  const settingsOpen = appUiState.settingsOpen;
+  const eventEditorOpen = appUiState.eventEditorOpen;
+  const rightOpen = appUiState.rightSidebarOpen;
+  const newWeekOpen = appUiState.newWeekOpen;
+  const rightLayout = appUiState.rightLayout;
+  const rightTop = appUiState.rightTop;
+  const rightBottom = appUiState.rightBottom;
+  const rightSplitPct = appUiState.rightSplitPct;
+  const openGroup = appUiState.openGroup;
+  const openExtra = appUiState.openExtra;
+  const leftTab = appUiState.leftTab;
+  const leftEditMode = appUiState.leftEditMode;
+  const openLocationName = appUiState.openLocationName;
+  const rosterOpen = appUiState.rosterOpen;
+  const autoTravelLoading = appUiState.autoTravelLoading;
+  const [autoTravelError, setAutoTravelError] = useState<string | null>(null);
+  const confirmDialog = appUiState.confirmDialog;
+  const rosterSearch = appUiState.rosterSearch;
+  const selectedPlayerId = appUiState.selectedPlayerId;
+  const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
+  const [promptDialog, setPromptDialog] = useState<PromptDialogState>({
+    open: false,
+    title: "",
+    message: "",
+    value: "",
+    placeholder: "",
+  });
+  const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
+
+  const askPrompt = useCallback(
+    (title: string, message: string, initialValue = "", placeholder = "") => {
+      return new Promise<string | null>((resolve) => {
+        promptResolverRef.current = resolve;
+        setPromptDialog({
+          open: true,
+          title,
+          message,
+          value: initialValue,
+          placeholder,
+        });
+      });
+    },
+    []
+  );
+
+  const resolvePrompt = useCallback((value: string | null) => {
+    setPromptDialog((prev) => ({ ...prev, open: false }));
+    const resolver = promptResolverRef.current;
+    promptResolverRef.current = null;
+    resolver?.(value);
+  }, []);
+
+  /* ============================================================
+    EFFECTS (useEffect...)
+    ============================================================ */
+
+  /* ----------------------
+    Right Sidebar
+    ---------------------- */
+
+  useRightSidebarPersistence({
+    rightOpen,
+    rightLayout,
+    rightTop,
+    rightBottom,
+    rightSplitPct,
+    setRightOpen,
+    setRightLayout,
+    setRightTop,
+    setRightBottom,
+    setRightSplitPct,
+  });
+
+  /* ----------------------
+     Staff / Coaches
+     ---------------------- */
+  const [coaches, setCoaches] = usePersistedState<Coach[]>(
+    STAFF_STORAGE_KEY,
+    DEFAULT_STAFF,
+    (savedRaw) => safeParseStaff(savedRaw) ?? DEFAULT_STAFF
+  );
+
+  /* ============================================================
+     HANDLERS (onDrag..., upsert..., export...)
+     ============================================================ */
+
+  async function importStaffFile(file: File) {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    const list = Array.isArray(json) ? json : json?.coaches;
+    if (!Array.isArray(list)) return;
+    const normalized: Coach[] = list
+      .map((rawCoach) => {
+        const c = (rawCoach && typeof rawCoach === "object") ? (rawCoach as Record<string, unknown>) : {};
+        return {
+          id: String(c.id ?? randomId("c_")),
+          name: String(c.name ?? ""),
+          role: String(c.role ?? "Coach"),
+          license: c.license !== undefined ? String(c.license ?? "") : "",
+        };
+      })
+      .filter((c: Coach) => c.id && c.name);
+    if (normalized.length) setCoaches(normalized);
+  }
+
+  function exportStaff() {
+    downloadJson("staff.json", coaches);
+  }
+
+  function addCoach() {
+    const id = randomId("c_");
+    setCoaches((prev) => [...prev, { id, name: "Name", role: "Coach", license: "" }]);
+  }
+
+  function updateCoach(id: string, patch: Partial<Coach>) {
+    setCoaches((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }
+
+  function deleteCoach(id: string) {
+    setCoaches((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  /* ----------------------
+     Load roster.json
+     ---------------------- */
+  const normalizedRoster = useMemo(() => normalizeRoster(rosterRaw as unknown), []);
+  const [rosterMeta, setRosterMeta] = useState<{ season: string; ageGroups: unknown }>({
+    season: normalizedRoster.season,
+    ageGroups: normalizedRoster.ageGroups,
+  });
+
+  const [players, setPlayers] = useState<Player[]>(() => normalizedRoster.players);
+
+  function handleClubLogoUpload(file: File) {
+    setLogoUploadError("");
+
+    if (!file.type.startsWith("image/")) {
+      setLogoUploadError(theme.locale === "de" ? "Bitte eine Bilddatei auswählen." : "Please choose an image file.");
+      return;
+    }
+    if (file.size > CLUB_LOGO_MAX_BYTES) {
+      const maxKb = Math.round(CLUB_LOGO_MAX_BYTES / 1024);
+      setLogoUploadError(
+        theme.locale === "de"
+          ? `Logo ist zu groß (max. ${maxKb} KB).`
+          : `Logo is too large (max ${maxKb} KB).`
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
+        return;
+      }
+      setClubLogoDataUrl(reader.result);
+      setLogoUploadError("");
+    };
+    reader.onerror = () => {
+      setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  useEffect(() => {
+    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+  }, [profiles]);
+
+  useEffect(() => {
+    if (!activeProfileId) {
+      localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(ACTIVE_PROFILE_STORAGE_KEY, activeProfileId);
+  }, [activeProfileId]);
+
+  /* ----------------------
+     Ensure TBD placeholder exists
+     ---------------------- */
+  useEffect(() => {
+    setPlayers((prev) => {
+      if (prev.some((p) => p.id === "TBD")) return prev;
+      const tbd: Player = {
+        id: "TBD",
+        name: "TBD",
+        firstName: "TBD",
+        lastName: "",
+        group: "TBD",
+        positions: [],
+        primaryYouthTeam: "",
+        primarySeniorTeam: "",
+        defaultTeams: [],
+        lizenzen: [],
+        isLocalPlayer: false,
+      };
+      return [...prev, tbd];
+    });
+  }, []);
+
+  /* ----------------------
+     Plan: use last plan if exists, else master
+     ---------------------- */
+  const masterPlan = useMemo(() => normalizeMasterWeek(weekMasterRaw as unknown), []);
+
   const [plan, setPlan] = usePersistedState<WeekPlan>(
     LAST_PLAN_STORAGE_KEY,
     masterPlan,
     reviveWeekPlan
   );
-    // ---
+
+  /* ----------------------
+     Export HTML (Source of Truth)
+     ---------------------- */
   const exportPages = useMemo(() => {
     return buildPrintPages({
       sessions: plan?.sessions ?? [],
@@ -131,7 +806,10 @@ import React, {
     });
   }, [plan, players, coaches, theme, clubLogoDataUrl]);
 
-    const conflictsBySession = useMemo(() => computeConflictsBySession(plan), [plan]);
+  /* ----------------------
+     Derived
+     ---------------------- */
+  const conflictsBySession = useMemo(() => computeConflictsBySession(plan), [plan]);
 
   const [lastDropError, setLastDropError] = useState<string | null>(null);
   const [collapsedParticipantsBySession, setCollapsedParticipantsBySession] = useState<Record<string, boolean>>({});
@@ -148,12 +826,11 @@ import React, {
     [plan, playerById]
   );
 
-  // Use makeParticipantSorter as a stub (no args)
-  const sortParticipants = useMemo(() => makeParticipantSorter(), []);
+  const sortParticipants = useMemo(() => makeParticipantSorter(playerById), [playerById]);
   const trainingCounts = useMemo(() => computeTrainingCounts(plan), [plan]);
   const locationUsageMap = useLocationUsageMap(plan.sessions ?? []);
 
-  // planDateSet is a function, call it with plan
+  // Plan date set & birthdays for players present in the plan
   const planDates = useMemo(() => planDateSet(plan), [plan]);
 
   const birthdayPlayerIds = useMemo(() => {
@@ -162,16 +839,18 @@ import React, {
       for (const pid of s.participants ?? []) {
         const p = playerById.get(pid);
         if (!p) continue;
-        // isBirthdayOnAnyPlanDate stub: no args
         if (isBirthdayOnAnyPlanDate(p, planDates)) res.add(pid);
       }
     }
     return res;
   }, [plan, playerById, planDates]);
 
-    const playersByGroup = useMemo(() => {
+  /* ----------------------
+     Sidebar grouping
+     ---------------------- */
+  const playersByGroup = useMemo(() => {
     const map = new Map<GroupId, Player[]>();
-    for (const g of GROUPS) map.set(g, []);
+    for (const g of GROUPS) map.set(g.id, []);
 
     for (const p of players) {
       // nur Core (oder TBD) in die Jahrgang/Herren-Gruppen
@@ -192,37 +871,63 @@ import React, {
   const holOnlyPlayers = useMemo(() => {
     return players.filter(isHolOnly).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
   }, [players]);
+  /* ----------------------
+    LEFT TABS: Players / Coaches / Locations
+    ---------------------- */
+
+  /* ============================================================
+     DnD: add/remove participants
+     ============================================================ */
   function removePlayerFromSession(sessionId: string, playerId: string) {
-	// TODO: implement logic
+    setPlan((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) => {
+        if (s.id !== sessionId) return s;
+        const next = (s.participants ?? []).filter((id) => id !== playerId).sort(sortParticipants);
+        return { ...s, participants: next };
+      }),
+    }));
   }
+
 
   /* ============================================================
      Event planner
      ============================================================ */
 
-  // TEAM_OPTIONS imported from hooks barrel
+  const TEAM_OPTIONS = ["U18", "NBBL", "HOL", "1RLH"];
 
-  // Event-Editor-Logik jetzt über useEventPlannerState
-  const eventPlanner = useEventPlannerState();
+  const LOCATION_PRESETS = ["BSH", "SHP", "Seminarraum"] as const;
+  type LocationMode = string; // any location name or "__CUSTOM__"
 
-  // Alias für Kompatibilität mit bestehendem Code
-  const {
-    editorState,
-    setEditingSessionId,
-    setFormDate,
-    // setFormTeams,
-    setLocationMode,
-    setCustomLocation,
-    setFormStart,
-    setFormDuration,
-    setFormOpponent,
-    setFormWarmupMin,
-    setFormTravelMin,
-    currentLocationValue,
-    onToggleTeam,
-    resetForm,
-    // buildSessionFromForm,
-  } = eventPlanner;
+  type EditorState = {
+    editingSessionId: string | null;
+    formDate: string;
+    formTeams: string[];
+    locationMode: LocationMode;
+    customLocation: string;
+    formStart: string;
+    formDuration: number;
+    formOpponent: string;
+    formWarmupMin: number;
+    formTravelMin: number;
+    formExcludeFromRoster: boolean;
+    formRowColor: string;
+  };
+
+  const [editorState, setEditorState] = useState<EditorState>({
+    editingSessionId: null,
+    formDate: new Date().toISOString().slice(0, 10),
+    formTeams: ["NBBL"],
+    locationMode: "BSH",
+    customLocation: "",
+    formStart: "18:00",
+    formDuration: 90,
+    formOpponent: "",
+    formWarmupMin: 30,
+    formTravelMin: 0,
+    formExcludeFromRoster: false,
+    formRowColor: "",
+  });
 
   const {
     editingSessionId,
@@ -235,9 +940,220 @@ import React, {
     formOpponent,
     formWarmupMin,
     formTravelMin,
+    formExcludeFromRoster,
+    formRowColor,
   } = editorState;
 
-  // Die Felder formExcludeFromRoster, formRowColor ggf. separat weiterreichen, falls benötigt
+  function setEditorField<K extends keyof EditorState>(key: K, value: React.SetStateAction<EditorState[K]>) {
+    setEditorState((prev) => ({
+      ...prev,
+      [key]: typeof value === "function" ? (value as (p: EditorState[K]) => EditorState[K])(prev[key]) : value,
+    }));
+  }
+
+  const setEditingSessionId = (value: React.SetStateAction<string | null>) => setEditorField("editingSessionId", value);
+  const setFormDate = (value: React.SetStateAction<string>) => setEditorField("formDate", value);
+  const setFormTeams = (value: React.SetStateAction<string[]>) => setEditorField("formTeams", value);
+  const setLocationMode = (value: React.SetStateAction<LocationMode>) => setEditorField("locationMode", value);
+  const setCustomLocation = (value: React.SetStateAction<string>) => setEditorField("customLocation", value);
+  const setFormStart = (value: React.SetStateAction<string>) => setEditorField("formStart", value);
+  const setFormDuration = (value: React.SetStateAction<number>) => setEditorField("formDuration", value);
+  const setFormOpponent = (value: React.SetStateAction<string>) => setEditorField("formOpponent", value);
+  const setFormWarmupMin = (value: React.SetStateAction<number>) => setEditorField("formWarmupMin", value);
+  const setFormTravelMin = (value: React.SetStateAction<number>) => setEditorField("formTravelMin", value);
+  const setFormExcludeFromRoster = (value: React.SetStateAction<boolean>) => setEditorField("formExcludeFromRoster", value);
+  const setFormRowColor = (value: React.SetStateAction<string>) => setEditorField("formRowColor", value);
+
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const opponentInputRef = useRef<HTMLInputElement | null>(null);
+  const editorTopRef = useRef<HTMLDivElement | null>(null);
+  const prevOpponentModeRef = useRef<{ game: boolean; away: boolean } | null>(null);
+
+  // Default-Logik:
+  // - nur bei Modus-Übergängen defaults setzen:
+  //   * non-game -> game: warmup default 90 (falls bisher 0)
+  //   * home -> away: travel default 90 (falls bisher 0)
+  //   * away -> home: travel = 0
+  //   * game -> non-game: warmup/travel = 0
+  useEffect(() => {
+    const info = normalizeOpponentInfo(formOpponent);
+    const game = isGameInfo(info);
+    const away = info.startsWith("@");
+
+    setEditorState((prev) => {
+      const prevMode = prevOpponentModeRef.current;
+      prevOpponentModeRef.current = { game, away };
+
+      let nextWarmupMin = prev.formWarmupMin;
+      let nextTravelMin = prev.formTravelMin;
+
+      // Bei reinem Gegnernamen-Ändern ohne Moduswechsel keine automatischen Anpassungen.
+      if (prevMode && prevMode.game === game && prevMode.away === away) {
+        return prev;
+      }
+
+      if (game && !prevMode?.game) {
+        if (nextWarmupMin <= 0) nextWarmupMin = 90;
+      }
+
+      if (game && away && prevMode && !prevMode.away) {
+        if (nextTravelMin <= 0) nextTravelMin = 90;
+      }
+
+      if (game && !away && prevMode?.away) {
+        if (nextTravelMin !== 0) nextTravelMin = 0;
+      }
+
+      if (!game && prevMode?.game) {
+        if (nextWarmupMin !== 0) nextWarmupMin = 0;
+        if (nextTravelMin !== 0) nextTravelMin = 0;
+      }
+
+      if (nextWarmupMin === prev.formWarmupMin && nextTravelMin === prev.formTravelMin) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        formWarmupMin: nextWarmupMin,
+        formTravelMin: nextTravelMin,
+      };
+    });
+  }, [formOpponent]);
+
+  function currentLocationValue(): string {
+    if (locationMode === "__CUSTOM__") return (customLocation || "").trim() || "—";
+    return locationMode;
+  }
+
+  function handleRecallLocationEdit() {
+    const current = currentLocationValue().trim();
+    setLeftTab("locations");
+    setLeftEditMode(true);
+
+    if (!current || current === "—") {
+      setOpenLocationName(null);
+      return;
+    }
+
+    const known = Object.prototype.hasOwnProperty.call(theme.locations?.locations ?? {}, current);
+    const isPreset = LOCATION_PRESETS.includes(current as (typeof LOCATION_PRESETS)[number]);
+
+    if (!known && !isPreset) {
+      ensureLocationSaved(theme, setTheme, current);
+    }
+
+    setOpenLocationName(current);
+  }
+
+  function onToggleTeam(t: string) {
+    setFormTeams((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  }
+
+  function resetForm() {
+    setEditingSessionId(null);
+    setFormDate(new Date().toISOString().slice(0, 10));
+    setFormTeams(["NBBL"]);
+    setLocationMode("BSH");
+    setCustomLocation("");
+    setFormStart("18:00");
+    setFormDuration(90);
+    setFormOpponent("");
+    setFormWarmupMin(30);
+    setFormTravelMin(0);
+    setFormExcludeFromRoster(false);
+    setFormRowColor("");
+  }
+
+  function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
+    const info = normalizeOpponentInfo(formOpponent);
+    const isGame = isGameInfo(info);
+    const dur = isGame ? 120 : formDuration;
+    const end = addMinutesToHHMM(formStart, dur);
+    const time = `${formStart}–${end}`;
+
+    return {
+      id: existingId ?? randomId("sess_"),
+      date: formDate,
+      day: weekdayShortDE(formDate),
+      teams: [...formTeams].sort((a, b) => a.localeCompare(b, "de")),
+      time,
+      location: currentLocationValue(),
+      info: info || null,
+      warmupMin: isGame ? Math.max(0, Math.floor(formWarmupMin)) : null,
+      travelMin: isGame ? Math.max(0, Math.floor(formTravelMin)) : null,
+      participants: keepParticipants ?? [],
+      excludeFromRoster: formExcludeFromRoster,
+      rowColor: formRowColor || undefined,
+    };
+  }
+
+  const { upsert: upsertSessionInPlan, remove: removeSessionFromPlan } = useSessionEditor(setPlan, sortParticipants);
+
+  function upsertSession() {
+    if (!formDate || formTeams.length === 0) return;
+
+    if (editingSessionId) {
+      const old = plan.sessions.find((s) => s.id === editingSessionId);
+      if (old) upsertSessionInPlan(buildSessionFromForm(old.id, old.participants ?? []));
+    } else {
+      upsertSessionInPlan(buildSessionFromForm());
+    }
+
+    resetForm();
+  }
+
+  function onEditSession(s: Session) {
+    setEventEditorOpen(true);
+    setEditingSessionId(s.id);
+    setFormDate(s.date);
+    setFormTeams(Array.isArray(s.teams) ? s.teams : []);
+
+    // Scroll to editor and focus opponent field
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Focus nach einer kurzen Verzögerung, damit das Scroll abgeschlossen ist
+      setTimeout(() => {
+        opponentInputRef.current?.focus();
+        opponentInputRef.current?.select();
+      }, 500);
+    });
+
+    const loc = (s.location ?? "").trim();
+    // Check if location is a preset or saved location
+    const savedLocations = Object.keys(theme.locations?.locations ?? {});
+    const isKnownLocation = LOCATION_PRESETS.includes(loc as (typeof LOCATION_PRESETS)[number]) || savedLocations.includes(loc);
+
+    if (isKnownLocation) {
+      setLocationMode(loc);
+      setCustomLocation("");
+    } else {
+      setLocationMode("__CUSTOM__");
+      setCustomLocation(loc);
+    }
+
+    const tr = splitTimeRange(s.time ?? "");
+    const start = tr ? tr[0] : "18:00";
+    setFormStart(start);
+
+    if (tr) {
+      const [st, en] = tr;
+      const startMin = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
+      const endMin = parseInt(en.slice(0, 2), 10) * 60 + parseInt(en.slice(3, 5), 10);
+      const dur = Math.max(0, endMin - startMin);
+      setFormDuration(dur || 90);
+    } else {
+      setFormDuration(90);
+    }
+
+    setFormOpponent(s.info ?? "");
+
+    const game = isGameInfo(s.info ?? "");
+    setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
+    setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
+    setFormExcludeFromRoster(s.excludeFromRoster === true);
+    setFormRowColor(s.rowColor ?? "");
+  }
 
   async function onDeleteSession(sessionId: string) {
     const s = plan.sessions.find((x) => x.id === sessionId);
@@ -249,27 +1165,27 @@ import React, {
   }
 
   function toggleSessionTravel(sessionId: string) {
-    planHistory.push({
-      ...plan,
-      sessions: plan.sessions.map((s) => {
+    setPlan((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) => {
         if (s.id !== sessionId) return s;
         const cur = Math.max(0, Math.floor(Number(s.travelMin ?? 0)));
         const next = cur > 0 ? 0 : 30;
         return { ...s, travelMin: next };
       }),
-    });
+    }));
   }
 
   function toggleSessionWarmup(sessionId: string) {
-    planHistory.push({
-      ...plan,
-      sessions: plan.sessions.map((s) => {
+    setPlan((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) => {
         if (s.id !== sessionId) return s;
         const cur = Math.max(0, Math.floor(Number(s.warmupMin ?? 0)));
         const next = cur > 0 ? 0 : 30;
         return { ...s, warmupMin: next };
       }),
-    });
+    }));
   }
 
   function handleOpenEventEditor(eventId: string) {
@@ -520,14 +1436,11 @@ import React, {
      (minimal editor – erweitert später um LP/Trikot/Positions etc.)
      ============================================================ */
 
-  /*
   const selectedPlayer = useMemo(() => {
     if (!selectedPlayerId) return null;
     return playerById.get(selectedPlayerId) ?? null;
   }, [selectedPlayerId, playerById]);
-  */
 
-  /*
   function updatePlayer(id: string, patch: Partial<Player>) {
     if (id === "TBD") return;
 
@@ -547,9 +1460,7 @@ import React, {
       })
     );
   }
-  */
 
-  /*
   function addNewPlayer() {
     const id = randomId("p_");
     const p: Player = {
@@ -570,29 +1481,23 @@ import React, {
     setPlayers((prev) => [...prev, p]);
     setSelectedPlayerId(id);
   }
-  */
 
-  /*
   function deletePlayer(id: string) {
     if (id === "TBD") return;
 
     setPlayers((prev) => prev.filter((p) => p.id !== id));
-    planHistory.push({
-      ...plan,
-      sessions: plan.sessions.map((s) => ({
+    setPlan((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) => ({
         ...s,
         participants: (s.participants ?? []).filter((pid) => pid !== id),
       })),
-    });
+    }));
     setSelectedPlayerId((prev) => (prev === id ? null : prev));
   }
-  */
 
-  /*
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
-  */
 
-  /*
   async function importRosterFile(file: File) {
     const text = await file.text();
     const json = JSON.parse(text);
@@ -616,9 +1521,7 @@ import React, {
     setPlayers(cleaned);
     setSelectedPlayerId(cleaned[0]?.id ?? null);
   }
-  */
 
-  /*
   function exportRoster() {
     const exportPlayers = players.filter((p) => p.id !== "TBD").map((p) => {
       // keep roster.json schema + preserve extra fields for future
@@ -653,7 +1556,6 @@ import React, {
       players: exportPlayers,
     });
   }
-  */
 
   /* ============================================================
      Print / PDF
@@ -865,14 +1767,13 @@ import React, {
     return entry;
   }
 
-  // function handleSaveCurrentWeekToArchive() {
+  function handleSaveCurrentWeekToArchive() {
     if (!activeProfileId) {
       return;
     }
     savePlanToArchive(plan, activeProfileId, "manual");
   }
 
-  /*
   function handleLoadArchiveEntry(entry: WeekArchiveEntry) {
     if (!activeProfileId || entry.profileId !== activeProfileId) return;
     setPlan(cloneWeekPlan(entry.plan));
@@ -899,13 +1800,12 @@ import React, {
     }));
 
     const shifted = applyWeekDatesToSessions(copied, archiveTemplateStart);
-    planHistory.push({
+    setPlan({
       weekId: `WEEK_${archiveTemplateStart}_tpl`,
       sessions: shifted,
     });
     setWeekArchiveOpen(false);
   }
-  */
 
   async function createNewWeek(mode: NewWeekMode, keepParticipants: boolean, weekStartMondayISO: string) {
     const hasDraft = (plan.sessions ?? []).length > 0;
@@ -935,24 +1835,30 @@ import React, {
     }
 
     if (mode === "MASTER") {
-      planHistory.push({
-        weekId: `WEEK_${weekStartMondayISO}`,
-        sessions: applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO).map((s) => ({ ...s, participants: [] })),
+      setPlan(() => {
+        const sessionsWithDates = applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO);
+        return {
+          weekId: `WEEK_${weekStartMondayISO}`,
+          sessions: sessionsWithDates.map((s) => ({ ...s, participants: [] })), // master = without participants
+        };
       });
     } else if (mode === "EMPTY") {
-      planHistory.push({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });
+      setPlan({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });
     } else {
       // COPY_CURRENT
-      planHistory.push({
-        weekId: `WEEK_${weekStartMondayISO}_copy`,
-        sessions: applyWeekDatesToSessions(
-          plan.sessions.map((s) => ({
-            ...s,
-            id: randomId("sess_"),
-            participants: keepParticipants ? [...(s.participants ?? [])] : [],
-          })),
-          weekStartMondayISO
-        ),
+      setPlan((prev) => {
+        const copied = prev.sessions.map((s) => ({
+          ...s,
+          id: randomId("sess_"),
+          participants: keepParticipants ? [...(s.participants ?? [])] : [],
+        }));
+
+        const shifted = applyWeekDatesToSessions(copied, weekStartMondayISO);
+
+        return {
+          weekId: `WEEK_${weekStartMondayISO}_copy`,
+          sessions: shifted,
+        };
       });
     }
     setNewWeekOpen(false);
@@ -963,13 +1869,65 @@ import React, {
      Responsive CSS
      ============================================================ */
 
-  /*
   const responsiveCss = `
-    ...CSS omitted for TS compatibility...
-    (Full CSS block is commented out for TypeScript compatibility)
-  `;
-  */
-  /*
+    /* --- Robust defaults --- */
+    * { box-sizing: border-box; }
+
+    input, select, button, textarea {
+      font: inherit;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .shrink0 { min-width: 0; }
+
+    /* Grid helpers */
+    .grid2 {
+      display: grid;
+      grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .grid2equal {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .rosterGrid {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .flexRow {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .flexRow > * { min-width: 0; }
+
+    .touchBtn {
+      min-height: 42px;
+    }
+
+    .leftTabsRow {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .leftTabsGroup {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
       flex: 1 1 260px;
     }
 
@@ -1021,9 +1979,7 @@ import React, {
       text-overflow: ellipsis;
       max-width: 100%;
     }
-  */
 
-  /*
     .topBar {
       display: flex;
       justify-content: space-between;
@@ -1066,7 +2022,6 @@ import React, {
     .modalBody { container-type: inline-size; }
 
     /* Layout */
-  /*
     .appGrid {
       display: grid;
       grid-template-columns: minmax(280px, 380px) 1fr;
@@ -1154,7 +2109,7 @@ import React, {
         grid-template-columns: 1fr;
       }
     }
-  */
+  `;
 
   /* ============================================================
      Render
@@ -1205,105 +2160,114 @@ import React, {
      RENDER
      ============================================================ */
 
-      // Main app render continues below
-      // (removed duplicate return)
-      // ...
-      return (
-        <>
-          <PrintView
-            plan={plan}
-            playerById={playerById}
-            groupBg={groupBg}
-            coaches={coaches}
-            birthdayPlayerIds={birthdayPlayerIds}
-            clubName={theme.clubName}
-            logoUrl={clubLogoDataUrl ?? null}
-            locations={theme.locations}
-            t={t}
-          />
-          {/* ...rest of app content... */}
-          <DndContext sensors={sensors} onDragStart={dnd.onDragStart} onDragOver={dnd.onDragOver} onDragEnd={dnd.onDragEnd}>
-            <div className={rightOpen ? "appGrid appGrid3" : "appGrid"}>
-              {/* LEFT */}
-              <LeftSidebar
-                t={t}
-                leftTab={leftTab}
-                leftEditMode={leftEditMode}
-                onSelectTab={(tab) => { setLeftTab(tab); setLeftEditMode(false); }}
-                onToggleEditMode={() => setLeftEditMode((v) => !v)}
-                onOpenRoster={() => { setRosterSearch(""); setRosterOpen(true); }}
-                openExtra={openExtra}
-                onToggleU18Only={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
-                onToggleHolOnly={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
-                u18OnlyPlayers={u18OnlyPlayers}
-                holOnlyPlayers={holOnlyPlayers}
-                openGroup={openGroup}
-                onToggleGroup={(gid) => setOpenGroup((prev) => (prev === gid ? null : gid))}
-                playersByGroup={playersByGroup}
-                renderDraggablePlayer={(p) => (
-                  <DraggablePlayerRow
-                    key={p.id}
-                    player={p}
-                    trainingCount={trainingCounts.get(p.id) ?? 0}
-                    groupBg={groupBg}
-                    isBirthday={birthdayPlayerIds.has(p.id)}
-                    t={t}
-                  />
-                )}
-                coaches={coaches}
-                onAddCoach={addCoach}
-                onUpdateCoach={updateCoach}
-                onDeleteCoach={deleteCoach}
-                onExportStaff={exportStaff}
-                onImportStaffFile={importStaffFile}
-                theme={theme}
-                setTheme={setTheme}
-                locationUsageMap={locationUsageMap}
-                openLocationName={openLocationName}
-                setOpenLocationName={setOpenLocationName}
-              />
-              {/* RIGHT */}
-              <div className="rightPane" style={{ padding: 16, overflow: "auto", background: "var(--ui-bg)" }}>
-                {/* Top bar */}
-                <div className="topBar">
-                  {/* Left: Flag Button */}
-                  <div className="topBarLeft">
+  return (
+    <>
+      <style>{responsiveCss}</style>
+
+      <PrintView
+        plan={plan}
+        playerById={playerById}
+        groupBg={groupBg}
+        coaches={coaches}
+        birthdayPlayerIds={birthdayPlayerIds}
+        clubName={theme.clubName}
+        logoUrl={clubLogoDataUrl ?? null}
+        locations={theme.locations}
+        t={t}
+      />
+
+      <div
+        id="app-root"
+        style={{
+          background: "var(--ui-bg)",
+          color: "var(--ui-text)",
+          minHeight: "100vh",
+          fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        }}
+      >
+        <DndContext sensors={sensors} onDragStart={dnd.onDragStart} onDragOver={dnd.onDragOver} onDragEnd={dnd.onDragEnd}>
+          <div className={rightOpen ? "appGrid appGrid3" : "appGrid"}>
+            {/* LEFT */}
+            <LeftSidebar
+              t={t}
+              leftTab={leftTab}
+              leftEditMode={leftEditMode}
+              onSelectTab={(tab) => { setLeftTab(tab); setLeftEditMode(false); }}
+              onToggleEditMode={() => setLeftEditMode((v) => !v)}
+              onOpenRoster={() => { setRosterSearch(""); setRosterOpen(true); }}
+              openExtra={openExtra}
+              onToggleU18Only={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
+              onToggleHolOnly={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
+              u18OnlyPlayers={u18OnlyPlayers}
+              holOnlyPlayers={holOnlyPlayers}
+              openGroup={openGroup}
+              onToggleGroup={(gid) => setOpenGroup((prev) => (prev === gid ? null : gid))}
+              playersByGroup={playersByGroup}
+              renderDraggablePlayer={(p) => (
+                <DraggablePlayerRow
+                  key={p.id}
+                  player={p}
+                  trainingCount={trainingCounts.get(p.id) ?? 0}
+                  groupBg={groupBg}
+                  isBirthday={birthdayPlayerIds.has(p.id)}
+                  t={t}
+                />
+              )}
+              coaches={coaches}
+              onAddCoach={addCoach}
+              onUpdateCoach={updateCoach}
+              onDeleteCoach={deleteCoach}
+              onExportStaff={exportStaff}
+              onImportStaffFile={importStaffFile}
+              theme={theme}
+              setTheme={setTheme}
+              locationUsageMap={locationUsageMap}
+              openLocationName={openLocationName}
+              setOpenLocationName={setOpenLocationName}
+            />
+            {/* RIGHT */}
+            <div className="rightPane" style={{ padding: 16, overflow: "auto", background: "var(--ui-bg)" }}>
+              {/* Top bar */}
+              <div className="topBar">
+                {/* Left: Flag Button */}
+                <div className="topBarLeft">
+                  <Button
+                    className="touchBtn"
+                    variant="outline"
+                    onClick={() => setTheme((p) => ({ ...p, locale: (p.locale === "de" ? "en" : "de") as Lang }))}
+                    title={t("language")}
+                    style={{
+                      width: 38,
+                      height: 34,
+                      padding: 0,
+                      display: "grid",
+                      placeItems: "center",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <img
+                      src={`${import.meta.env.BASE_URL}flags/${theme.locale === "de" ? "de" : "gb"}.svg`}
+                      alt={theme.locale === "de" ? "Deutsch" : "English"}
+                      style={{ width: 24, height: 16, borderRadius: 2, display: "block" }}
+                    />
+                  </Button>
+
+                  <div ref={profileMenuRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
                     <Button
                       className="touchBtn"
                       variant="outline"
-                      onClick={() => setTheme((p) => ({ ...p, locale: (p.locale === "de" ? "en" : "de") as Lang }))}
-                      title={t("language")}
+                      onClick={() => setProfilesOpen(true)}
+                      title={activeProfileName ?? t("profileNone")}
                       style={{
-                        width: 38,
-                        height: 34,
-                        padding: 0,
-                        display: "grid",
-                        placeItems: "center",
-                        borderRadius: 10,
+                        padding: "8px 10px",
+                        maxWidth: 230,
+                        whiteSpace: "nowrap",
                         overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
-                      <img
-                        src={`${import.meta.env.BASE_URL}flags/${theme.locale === "de" ? "de" : "gb"}.svg`}
-                        alt={theme.locale === "de" ? "Deutsch" : "English"}
-                        style={{ width: 24, height: 16, borderRadius: 2, display: "block" }}
-                      />
-                    </Button>
-                    <div ref={profileMenuRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
-                      <Button
-                        className="touchBtn"
-                        variant="outline"
-                        onClick={() => setProfilesOpen(true)}
-                        title={activeProfileName ?? t("profileNone")}
-                        style={{
-                          padding: "8px 10px",
-                          maxWidth: 230,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                         {clubLogoDataUrl ? (
                           <img
                             src={clubLogoDataUrl}
@@ -1385,30 +2349,10 @@ import React, {
                   >
                     🗃️ {t("weekArchiveButton")}
                   </Button>
-                {/* end player list column */}
+                </div>
 
                 {/* Right: Other Buttons */}
                 <div className="topBarRight">
-                  <Button
-                    className="touchBtn"
-                    variant="outline"
-                    onClick={planHistory.undo}
-                    disabled={!planHistory.canUndo}
-                    title={t("undo")}
-                    style={{ padding: "8px 10px", borderRadius: 12 }}
-                  >
-                    ↶ {t("undo")}
-                  </Button>
-                  <Button
-                    className="touchBtn"
-                    variant="outline"
-                    onClick={planHistory.redo}
-                    disabled={!planHistory.canRedo}
-                    title={t("redo")}
-                    style={{ padding: "8px 10px", borderRadius: 12 }}
-                  >
-                    ↷ {t("redo")}
-                  </Button>
                   <Button
                     className="touchBtn"
                     variant={eventEditorOpen ? "solid" : "outline"}
@@ -1440,7 +2384,6 @@ import React, {
                   </Button>
                 </div>
               </div>
-            </div> {/* close appGrid/appGrid3 */}
 
               {/* Editor Top Anchor */}
               <div ref={editorTopRef} id="event-editor-top" />
@@ -1524,7 +2467,7 @@ import React, {
 
                       <div style={{ fontWeight: 900 }}>{t("teams")}</div>
                       <div className="flexRow">
-                        {TEAM_OPTIONS.map((teamOption: string) => {
+                        {TEAM_OPTIONS.map((teamOption) => {
                           const active = formTeams.includes(teamOption);
                           return (
                             <Button
@@ -1606,7 +2549,16 @@ import React, {
                                 return (
                                   <button
                                     type="button"
-                                    onClick={handleSaveCustomLocation}
+                                    onClick={() => {
+                                      if (!name) return;
+
+                                      ensureLocationSaved(theme, setTheme, name);
+
+                                      // Optional: direkt auf Orte springen und aufklappen
+                                      setLeftTab("locations");
+                                      setLeftEditMode(true);
+                                      setOpenLocationName(name);
+                                    }}
                                     disabled={!name}
                                     style={{
                                       padding: "8px 10px",
@@ -1619,7 +2571,7 @@ import React, {
                                       opacity: name ? 1 : 0.5,
                                       whiteSpace: "nowrap",
                                     }}
-                                    title={t("saveAsLocation")}
+                                    title={t("saveCustomLocationTitle")}
                                   >
                                     {t("saveAsLocation")}
                                   </button>
@@ -1827,7 +2779,7 @@ import React, {
                       <input
                         type="checkbox"
                         checked={formExcludeFromRoster}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormExcludeFromRoster(e.target.checked)}
+                        onChange={(e) => setFormExcludeFromRoster(e.target.checked)}
                         style={{ width: 16, height: 16, accentColor: "var(--ui-accent)" }}
                       />
                       <span style={{ fontSize: 13, fontWeight: 900 }}>{t("excludeFromRoster") || "Aus Kaderübersicht verbergen"}</span>
@@ -1837,7 +2789,7 @@ import React, {
                       <input
                         type="color"
                         value={formRowColor || "#ffffff"}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormRowColor(e.target.value === "#ffffff" ? "" : e.target.value)}
+                        onChange={(e) => setFormRowColor(e.target.value === "#ffffff" ? "" : e.target.value)}
                         style={{ width: 36, height: 28, padding: 2, border: "1px solid var(--ui-border)", borderRadius: 6, cursor: "pointer" }}
                         title="Hintergrundfarbe für Datenzellen im Zeitplan (nur Preview/Export)"
                       />
@@ -1885,8 +2837,8 @@ import React, {
                 selectedSessionId={selectedSessionId}
                 onSelectSession={setSelectedSessionId}
                 collapsedParticipantsBySession={collapsedParticipantsBySession}
-                onToggleParticipantsCollapse={(sid: string) => setCollapsedParticipantsBySession((p: Record<string, boolean>) => ({ ...p, [sid]: !p[sid] }))}
-                onEditSession={(s: { id: string }) => { setEditingSessionId(s.id); setEventEditorOpen(true); }}
+                onToggleParticipantsCollapse={(sid) => setCollapsedParticipantsBySession((p) => ({ ...p, [sid]: !p[sid] }))}
+                onEditSession={(s) => { setEditingSessionId(s.id); setEventEditorOpen(true); }}
                 onDeleteSession={onDeleteSession}
                 playerById={playerById}
                 removePlayerFromSession={removePlayerFromSession}
@@ -1934,7 +2886,7 @@ import React, {
                       roster={players}
                       onUpdateWeekPlan={setPlan}
                       dnd={dnd}
-                      onDelete={(id: string) => onDeleteSession(id)}
+                      onDelete={(id) => onDeleteSession(id)}
                       onToggleTravel={toggleSessionTravel}
                       onToggleWarmup={toggleSessionWarmup}
                       editingSessionId={editingSessionId}
@@ -1944,88 +2896,85 @@ import React, {
                 ),
               }}
             />
-          </div> {/* close appGrid/appGrid3 */}
+          </div>
         </DndContext>
+      </div>
 
-      {/* Wrap main layout and modal overlays in a single fragment */}
-      <>
-        { /* Main layout */ }
-        <div>
-          {/* ...existing main layout code up to here... */}
-        </div>
-        {/* Modal overlays and dialogs */}
-        <ThemeSettingsModal
-          open={settingsOpen}
-          theme={theme}
-          defaultTheme={DEFAULT_THEME}
-          onChangeTheme={setTheme}
-          onReset={() => setTheme(DEFAULT_THEME)}
-          onClose={() => setSettingsOpen(false)}
-          t={t}
-          onConfirmOverwrite={(title: string, message: string) => askConfirm(title, message)}
-        />
-        <NewWeekModal
-          open={newWeekOpen}
-          onClose={closeNewWeek}
-          onCreate={createNewWeek}
-          defaultMode="MASTER"
-          t={t}
-        />
-        <ConfirmModal
-          open={confirmDialog.open}
-          title={confirmDialog.title}
-          message={confirmDialog.message}
-          onConfirm={() => resolveConfirm(true)}
-          onCancel={() => resolveConfirm(false)}
-          t={t}
-        />
-        <PromptModal
-          open={promptDialog.open}
-          title={promptDialog.title}
-          message={promptDialog.message}
-          value={promptDialog.value}
-          onValueChange={(value) => setPromptDialog((prev) => ({ ...prev, value }))}
-          placeholder={promptDialog.placeholder}
-          onConfirm={() => resolvePrompt(promptDialog.value.trim())}
-          onCancel={() => resolvePrompt(null)}
-          t={t}
-        />
-        {profilesOpen && (
-          <Modal title={t("profiles")} onClose={() => setProfilesOpen(false)} closeLabel={t("close")}> 
-            <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 900 }}>{t("profileActive")}</div>
-                <select
-                  value={activeProfileId}
-                  onChange={(e) => selectProfile(e.target.value)}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "1px solid var(--ui-border)",
-                    background: "var(--ui-card)",
-                    color: "var(--ui-text)",
-                  }}
-                >
-                  <option value="">— {t("profileNone")} —</option>
-                  {profiles.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 900 }}>{t("name")}</div>
-                <Input
-                  value={profileNameInput}
-                  onChange={setProfileNameInput}
-                  placeholder={t("profileNamePlaceholder")}
-                />
-              </div>
+      {/* Settings Modal */}
+      <ThemeSettingsModal
+        open={settingsOpen}
+        theme={theme}
+        defaultTheme={DEFAULT_THEME}
+        onChangeTheme={setTheme}
+        onReset={() => setTheme(DEFAULT_THEME)}
+        onClose={() => setSettingsOpen(false)}
+        t={t}
+        onConfirmOverwrite={(title, message) => askConfirm(title, message)}
+      />
+
+      {/* New Week Modal */}
+      <NewWeekModal
+        open={newWeekOpen}
+        onClose={closeNewWeek}
+        onCreate={createNewWeek}
+        defaultMode="MASTER"
+        t={t}
+      />
+
+      <ConfirmModal
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={() => resolveConfirm(true)}
+        onCancel={() => resolveConfirm(false)}
+        t={t}
+      />
+
+      <PromptModal
+        open={promptDialog.open}
+        title={promptDialog.title}
+        message={promptDialog.message}
+        value={promptDialog.value}
+        onValueChange={(value) => setPromptDialog((prev) => ({ ...prev, value }))}
+        placeholder={promptDialog.placeholder}
+        onConfirm={() => resolvePrompt(promptDialog.value.trim())}
+        onCancel={() => resolvePrompt(null)}
+        t={t}
+      />
+
+      {profilesOpen && (
+        <Modal title={t("profiles")} onClose={() => setProfilesOpen(false)} closeLabel={t("close")}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 900 }}>{t("profileActive")}</div>
+              <select
+                value={activeProfileId}
+                onChange={(e) => selectProfile(e.target.value)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid var(--ui-border)",
+                  background: "var(--ui-card)",
+                  color: "var(--ui-text)",
+                }}
+              >
+                <option value="">— {t("profileNone")} —</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          </Modal>
-        )}
-      </>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 900 }}>{t("name")}</div>
+              <Input
+                value={profileNameInput}
+                onChange={setProfileNameInput}
+                placeholder={t("profileNamePlaceholder")}
+              />
+            </div>
 
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 900 }}>Logo</div>
@@ -2132,7 +3081,7 @@ import React, {
       )}
 
       {weekArchiveOpen && (
-        <Modal title={t("weekArchiveTitle")} onClose={() => setWeekArchiveOpen(false)} closeLabel={t("close")}> 
+        <Modal title={t("weekArchiveTitle")} onClose={() => setWeekArchiveOpen(false)} closeLabel={t("close")}>
           <div style={{ display: "grid", gap: 12 }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
@@ -2195,141 +3144,160 @@ import React, {
 
       {/* Roster Editor Modal */}
       {rosterOpen && (
-        <RosterEditorModal
-          open={rosterOpen}
-          onClose={() => setRosterOpen(false)}
-          t={t}
-          players={players}
-          selectedPlayerId={selectedPlayerId}
-          onSelectPlayer={setSelectedPlayerId}
-          rosterSearch={rosterSearch}
-          onRosterSearchChange={setRosterSearch}
-          addNewPlayer={addNewPlayer}
-          exportRoster={exportRoster}
-          importRosterFile={importRosterFile}
-          deletePlayer={deletePlayer}
-          updatePlayer={updatePlayer}
-          teamOptions={TEAM_OPTIONS}
-          clubName={theme.clubName}
-        />
-      )}
-
-      {/* Player List and Editor Section */}
-      <div style={{ display: "flex", gap: 16 }}>
-        {/* Player List Column */}
-        <div style={{ minWidth: 220, maxWidth: 320, flex: 1 }}>
-          {(() => {
-            // Remove unused setQ, just use empty string for q
-            const q = "";
-            const filtered = players.filter((p) => {
-              const hay = [
-                p.name,
-                p.firstName,
-                p.lastName,
-                String(p.birthYear ?? ""),
-                String(p.birthDate ?? ""),
-                primaryTna(p),
-              ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase();
-              return hay.includes(q);
-            });
-            const list = filtered.slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
-            return (
-              <>
-                {list.map((p) => {
-                  const active = p.id === selectedPlayerId;
-                  const gid = getPlayerGroup(p);
-                  const tna = primaryTna(p);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedPlayerId(p.id)}
-                      style={{
-                        textAlign: "left",
-                        border: `1px solid ${active ? "var(--ui-soft)" : "var(--ui-border)"}`,
-                        background: active ? "var(--ui-panel)" : "var(--ui-card)",
-                        color: "var(--ui-text)",
-                        borderRadius: 12,
-                        padding: "10px 10px",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                      }}
-                      title={tna ? `${t("primaryTaTna")}: ${tna}` : t("noTaTna")}
-                    >
-                      <span style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {p.name}
-                      </span>
-                      <span style={{ fontWeight: 900, color: "var(--ui-muted)" }}>{gid}</span>
-                    </button>
-                  );
-                })}
-              </>
-            );
-          })()}
-        </div>
-        {/* end player list column */}
-        {/* Player Editor Column */}
-        <div style={{ flex: 2, minWidth: 320 }}>
-          {!selectedPlayer ? (
-            <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12, color: "var(--ui-muted)", fontWeight: 900 }}>
-              {t("selectPlayerLeft")}
-            </div>
-          ) : (
-            <>
+        <Modal title={`${t("rosterEdit")} (roster.json)`} onClose={() => setRosterOpen(false)} closeLabel={t("close")}>
+          <div className="rosterGrid">
+            <div style={{ display: "grid", gap: 10 }}>
               <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-                  <div style={{ fontSize: 16, fontWeight: 900 }}>{selectedPlayer ? selectedPlayer.name : ""}</div>
+                <div className="flexRow">
+                  <Button onClick={addNewPlayer} style={{ padding: "8px 10px" }}>+ {t("playersSingle")}</Button>
+                  <Button variant="outline" onClick={exportRoster} style={{ padding: "8px 10px" }}>
+                    {t("export")} roster.json
+                  </Button>
                   <Button
                     variant="outline"
-                    onClick={() => selectedPlayer && deletePlayer(selectedPlayer.id)}
-                    style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
+                    onClick={() => rosterFileRef.current?.click()}
+                    style={{ padding: "8px 10px" }}
                   >
-                    {t("delete").toLowerCase()}
+                    {t("import")} roster.json
                   </Button>
+                  <input
+                    ref={rosterFileRef}
+                    type="file"
+                    accept="application/json"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) importRosterFile(f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
                 </div>
+
+                <div style={{ marginTop: 10, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                  {t("rosterHintTbd")}
+                </div>
+              </div>
+
+              <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 10 }}>
+                <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("players")}</div>
+                <Input
+                  value={rosterSearch}
+                  onChange={setRosterSearch}
+                  placeholder={t("rosterSearchPlaceholder")}
+                  style={{ marginBottom: 8 }}
+                />
+                <div style={{ fontSize: 12, color: "var(--ui-muted)", fontWeight: 800, marginBottom: 8 }}>
+                  {t("filter")}: {rosterSearch.trim() ? `"${rosterSearch.trim()}"` : "—"}
+                </div>
+                <div style={{ display: "grid", gap: 6, maxHeight: "60vh", overflow: "auto" }}>
+                  {(() => {
+                    const q = rosterSearch.trim().toLowerCase();
+
+                    const list = players
+                      .filter((p) => p.id !== "TBD")
+                      .filter((p) => {
+                        if (!q) return true;
+                        const hay = [
+                          p.name,
+                          p.firstName,
+                          p.lastName,
+                          String(p.birthYear ?? ""),
+                          String(p.birthDate ?? ""),
+                          primaryTna(p),
+                        ]
+                          .filter(Boolean)
+                          .join(" ")
+                          .toLowerCase();
+                        return hay.includes(q);
+                      })
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name, "de"));
+
+                    return list.map((p) => {
+                      const active = p.id === selectedPlayerId;
+                      const gid = getPlayerGroup(p);
+                      const tna = primaryTna(p);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedPlayerId(p.id)}
+                          style={{
+                            textAlign: "left",
+                            border: `1px solid ${active ? "var(--ui-soft)" : "var(--ui-border)"}`,
+                            background: active ? "var(--ui-panel)" : "var(--ui-card)",
+                            color: "var(--ui-text)",
+                            borderRadius: 12,
+                            padding: "10px 10px",
+                            cursor: "pointer",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                          }}
+                          title={tna ? `${t("primaryTaTna")}: ${tna}` : t("noTaTna")}
+                        >
+                          <span style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {p.name}
+                          </span>
+                          <span style={{ fontWeight: 900, color: "var(--ui-muted)" }}>{gid}</span>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {!selectedPlayer ? (
+                <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12, color: "var(--ui-muted)", fontWeight: 900 }}>
+                  {t("selectPlayerLeft")}
+                </div>
+              ) : (
+                <>
+                  <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                      <div style={{ fontSize: 16, fontWeight: 900 }}>{selectedPlayer.name}</div>
+                      <Button
+                        variant="outline"
+                        onClick={() => deletePlayer(selectedPlayer.id)}
+                        style={{ padding: "8px 10px", borderColor: "#ef4444", color: "#ef4444" }}
+                      >
+                        {t("delete").toLowerCase()}
+                      </Button>
+                    </div>
 
                     <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                       <div>
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("firstName")}</div>
-                        <Input value={selectedPlayer ? selectedPlayer.firstName ?? "" : ""} onChange={(v) => selectedPlayer && updatePlayer(selectedPlayer.id, { firstName: v })} />
+                        <Input value={selectedPlayer.firstName ?? ""} onChange={(v) => updatePlayer(selectedPlayer.id, { firstName: v })} />
                       </div>
                       <div>
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("name")}</div>
-                        <Input value={selectedPlayer ? selectedPlayer.lastName ?? "" : ""} onChange={(v) => selectedPlayer && updatePlayer(selectedPlayer.id, { lastName: v })} />
+                        <Input value={selectedPlayer.lastName ?? ""} onChange={(v) => updatePlayer(selectedPlayer.id, { lastName: v })} />
                       </div>
 
                       <div>
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("birthYearForGroup")}</div>
                         <Input
                           type="number"
-                          value={selectedPlayer ? String(selectedPlayer.birthYear ?? "") : ""}
-                          onChange={(v) => selectedPlayer && updatePlayer(selectedPlayer.id, { birthYear: v ? parseInt(v, 10) : undefined })}
+                          value={String(selectedPlayer.birthYear ?? "")}
+                          onChange={(v) => updatePlayer(selectedPlayer.id, { birthYear: v ? parseInt(v, 10) : undefined })}
                         />
                       </div>
                       <div>
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("birthDateOptional")}</div>
-                        <Input type="date" value={selectedPlayer?.birthDate ?? ""} onChange={(v) => selectedPlayer && updatePlayer(selectedPlayer.id, { birthDate: v })} />
+                        <Input type="date" value={selectedPlayer.birthDate ?? ""} onChange={(v) => updatePlayer(selectedPlayer.id, { birthDate: v })} />
                       </div>
 
                       <div>
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("group")}</div>
                         {(() => {
-                          let y: number | undefined = undefined;
-                          let yearLocked = false;
-                          let groupValue = "";
-                          if (selectedPlayer) {
-                            y = birthYearOf(selectedPlayer);
-                            yearLocked = y === 2007 || y === 2008 || y === 2009;
-                            groupValue = selectedPlayer.group ?? getPlayerGroup(selectedPlayer);
-                          }
+                          const y = birthYearOf(selectedPlayer);
+                          const yearLocked = y === 2007 || y === 2008 || y === 2009;
                           return (
                             <Select
-                              value={groupValue}
-                              onChange={(v) => selectedPlayer && updatePlayer(selectedPlayer.id, { group: v as GroupId })}
+                              value={selectedPlayer.group ?? getPlayerGroup(selectedPlayer)}
+                              onChange={(v) => updatePlayer(selectedPlayer.id, { group: v as GroupId })}
                               options={
                                 yearLocked
                                   ? [{ value: String(y), label: String(y) }]
@@ -2349,8 +3317,8 @@ import React, {
                       <div>
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("localPlayer")}</div>
                         <Select
-                          value={selectedPlayer ? (selectedPlayer.isLocalPlayer ? "true" : "false") : "false"}
-                          onChange={(v) => selectedPlayer && updatePlayer(selectedPlayer.id, { isLocalPlayer: v === "true" })}
+                          value={selectedPlayer.isLocalPlayer ? "true" : "false"}
+                          onChange={(v) => updatePlayer(selectedPlayer.id, { isLocalPlayer: v === "true" })}
                           options={[
                             { value: "true", label: t("lpYes") },
                             { value: "false", label: t("lpNo") },
@@ -2362,27 +3330,27 @@ import React, {
                     <div style={{ marginTop: 12, borderTop: `1px solid var(--ui-border)`, paddingTop: 12 }}>
                       <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("licensesTa")}</div>
 
-                        {(() => {
-                          if (!selectedPlayer) return null;
-                          const check = dbbDobMatchesBirthDate(selectedPlayer);
-                          if (typeof check === "object" && check && "ok" in check && check.ok) return null;
-                          return (
-                            <div
-                              style={{
-                                marginTop: 10,
-                                border: "1px solid #ef4444",
-                                background: "rgba(239,68,68,0.12)",
-                                borderRadius: 12,
-                                padding: "10px 12px",
-                                fontWeight: 900,
-                                fontSize: 12,
-                                color: "var(--ui-text)",
-                              }}
-                            >
-                              ⚠️ {t("dbbTaBirthMismatch")}: {typeof check === "object" && check && "reason" in check ? check.reason : ""}
-                            </div>
-                          );
-                        })()}
+                      {(() => {
+                        const check = dbbDobMatchesBirthDate(selectedPlayer);
+                        if (check?.ok) return null;
+
+                        return (
+                          <div
+                            style={{
+                              marginTop: 10,
+                              border: "1px solid #ef4444",
+                              background: "rgba(239,68,68,0.12)",
+                              borderRadius: 12,
+                              padding: "10px 12px",
+                              fontWeight: 900,
+                              fontSize: 12,
+                              color: "var(--ui-text)",
+                            }}
+                          >
+                            ⚠️ {t("dbbTaBirthMismatch")}: {check?.reason}
+                          </div>
+                        );
+                      })()}
 
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         <div>
@@ -2420,7 +3388,7 @@ import React, {
                   <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("positionsMultiSelect")}</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {selectedPlayer && ["PG", "SG", "SF", "PF", "C"].map((pos: string) => {
+                      {(["PG", "SG", "SF", "PF", "C"] as Position[]).map((pos) => {
                         const current = selectedPlayer.positions ?? [];
                         const active = current.includes(pos);
                         return (
@@ -2457,9 +3425,10 @@ import React, {
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("defaultTeams")}</div>
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {selectedPlayer && TEAM_OPTIONS.map((t) => {
+                      {TEAM_OPTIONS.map((t) => {
                         const current = selectedPlayer.defaultTeams ?? [];
                         const active = current.includes(t);
+
                         return (
                           <Button
                             key={t}
@@ -2505,9 +3474,10 @@ import React, {
                         alignItems: "center",
                       }}
                     >
-                      {selectedPlayer && TEAM_OPTIONS.map((teamCode) => {
+                      {TEAM_OPTIONS.map((teamCode) => {
                         const current = selectedPlayer.jerseyByTeam ?? {};
                         const value = current[teamCode];
+
                         return (
                           <div key={teamCode} style={{ display: "contents" }}>
                             <div style={{ fontWeight: 900 }}>{teamCode}</div>
@@ -2571,7 +3541,7 @@ import React, {
                     </div>
 
                     <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                      {selectedPlayer && (selectedPlayer.historyLast6 ?? []).slice(0, 6).map((h, idx) => (
+                      {(selectedPlayer.historyLast6 ?? []).slice(0, 6).map((h, idx) => (
                         <div
                           key={idx}
                           style={{
@@ -2619,15 +3589,15 @@ import React, {
                     <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
                       {t("historyLast6Hint")}
                     </div>
-				  </div>
+                  </div>
 
-				  {/* --- Ende Roster-Editor (im Modal) --- */}
-				</>
+/* --- Ende Roster-Editor (im Modal) --- */
+                </>
               )}
             </div>
-          )}
-        </div> {/* end player editor column */}
-      </div> {/* end player list and editor section */}
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

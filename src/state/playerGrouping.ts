@@ -1,5 +1,4 @@
-import type { Player } from "./types";
-import { YEAR_GROUPS, GroupId } from "../config";
+import type { GroupId, Player } from "./types";
 
 export const GROUPS: Array<{
   id: GroupId;
@@ -13,9 +12,9 @@ export const GROUPS: Array<{
   { id: "TBD", label: "TBD", order: 4 },
 ];
 
-const GROUP_ORDER = new Map<GroupId, number>(YEAR_GROUPS.map((y, i) => [y, i]).concat([["Herren", YEAR_GROUPS.length], ["TBD", YEAR_GROUPS.length + 1]]));
+const GROUP_ORDER = new Map<GroupId, number>(GROUPS.map((g) => [g.id, g.order]));
 
-export const PRINT_GROUP_ORDER: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
+export const PRINT_GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
 
 export function birthYearOf(p: Player): number | null {
   if (p.birthDate && p.birthDate.length >= 4) {

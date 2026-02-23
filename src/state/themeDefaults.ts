@@ -1,13 +1,11 @@
-// Export GROUPS for barrel import
-import type { GroupId } from "./types";
-export const GROUPS: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
 import type { GroupId, ThemeSettings } from "./types";
-import { YEAR_GROUPS, GroupId } from "../config";
 
 export const DEFAULT_GROUP_COLORS: Record<GroupId, { bg: string }> = {
-  ...Object.fromEntries(YEAR_GROUPS.map((y, i) => [y, { bg: ["#fbbf24", "#60a5fa", "#34d399"][i % 3] }])),
-  Herren: { bg: "#f472b6" },
-  TBD: { bg: "#d1d5db" },
+  "2007": { bg: "#4b5563" },
+  "2008": { bg: "#6b7280" },
+  "2009": { bg: "#9ca3af" },
+  Herren: { bg: "#ffffff" },
+  TBD: { bg: "#4b5563" },
 };
 
 export const DEFAULT_THEME: ThemeSettings = {

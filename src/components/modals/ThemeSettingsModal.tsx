@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { THEME_PRESETS } from "@/themes/presets";
 import { useThemePresets } from "@/hooks";
-import type { ThemeSettings } from "@/types";
-import { YEAR_GROUPS, GroupId } from "@/config";
+import type { GroupId, ThemeSettings } from "@/types";
 import { randomId } from "@/utils/id";
 import { Button, Input, Modal } from "@/components/ui";
 
@@ -17,7 +16,7 @@ type Props = {
   onConfirmOverwrite?: (title: string, message: string) => Promise<boolean>;
 };
 
-const GROUP_IDS: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
+const GROUP_IDS: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
 
 const ColorButton = ({ value, onChange, title }: { value: string; onChange: (hex: string) => void; title?: string }) => {
   return (

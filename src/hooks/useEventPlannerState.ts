@@ -124,7 +124,6 @@ export function useEventPlannerState() {
     const info = normalizeOpponentInfo(editorState.formOpponent);
     const game = isGameInfo(info);
     const duration = game ? 120 : editorState.formDuration;
-    const startMin = parseHHMM(editorState.formStart);
     const end = addMinutesToHHMM(editorState.formStart, duration);
 
     return {
@@ -133,8 +132,6 @@ export function useEventPlannerState() {
       day: weekdayShortDE(editorState.formDate),
       teams: [...editorState.formTeams].sort((a, b) => a.localeCompare(b, "de")),
       time: `${editorState.formStart}–${end}`,
-      startMin,
-      durationMin: duration,
       location: currentLocationValue(),
       info: info || null,
       warmupMin: game ? Math.max(0, Math.floor(editorState.formWarmupMin)) : null,

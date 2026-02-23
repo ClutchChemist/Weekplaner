@@ -57,15 +57,15 @@ export type CalendarEvent = {
    * Legacy string time range (e.g. "18:00–19:30").
    * Use startMin/durationMin for all new logic.
    */
-  time?: string;
+  time: string;
   /**
    * Minutes since midnight for session start (e.g. 18:00 → 1080)
    */
-  startMin: number;
+  startMin?: number;
   /**
    * Duration in minutes (e.g. 90)
    */
-  durationMin: number;
+  durationMin?: number;
   location: string;
   info?: string | null;
   warmupMin?: number | null;

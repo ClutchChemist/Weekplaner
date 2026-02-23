@@ -11,6 +11,6 @@ describe('parseHHMM', () => {
   it('returns 0 for invalid input', () => {
     expect(parseHHMM('')).toBe(0);
     expect(parseHHMM('bad')).toBe(0);
-    expect(parseHHMM(undefined as any)).toBe(0);
+    expect(parseHHMM(undefined as unknown as string)).toBe(0);
   });
 });

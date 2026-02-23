@@ -5,6 +5,7 @@ import type { Coach } from "@/types";
 import type {
   CloudSnapshotV1,
   ProfileSyncMode,
+  SavedProfile,
 } from "@/state/profileTypes";
 
 export function useCloudSnapshotHandlers({
@@ -42,7 +43,7 @@ export function useCloudSnapshotHandlers({
   setTheme: Dispatch<SetStateAction<ThemeSettings>>;
   setPlan: Dispatch<SetStateAction<WeekPlan>>;
   setClubLogoDataUrl: (url: string | null) => void;
-  setProfiles: Dispatch<SetStateAction<any[]>>;
+  setProfiles: Dispatch<SetStateAction<SavedProfile[]>>;
   setProfileHydratedId: (id: string) => void;
   setActiveProfileId: (id: string) => void;
 }) {
@@ -66,21 +67,21 @@ export function useCloudSnapshotHandlers({
       prev.map((p) =>
         p.id === snapshot.profileId
           ? {
-              ...p,
-              payload: {
-                rosterMeta: data.rosterMeta,
-                players: data.players,
-                coaches: data.coaches,
-                locations: data.theme.locations ?? p.payload.locations,
-                clubLogoDataUrl: data.clubLogoDataUrl,
-              },
-            }
+            ...p,
+            payload: {
+              rosterMeta: data.rosterMeta,
+              players: data.players,
+              coaches: data.coaches,
+              locations: data.theme.locations ?? p.payload.locations,
+              clubLogoDataUrl: data.clubLogoDataUrl,
+            },
+          }
           : p
       )
     );
     setProfileHydratedId(snapshot.profileId);
     setActiveProfileId(snapshot.profileId);
-  }, [setCoaches, setPlan, setClubLogoDataUrl, setProfiles, setProfileHydratedId, setActiveProfileId]);
+  }, [setRosterMeta, setPlayers, setCoaches, setTheme, setPlan, setClubLogoDataUrl, setProfiles, setProfileHydratedId, setActiveProfileId]);
 
   const isCloudSnapshotV1 = useCallback((raw: unknown): raw is CloudSnapshotV1 => {
     if (!raw || typeof raw !== "object") return false;
