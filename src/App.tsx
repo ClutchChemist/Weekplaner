@@ -50,6 +50,7 @@ import {
   usePlayerActions,
   useRightSidebarPersistence,
   useSessionEditor,
+  useWeekManager,
   LOCATION_PRESETS,
   TEAM_OPTIONS,
 } from "@/hooks";
@@ -1475,6 +1476,19 @@ export default function App() {
      New Week
      ============================================================ */
 
+  const {
+    weekLabel,
+    weekDates,
+    createNewWeek: createWeekFromMode,
+  } = useWeekManager({
+    plan,
+    setPlan,
+    masterPlan,
+    birthdayPlayerIds,
+    setNewWeekOpen,
+    resetForm,
+  });
+
   const closeNewWeek = useCallback(() => setNewWeekOpen(false), [setNewWeekOpen]);
 
   function applyWeekDatesToSessions(sessions: Session[], weekStartMondayISO: string): Session[] {
@@ -1601,35 +1615,7 @@ export default function App() {
       }
     }
 
-    if (mode === "MASTER") {
-      setPlan(() => {
-        const sessionsWithDates = applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO);
-        return {
-          weekId: `WEEK_${weekStartMondayISO}`,
-          sessions: sessionsWithDates.map((s) => ({ ...s, participants: [] })), // master = without participants
-        };
-      });
-    } else if (mode === "EMPTY") {
-      setPlan({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });
-    } else {
-      // COPY_CURRENT
-      setPlan((prev) => {
-        const copied = prev.sessions.map((s) => ({
-          ...s,
-          id: randomId("sess_"),
-          participants: keepParticipants ? [...(s.participants ?? [])] : [],
-        }));
-
-        const shifted = applyWeekDatesToSessions(copied, weekStartMondayISO);
-
-        return {
-          weekId: `WEEK_${weekStartMondayISO}_copy`,
-          sessions: shifted,
-        };
-      });
-    }
-    setNewWeekOpen(false);
-    resetForm();
+    createWeekFromMode(mode, keepParticipants, weekStartMondayISO);
   }
 
   /* ============================================================
@@ -1881,37 +1867,6 @@ export default function App() {
   /* ============================================================
      Render
      ============================================================ */
-
-  const weekLabel = useMemo(() => {
-    const base = kwLabelFromPlan(plan);
-    try {
-      return (birthdayPlayerIds && birthdayPlayerIds.size > 0) ? `${base} 🎂` : base;
-    } catch {
-      return base;
-    }
-  }, [plan, birthdayPlayerIds]);
-
-  const weekDates = useMemo(() => {
-    // Extrahiere Wochen-Start aus weekId (Format: WEEK_2026-02-17 oder ähnlich)
-    let base: string;
-    if (plan.weekId && plan.weekId.startsWith("WEEK_")) {
-      const dateMatch = plan.weekId.match(/WEEK_(\d{4}-\d{2}-\d{2})/);
-      if (dateMatch && dateMatch[1]) {
-        base = dateMatch[1];
-      } else {
-        // Fallback: nutze Sessions oder heutiges Datum
-        const dates = plan.sessions.map((s) => s.date).filter((d) => typeof d === "string" && d.length === 10).sort();
-        base = dates.length ? isoWeekMonday(dates[0]) : isoWeekMonday(new Date().toISOString().slice(0, 10));
-      }
-    } else {
-      // Fallback: nutze Sessions oder heutiges Datum
-      const dates = plan.sessions.map((s) => s.date).filter((d) => typeof d === "string" && d.length === 10).sort();
-      base = dates.length ? isoWeekMonday(dates[0]) : isoWeekMonday(new Date().toISOString().slice(0, 10));
-    }
-    const out: string[] = [];
-    for (let i = 0; i < 7; i++) out.push(addDaysISO(base, i));
-    return out;
-  }, [plan]);
 
   // DnD Sensors: separate mouse/touch improve Android drag reliability.
   const sensors = useSensors(
