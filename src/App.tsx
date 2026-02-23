@@ -18,7 +18,6 @@ import {
 import type { Lang } from "./i18n/types";
 import type {
   CalendarEvent as Session,
-  Coach,
   GroupId,
   Player,
   Position,
@@ -44,6 +43,7 @@ import {
   useDndPlan,
   useCloudSync,
   useCloudSnapshotHandlers,
+  useCoaches,
   useEventPlannerState,
   useLocationUsageMap,
   usePersistedState,
@@ -81,7 +81,6 @@ import {
   primaryTna,
 } from "./state/playerMeta";
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
-import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
 import {
   type ProfileSyncMode,
   type CloudSnapshotV1,
@@ -114,8 +113,6 @@ import {
 import { fetchTravelMinutes } from "./utils/mapsApi";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
 import { normalizeYearColor, pickTextColor } from "./utils/color";
-import { downloadJson } from "./utils/json";
-import { randomId } from "./utils/id";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
@@ -510,6 +507,7 @@ export default function App() {
   const selectedPlayerId = appUiState.selectedPlayerId;
   const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
   const { promptDialog, setPromptValue, askPrompt, resolvePrompt } = usePromptDialog();
+  const [lastDropError, setLastDropError] = useState<string | null>(null);
 
   /* ============================================================
     EFFECTS (useEffect...)
@@ -535,51 +533,14 @@ export default function App() {
   /* ----------------------
      Staff / Coaches
      ---------------------- */
-  const [coaches, setCoaches] = usePersistedState<Coach[]>(
-    STAFF_STORAGE_KEY,
-    DEFAULT_STAFF,
-    (savedRaw) => safeParseStaff(savedRaw) ?? DEFAULT_STAFF
+  const { coaches, setCoaches, importStaffFile, exportStaff, addCoach, updateCoach, deleteCoach } = useCoaches(
+    t,
+    setLastDropError
   );
 
   /* ============================================================
      HANDLERS (onDrag..., upsert..., export...)
      ============================================================ */
-
-  async function importStaffFile(file: File) {
-    const text = await file.text();
-    const json = JSON.parse(text);
-    const list = Array.isArray(json) ? json : json?.coaches;
-    if (!Array.isArray(list)) return;
-    const normalized: Coach[] = list
-      .map((rawCoach) => {
-        const c = (rawCoach && typeof rawCoach === "object") ? (rawCoach as Record<string, unknown>) : {};
-        return {
-          id: String(c.id ?? randomId("c_")),
-          name: String(c.name ?? ""),
-          role: String(c.role ?? "Coach"),
-          license: c.license !== undefined ? String(c.license ?? "") : "",
-        };
-      })
-      .filter((c: Coach) => c.id && c.name);
-    if (normalized.length) setCoaches(normalized);
-  }
-
-  function exportStaff() {
-    downloadJson("staff.json", coaches);
-  }
-
-  function addCoach() {
-    const id = randomId("c_");
-    setCoaches((prev) => [...prev, { id, name: "Name", role: "Coach", license: "" }]);
-  }
-
-  function updateCoach(id: string, patch: Partial<Coach>) {
-    setCoaches((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  }
-
-  function deleteCoach(id: string) {
-    setCoaches((prev) => prev.filter((c) => c.id !== id));
-  }
 
   /* ----------------------
      Load roster.json
@@ -711,7 +672,6 @@ export default function App() {
      ---------------------- */
   const conflictsBySession = useMemo(() => computeConflictsBySession(plan), [plan]);
 
-  const [lastDropError, setLastDropError] = useState<string | null>(null);
   const [collapsedParticipantsBySession, setCollapsedParticipantsBySession] = useState<Record<string, boolean>>({});
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
