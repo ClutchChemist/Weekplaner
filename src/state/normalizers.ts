@@ -1,6 +1,8 @@
 import { addDaysISO, isoWeekMonday, normalizeDash, weekdayOffsetFromDEShort, weekdayShortDE } from "../utils/date";
 import { randomId } from "../utils/id";
 import { enrichPlayersWithBirthFromDBBTA, safeNameSplit } from "./playerMeta";
+import { domainSessionToLegacySession, legacySessionToDomainSession } from "@/shared/domain/sessionAdapter";
+import { sortSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import type {
   GroupId,
   Lizenz,
@@ -140,7 +142,7 @@ export function normalizeMasterWeek(input: unknown): WeekPlan {
     const timeRaw = String(s.time ?? "");
     const time = timeRaw.includes("–") ? timeRaw : normalizeDash(timeRaw);
 
-    return {
+    const normalizedSession: Session = {
       id,
       date,
       day: day || weekdayShortDE(date),
@@ -151,16 +153,13 @@ export function normalizeMasterWeek(input: unknown): WeekPlan {
       participants: Array.isArray(s.participants) ? s.participants.map((x) => String(x)) : [],
       kaderLabel: s.kaderLabel ? String(s.kaderLabel) : undefined,
     };
+    return domainSessionToLegacySession(legacySessionToDomainSession(normalizedSession));
   });
 
-  sessions.sort((a, b) => {
-    const ad = a.date.localeCompare(b.date);
-    if (ad !== 0) return ad;
-    return a.time.localeCompare(b.time);
-  });
+  const sortedSessions = sortSessions(sessions);
 
   return {
     weekId: String(root.weekId ?? "MASTER"),
-    sessions: sessions.map((s) => ({ ...s, participants: [] })),
+    sessions: sortedSessions.map((s) => ({ ...s, participants: [] })),
   };
 }

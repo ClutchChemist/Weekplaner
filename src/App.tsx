@@ -1,16 +1,14 @@
-import React, {
+﻿import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import {
   DndContext,
   MouseSensor,
   TouchSensor,
-  useDraggable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -18,7 +16,6 @@ import {
 import type { Lang } from "./i18n/types";
 import type {
   CalendarEvent as Session,
-  Coach,
   GroupId,
   Player,
   Position,
@@ -34,9 +31,9 @@ import {
   RightSidebar,
   WeekPlanBoard,
 } from "@/components/layout";
+import { DraggablePlayerRow } from "@/components/roster";
 
-import { ConfirmModal, EventEditorModal, NewWeekModal, ProfileCloudSyncPanel, PromptModal, ThemeSettingsModal } from "@/components/modals";
-import type { NewWeekMode } from "./components/modals/NewWeekModal";
+import { ConfirmModal, EventEditorModal, NewWeekModal, ProfilesModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import {
   composeOpponentInfo,
   getOpponentMode,
@@ -44,10 +41,21 @@ import {
   useConfirmDialog,
   useDndPlan,
   useCloudSync,
+  useCloudSnapshotHandlers,
+  useCoaches,
+  useEventPlannerState,
   useLocationUsageMap,
+  usePdfExport,
   usePersistedState,
+  usePlayerActions,
+  usePromptDialog,
+  useProfilesState,
   useRightSidebarPersistence,
+  useWeekArchiveManager,
   useSessionEditor,
+  useWeekManager,
+  LOCATION_PRESETS,
+  TEAM_OPTIONS,
 } from "@/hooks";
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
@@ -67,39 +75,21 @@ import {
   isU18Only,
   makeParticipantSorter,
 } from "./state/playerGrouping";
-import {
-  dbbDobMatchesBirthDate,
-  enrichPlayersWithBirthFromDBBTA,
-  hasAnyTna,
-  primaryTna,
-} from "./state/playerMeta";
+import { dbbDobMatchesBirthDate, primaryTna } from "./state/playerMeta";
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
-import { DEFAULT_STAFF, safeParseStaff } from "./state/staffPersistence";
 import {
-  ACTIVE_PROFILE_STORAGE_KEY,
-  DEFAULT_PROFILE_SYNC,
-  PROFILES_STORAGE_KEY,
   type ProfileSyncMode,
-  safeParseProfiles,
   type CloudSnapshotV1,
   type ProfilePayload,
-  type SavedProfile,
 } from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
-import { safeParseWeekArchive, WEEK_ARCHIVE_STORAGE_KEY, type WeekArchiveEntry } from "./state/weekArchive";
 import { DEFAULT_THEME } from "./state/themeDefaults";
 import { applyThemeToCssVars } from "./themes/cssVars";
 import {
-  addDaysISO,
   addMinutesToHHMM,
-  dateToShortDE,
-  isoWeekMonday,
   kwLabelFromPlan,
-  normalizeDash,
   splitTimeRange,
-  weekdayOffsetFromDEShort,
   weekdayShortLocalized,
-  weekdayShortDE,
 } from "./utils/date";
 import {
   computeConflictsBySession,
@@ -118,9 +108,7 @@ import {
 } from "./utils/locations";
 import { fetchTravelMinutes } from "./utils/mapsApi";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
-import { normalizeYearColor, pickTextColor } from "./utils/color";
-import { downloadJson } from "./utils/json";
-import { randomId } from "./utils/id";
+import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
 
@@ -159,14 +147,6 @@ import weekMasterRaw from "./data/weekplan_master.json";
 /* ============================================================
    UI PRIMITIVES (CSS vars)
    ============================================================ */
-
-type PromptDialogState = {
-  open: boolean;
-  title: string;
-  message: string;
-  value: string;
-  placeholder?: string;
-};
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
@@ -237,170 +217,9 @@ function MinutePicker({
    DND COMPONENTS
    ============================================================ */
 
-export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
-  player,
-  trainingCount,
-  groupBg,
-  isBirthday,
-  t,
-}: {
-  player: Player;
-  trainingCount: number;
-  groupBg: Record<GroupId, string>;
-  isBirthday: boolean;
-  t: (k: string) => string;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `player:${player.id}`,
-    data: { type: "player", playerId: player.id },
-  });
-
-  const style: CSSProperties = {
-    cursor: "grab",
-    opacity: isDragging ? 0.6 : 1,
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    boxShadow: isDragging
-      ? "0 10px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)"
-      : "none",
-    zIndex: isDragging ? 40 : undefined,
-    touchAction: "none",
-    userSelect: "none",
-    WebkitUserSelect: "none",
-  };
-
-  const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
-  const text = pickTextColor(bg);
-  const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
-
-  const pos = (player.positions ?? []).join("/") || "—";
-  const isTbd = player.id === "TBD";
-
-  const taOk = hasAnyTna(player);
-  const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
-      <div
-        style={{
-          border: "1px solid rgba(0,0,0,0.15)",
-          borderRadius: 12,
-          padding: 10,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          background: bg,
-        }}
-        title={
-          isTbd
-            ? t("placeholder")
-            : (player.lizenzen ?? [])
-              .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
-              .join(" | ") || t("noTaTnaSaved")
-        }
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              color: text,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-            title={!taDobCheck.ok ? taDobCheck.reason : undefined}
-          >
-            {player.name}{isBirthday ? " 🎂" : ""}{!taDobCheck.ok ? " ⚠️" : ""}
-          </div>
-          <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
-            {isTbd
-              ? t("placeholder")
-              : `${player.primaryYouthTeam || ""}${player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
-              }`}
-          </div>
-        </div>
-
-        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
-          {isTbd ? (
-            <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>TBD</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{t("groupTbdLong")}</div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{pos}</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{trainingCount}x</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>
-                TA {taOk ? "✓" : "—"}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-DraggablePlayerRow.displayName = "DraggablePlayerRow";
-
-
-
 /* ============================================================
    Optional right pane: Calendar week view (DnD)
    ============================================================ */
-
-const ParticipantCard = React.memo(function ParticipantCard({
-  player,
-  onRemove,
-  groupBg,
-  isBirthday,
-  t,
-}: {
-  player: Player;
-  onRemove: () => void;
-  groupBg: Record<GroupId, string>;
-  isBirthday: boolean;
-  t: (k: string) => string;
-}) {
-  const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
-  const text = pickTextColor(bg);
-
-  return (
-    <div
-      style={{
-        border: "1px solid rgba(0,0,0,0.15)",
-        borderRadius: 12,
-        padding: "8px 10px",
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 10,
-        background: bg,
-        alignItems: "center",
-      }}
-    >
-      <div style={{ fontWeight: 900, color: text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {player.name}{isBirthday ? " 🎂" : ""}
-      </div>
-      <button
-        onClick={onRemove}
-        style={{
-          border: "1px solid rgba(255,255,255,0.6)",
-          background: "rgba(255,255,255,0.25)",
-          color: text,
-          borderRadius: 10,
-          padding: "6px 10px",
-          cursor: "pointer",
-          fontWeight: 900,
-        }}
-      >
-        {t("remove")}
-      </button>
-    </div>
-  );
-});
-
-ParticipantCard.displayName = "ParticipantCard";
 
 /* ============================================================
    PRINT VIEW → src/components/layout/PrintView.tsx
@@ -477,68 +296,6 @@ export default function App() {
   const t = useMemo(() => makeT(lang), [lang]);
   const tf = useMemo(() => makeTF(lang), [lang]);
 
-  const [profiles, setProfiles] = useState<SavedProfile[]>(() =>
-    safeParseProfiles(typeof window !== "undefined" ? localStorage.getItem(PROFILES_STORAGE_KEY) : null)
-  );
-  const [activeProfileId, setActiveProfileId] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY) ?? "" : ""
-  );
-  const [profileHydratedId, setProfileHydratedId] = useState<string | null>(null);
-  const [profilesOpen, setProfilesOpen] = useState(false);
-  const [weekArchiveOpen, setWeekArchiveOpen] = useState(false);
-  const [profileNameInput, setProfileNameInput] = useState("");
-  const [logoUploadError, setLogoUploadError] = useState("");
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const profileMenuRef = useRef<HTMLDivElement | null>(null);
-  const logoFileRef = useRef<HTMLInputElement | null>(null);
-  const [clubLogoDataUrl, setClubLogoDataUrl] = usePersistedState<string | null>(
-    CLUB_LOGO_STORAGE_KEY,
-    null,
-    (savedRaw) => {
-      try {
-        const parsed = JSON.parse(savedRaw);
-        return typeof parsed === "string" || parsed === null ? parsed : null;
-      } catch {
-        return null;
-      }
-    }
-  );
-  const activeProfileName = useMemo(
-    () => profiles.find((p) => p.id === activeProfileId)?.name ?? null,
-    [profiles, activeProfileId]
-  );
-  const activeProfile = useMemo(
-    () => profiles.find((p) => p.id === activeProfileId) ?? null,
-    [profiles, activeProfileId]
-  );
-  const activeProfileSync = activeProfile?.sync ?? DEFAULT_PROFILE_SYNC;
-
-  const [weekArchiveByProfile, setWeekArchiveByProfile] = usePersistedState<Record<string, WeekArchiveEntry[]>>(
-    WEEK_ARCHIVE_STORAGE_KEY,
-    {},
-    (savedRaw) => safeParseWeekArchive(savedRaw)
-  );
-
-  const [archiveTemplateStart, setArchiveTemplateStart] = useState<string>(() =>
-    isoWeekMonday(new Date().toISOString().slice(0, 10))
-  );
-
-  const activeArchiveEntries = useMemo(() => {
-    if (!activeProfileId) return [] as WeekArchiveEntry[];
-    return (weekArchiveByProfile[activeProfileId] ?? []).filter((entry) => entry.profileId === activeProfileId);
-  }, [activeProfileId, weekArchiveByProfile]);
-
-  useEffect(() => {
-    if (!profileMenuOpen) return;
-    function onDocMouseDown(e: MouseEvent) {
-      const node = profileMenuRef.current;
-      if (!node) return;
-      if (!node.contains(e.target as Node)) setProfileMenuOpen(false);
-    }
-    window.addEventListener("mousedown", onDocMouseDown);
-    return () => window.removeEventListener("mousedown", onDocMouseDown);
-  }, [profileMenuOpen]);
-
   const {
     appUiState,
     setSettingsOpen,
@@ -581,37 +338,8 @@ export default function App() {
   const rosterSearch = appUiState.rosterSearch;
   const selectedPlayerId = appUiState.selectedPlayerId;
   const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
-  const [promptDialog, setPromptDialog] = useState<PromptDialogState>({
-    open: false,
-    title: "",
-    message: "",
-    value: "",
-    placeholder: "",
-  });
-  const promptResolverRef = useRef<((value: string | null) => void) | null>(null);
-
-  const askPrompt = useCallback(
-    (title: string, message: string, initialValue = "", placeholder = "") => {
-      return new Promise<string | null>((resolve) => {
-        promptResolverRef.current = resolve;
-        setPromptDialog({
-          open: true,
-          title,
-          message,
-          value: initialValue,
-          placeholder,
-        });
-      });
-    },
-    []
-  );
-
-  const resolvePrompt = useCallback((value: string | null) => {
-    setPromptDialog((prev) => ({ ...prev, open: false }));
-    const resolver = promptResolverRef.current;
-    promptResolverRef.current = null;
-    resolver?.(value);
-  }, []);
+  const { promptDialog, setPromptValue, askPrompt, resolvePrompt } = usePromptDialog();
+  const [lastDropError, setLastDropError] = useState<string | null>(null);
 
   /* ============================================================
     EFFECTS (useEffect...)
@@ -637,51 +365,14 @@ export default function App() {
   /* ----------------------
      Staff / Coaches
      ---------------------- */
-  const [coaches, setCoaches] = usePersistedState<Coach[]>(
-    STAFF_STORAGE_KEY,
-    DEFAULT_STAFF,
-    (savedRaw) => safeParseStaff(savedRaw) ?? DEFAULT_STAFF
+  const { coaches, setCoaches, importStaffFile, exportStaff, addCoach, updateCoach, deleteCoach } = useCoaches(
+    t,
+    setLastDropError
   );
 
   /* ============================================================
      HANDLERS (onDrag..., upsert..., export...)
      ============================================================ */
-
-  async function importStaffFile(file: File) {
-    const text = await file.text();
-    const json = JSON.parse(text);
-    const list = Array.isArray(json) ? json : json?.coaches;
-    if (!Array.isArray(list)) return;
-    const normalized: Coach[] = list
-      .map((rawCoach) => {
-        const c = (rawCoach && typeof rawCoach === "object") ? (rawCoach as Record<string, unknown>) : {};
-        return {
-          id: String(c.id ?? randomId("c_")),
-          name: String(c.name ?? ""),
-          role: String(c.role ?? "Coach"),
-          license: c.license !== undefined ? String(c.license ?? "") : "",
-        };
-      })
-      .filter((c: Coach) => c.id && c.name);
-    if (normalized.length) setCoaches(normalized);
-  }
-
-  function exportStaff() {
-    downloadJson("staff.json", coaches);
-  }
-
-  function addCoach() {
-    const id = randomId("c_");
-    setCoaches((prev) => [...prev, { id, name: "Name", role: "Coach", license: "" }]);
-  }
-
-  function updateCoach(id: string, patch: Partial<Coach>) {
-    setCoaches((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  }
-
-  function deleteCoach(id: string) {
-    setCoaches((prev) => prev.filter((c) => c.id !== id));
-  }
 
   /* ----------------------
      Load roster.json
@@ -694,49 +385,50 @@ export default function App() {
 
   const [players, setPlayers] = useState<Player[]>(() => normalizedRoster.players);
 
-  function handleClubLogoUpload(file: File) {
-    setLogoUploadError("");
+  const applyProfileData = useCallback((payload: ProfilePayload) => {
+    setRosterMeta(payload.rosterMeta);
+    setPlayers(payload.players);
+    setCoaches(payload.coaches);
+    setTheme((prev) => ({
+      ...prev,
+      locations: payload.locations,
+    }));
+  }, [setCoaches]);
 
-    if (!file.type.startsWith("image/")) {
-      setLogoUploadError(theme.locale === "de" ? "Bitte eine Bilddatei auswählen." : "Please choose an image file.");
-      return;
-    }
-    if (file.size > CLUB_LOGO_MAX_BYTES) {
-      const maxKb = Math.round(CLUB_LOGO_MAX_BYTES / 1024);
-      setLogoUploadError(
-        theme.locale === "de"
-          ? `Logo ist zu groß (max. ${maxKb} KB).`
-          : `Logo is too large (max ${maxKb} KB).`
-      );
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
-        return;
-      }
-      setClubLogoDataUrl(reader.result);
-      setLogoUploadError("");
-    };
-    reader.onerror = () => {
-      setLogoUploadError(theme.locale === "de" ? "Logo konnte nicht gelesen werden." : "Could not read logo file.");
-    };
-    reader.readAsDataURL(file);
-  }
-
-  useEffect(() => {
-    localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
-  }, [profiles]);
-
-  useEffect(() => {
-    if (!activeProfileId) {
-      localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(ACTIVE_PROFILE_STORAGE_KEY, activeProfileId);
-  }, [activeProfileId]);
+  const {
+    profiles,
+    setProfiles,
+    activeProfileId,
+    setActiveProfileId,
+    setProfileHydratedId,
+    profilesOpen,
+    setProfilesOpen,
+    profileNameInput,
+    setProfileNameInput,
+    logoUploadError,
+    profileMenuOpen,
+    setProfileMenuOpen,
+    profileMenuRef,
+    clubLogoDataUrl,
+    setClubLogoDataUrl,
+    activeProfileName,
+    activeProfileSync,
+    handleClubLogoUpload,
+    createProfile,
+    updateActiveProfile,
+    deleteActiveProfile,
+    selectProfile,
+  } = useProfilesState({
+    t,
+    tf,
+    rosterMeta,
+    players,
+    coaches,
+    locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
+    clubLogoStorageKey: CLUB_LOGO_STORAGE_KEY,
+    clubLogoMaxBytes: CLUB_LOGO_MAX_BYTES,
+    onApplyProfileData: applyProfileData,
+  });
 
   /* ----------------------
      Ensure TBD placeholder exists
@@ -771,7 +463,7 @@ export default function App() {
     masterPlan,
     reviveWeekPlan
   );
-  const scheduleSessions = plan.sessions;
+  const scheduleSessions = useMemo(() => selectScheduleSessions(plan), [plan]);
 
   /* ----------------------
      Export HTML (Source of Truth)
@@ -807,12 +499,17 @@ export default function App() {
     });
   }, [scheduleSessions, plan, players, coaches, theme, clubLogoDataUrl]);
 
+  const { createPlanPdf, createPlanPngPages } = usePdfExport({
+    exportPages,
+    clubName: theme.clubName,
+    weekId: plan.weekId,
+  });
+
   /* ----------------------
      Derived
      ---------------------- */
   const conflictsBySession = useMemo(() => computeConflictsBySession(plan), [plan]);
 
-  const [lastDropError, setLastDropError] = useState<string | null>(null);
   const [collapsedParticipantsBySession, setCollapsedParticipantsBySession] = useState<Record<string, boolean>>({});
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
@@ -895,40 +592,26 @@ export default function App() {
      Event planner
      ============================================================ */
 
-  const TEAM_OPTIONS = ["U18", "NBBL", "HOL", "1RLH"];
 
-  const LOCATION_PRESETS = ["BSH", "SHP", "Seminarraum"] as const;
-  type LocationMode = string; // any location name or "__CUSTOM__"
-
-  type EditorState = {
-    editingSessionId: string | null;
-    formDate: string;
-    formTeams: string[];
-    locationMode: LocationMode;
-    customLocation: string;
-    formStart: string;
-    formDuration: number;
-    formOpponent: string;
-    formWarmupMin: number;
-    formTravelMin: number;
-    formExcludeFromRoster: boolean;
-    formRowColor: string;
-  };
-
-  const [editorState, setEditorState] = useState<EditorState>({
-    editingSessionId: null,
-    formDate: new Date().toISOString().slice(0, 10),
-    formTeams: ["NBBL"],
-    locationMode: "BSH",
-    customLocation: "",
-    formStart: "18:00",
-    formDuration: 90,
-    formOpponent: "",
-    formWarmupMin: 30,
-    formTravelMin: 0,
-    formExcludeFromRoster: false,
-    formRowColor: "",
-  });
+  const {
+    editorState,
+    setEditingSessionId,
+    setFormDate,
+    setFormTeams,
+    setLocationMode,
+    setCustomLocation,
+    setFormStart,
+    setFormDuration,
+    setFormOpponent,
+    setFormWarmupMin,
+    setFormTravelMin,
+    setFormExcludeFromRoster,
+    setFormRowColor,
+    currentLocationValue,
+    onToggleTeam,
+    resetForm,
+    buildSessionFromForm,
+  } = useEventPlannerState();
 
   const {
     editingSessionId,
@@ -945,94 +628,16 @@ export default function App() {
     formRowColor,
   } = editorState;
 
-  function setEditorField<K extends keyof EditorState>(key: K, value: React.SetStateAction<EditorState[K]>) {
-    setEditorState((prev) => ({
-      ...prev,
-      [key]: typeof value === "function" ? (value as (p: EditorState[K]) => EditorState[K])(prev[key]) : value,
-    }));
-  }
-
-  const setEditingSessionId = (value: React.SetStateAction<string | null>) => setEditorField("editingSessionId", value);
-  const setFormDate = (value: React.SetStateAction<string>) => setEditorField("formDate", value);
-  const setFormTeams = (value: React.SetStateAction<string[]>) => setEditorField("formTeams", value);
-  const setLocationMode = (value: React.SetStateAction<LocationMode>) => setEditorField("locationMode", value);
-  const setCustomLocation = (value: React.SetStateAction<string>) => setEditorField("customLocation", value);
-  const setFormStart = (value: React.SetStateAction<string>) => setEditorField("formStart", value);
-  const setFormDuration = (value: React.SetStateAction<number>) => setEditorField("formDuration", value);
-  const setFormOpponent = (value: React.SetStateAction<string>) => setEditorField("formOpponent", value);
-  const setFormWarmupMin = (value: React.SetStateAction<number>) => setEditorField("formWarmupMin", value);
-  const setFormTravelMin = (value: React.SetStateAction<number>) => setEditorField("formTravelMin", value);
-  const setFormExcludeFromRoster = (value: React.SetStateAction<boolean>) => setEditorField("formExcludeFromRoster", value);
-  const setFormRowColor = (value: React.SetStateAction<string>) => setEditorField("formRowColor", value);
-
   const editorRef = useRef<HTMLDivElement | null>(null);
   const opponentInputRef = useRef<HTMLInputElement | null>(null);
   const editorTopRef = useRef<HTMLDivElement | null>(null);
-  const prevOpponentModeRef = useRef<{ game: boolean; away: boolean } | null>(null);
-
-  // Default-Logik:
-  // - nur bei Modus-Übergängen defaults setzen:
-  //   * non-game -> game: warmup default 90 (falls bisher 0)
-  //   * home -> away: travel default 90 (falls bisher 0)
-  //   * away -> home: travel = 0
-  //   * game -> non-game: warmup/travel = 0
-  useEffect(() => {
-    const info = normalizeOpponentInfo(formOpponent);
-    const game = isGameInfo(info);
-    const away = info.startsWith("@");
-
-    setEditorState((prev) => {
-      const prevMode = prevOpponentModeRef.current;
-      prevOpponentModeRef.current = { game, away };
-
-      let nextWarmupMin = prev.formWarmupMin;
-      let nextTravelMin = prev.formTravelMin;
-
-      // Bei reinem Gegnernamen-Ändern ohne Moduswechsel keine automatischen Anpassungen.
-      if (prevMode && prevMode.game === game && prevMode.away === away) {
-        return prev;
-      }
-
-      if (game && !prevMode?.game) {
-        if (nextWarmupMin <= 0) nextWarmupMin = 90;
-      }
-
-      if (game && away && prevMode && !prevMode.away) {
-        if (nextTravelMin <= 0) nextTravelMin = 90;
-      }
-
-      if (game && !away && prevMode?.away) {
-        if (nextTravelMin !== 0) nextTravelMin = 0;
-      }
-
-      if (!game && prevMode?.game) {
-        if (nextWarmupMin !== 0) nextWarmupMin = 0;
-        if (nextTravelMin !== 0) nextTravelMin = 0;
-      }
-
-      if (nextWarmupMin === prev.formWarmupMin && nextTravelMin === prev.formTravelMin) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        formWarmupMin: nextWarmupMin,
-        formTravelMin: nextTravelMin,
-      };
-    });
-  }, [formOpponent]);
-
-  function currentLocationValue(): string {
-    if (locationMode === "__CUSTOM__") return (customLocation || "").trim() || "—";
-    return locationMode;
-  }
 
   function handleRecallLocationEdit() {
     const current = currentLocationValue().trim();
     setLeftTab("locations");
     setLeftEditMode(true);
 
-    if (!current || current === "—") {
+    if (!current || current === "-") {
       setOpenLocationName(null);
       return;
     }
@@ -1046,49 +651,6 @@ export default function App() {
 
     setOpenLocationName(current);
   }
-
-  function onToggleTeam(t: string) {
-    setFormTeams((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  }
-
-  function resetForm() {
-    setEditingSessionId(null);
-    setFormDate(new Date().toISOString().slice(0, 10));
-    setFormTeams(["NBBL"]);
-    setLocationMode("BSH");
-    setCustomLocation("");
-    setFormStart("18:00");
-    setFormDuration(90);
-    setFormOpponent("");
-    setFormWarmupMin(30);
-    setFormTravelMin(0);
-    setFormExcludeFromRoster(false);
-    setFormRowColor("");
-  }
-
-  function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
-    const info = normalizeOpponentInfo(formOpponent);
-    const isGame = isGameInfo(info);
-    const dur = isGame ? 120 : formDuration;
-    const end = addMinutesToHHMM(formStart, dur);
-    const time = `${formStart}–${end}`;
-
-    return {
-      id: existingId ?? randomId("sess_"),
-      date: formDate,
-      day: weekdayShortDE(formDate),
-      teams: [...formTeams].sort((a, b) => a.localeCompare(b, "de")),
-      time,
-      location: currentLocationValue(),
-      info: info || null,
-      warmupMin: isGame ? Math.max(0, Math.floor(formWarmupMin)) : null,
-      travelMin: isGame ? Math.max(0, Math.floor(formTravelMin)) : null,
-      participants: keepParticipants ?? [],
-      excludeFromRoster: formExcludeFromRoster,
-      rowColor: formRowColor || undefined,
-    };
-  }
-
   const { upsert: upsertSessionInPlan, remove: removeSessionFromPlan } = useSessionEditor(setPlan, sortParticipants);
 
   function upsertSession() {
@@ -1218,100 +780,33 @@ export default function App() {
     prompt: askPrompt,
   });
 
-  const currentProfilePayload = useCallback((): ProfilePayload => {
-    return {
-      rosterMeta,
-      players,
-      coaches,
-      locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
-      clubLogoDataUrl,
-    };
-  }, [rosterMeta, players, coaches, theme.locations, clubLogoDataUrl]);
-
-  const buildCloudSnapshot = useCallback((): CloudSnapshotV1 => {
-    return {
-      version: 1,
-      savedAt: new Date().toISOString(),
-      profileId: activeProfileId,
-      profileName: activeProfileName ?? "",
-      data: {
-        rosterMeta,
-        players,
-        coaches,
-        theme,
-        plan,
-        clubLogoDataUrl,
-      },
-    };
-  }, [rosterMeta, players, coaches, theme, plan, activeProfileId, activeProfileName, clubLogoDataUrl]);
-
-  const applyCloudSnapshot = useCallback((snapshot: CloudSnapshotV1) => {
-    const data = snapshot.data;
-
-    setRosterMeta(data.rosterMeta);
-    setPlayers(data.players);
-    setCoaches(data.coaches);
-    setTheme(data.theme);
-    setPlan(data.plan);
-    setClubLogoDataUrl(data.clubLogoDataUrl ?? null);
-    setProfiles((prev) =>
-      prev.map((p) =>
-        p.id === snapshot.profileId
-          ? {
-            ...p,
-            payload: {
-              rosterMeta: data.rosterMeta,
-              players: data.players,
-              coaches: data.coaches,
-              locations: data.theme.locations ?? p.payload.locations,
-              clubLogoDataUrl: data.clubLogoDataUrl,
-            },
-          }
-          : p
-      )
-    );
-    setProfileHydratedId(snapshot.profileId);
-    setActiveProfileId(snapshot.profileId);
-  }, [setCoaches, setPlan, setClubLogoDataUrl]);
-
-  const isCloudSnapshotV1 = useCallback((raw: unknown): raw is CloudSnapshotV1 => {
-    if (!raw || typeof raw !== "object") return false;
-    const r = raw as Record<string, unknown>;
-    return (
-      r.version === 1 &&
-      typeof r.profileId === "string" &&
-      typeof r.profileName === "string" &&
-      !!r.data &&
-      typeof r.data === "object"
-    );
-  }, []);
-
-  const cloudSyncSignal = useMemo(
-    () => JSON.stringify({ rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync }),
-    [rosterMeta, players, coaches, theme, plan, activeProfileId, clubLogoDataUrl, activeProfileSync]
-  );
-
-  const cloudSyncEnabledForActiveProfile = Boolean(activeProfileId && activeProfileSync.mode === "cloud");
-
-  const updateActiveProfileSync = useCallback(
-    (patch: Partial<{ mode: ProfileSyncMode; autoSync: boolean }>) => {
-      if (!activeProfileId) return;
-      setProfiles((prev) =>
-        prev.map((p) =>
-          p.id === activeProfileId
-            ? {
-              ...p,
-              sync: {
-                ...p.sync,
-                ...patch,
-              },
-            }
-            : p
-        )
-      );
-    },
-    [activeProfileId]
-  );
+  const {
+    buildCloudSnapshot,
+    applyCloudSnapshot,
+    isCloudSnapshotV1,
+    cloudSyncSignal,
+    cloudSyncEnabledForActiveProfile,
+    updateActiveProfileSync,
+  } = useCloudSnapshotHandlers({
+    rosterMeta,
+    players,
+    coaches,
+    theme,
+    plan,
+    activeProfileId,
+    activeProfileName,
+    activeProfileSync,
+    clubLogoDataUrl,
+    setRosterMeta,
+    setPlayers,
+    setCoaches,
+    setTheme,
+    setPlan,
+    setClubLogoDataUrl,
+    setProfiles,
+    setProfileHydratedId,
+    setActiveProfileId,
+  });
 
   const {
     cloudConfigured,
@@ -1339,99 +834,6 @@ export default function App() {
     autoSyncSignal: cloudSyncSignal,
   });
 
-  const applyProfile = useCallback((profile: SavedProfile) => {
-    setRosterMeta(profile.payload.rosterMeta);
-    setPlayers(profile.payload.players);
-    setCoaches(profile.payload.coaches);
-    setClubLogoDataUrl(profile.payload.clubLogoDataUrl ?? null);
-    setTheme((prev) => ({
-      ...prev,
-      locations: profile.payload.locations,
-    }));
-  }, [setCoaches, setClubLogoDataUrl]);
-
-  function createProfile() {
-    const name = profileNameInput.trim();
-    if (!name) return;
-    const id = randomId("profile_");
-    const entry: SavedProfile = {
-      id,
-      name,
-      payload: currentProfilePayload(),
-      sync: { ...DEFAULT_PROFILE_SYNC },
-    };
-    setProfiles((prev) => [...prev, entry]);
-    setProfileHydratedId(id);
-    setActiveProfileId(id);
-    setProfileNameInput("");
-  }
-
-  function updateActiveProfile() {
-    if (!activeProfileId) return;
-    setProfiles((prev) =>
-      prev.map((p) =>
-        p.id === activeProfileId
-          ? {
-            ...p,
-            name: profileNameInput.trim() || p.name,
-            payload: currentProfilePayload(),
-          }
-          : p
-      )
-    );
-  }
-
-  function deleteActiveProfile() {
-    if (!activeProfileId) return;
-    setProfiles((prev) => prev.filter((p) => p.id !== activeProfileId));
-    setProfileHydratedId(null);
-    setActiveProfileId("");
-  }
-
-  function selectProfile(id: string) {
-    if (!id) {
-      setProfileHydratedId(null);
-      setActiveProfileId("");
-      return;
-    }
-    setActiveProfileId(id);
-    const hit = profiles.find((p) => p.id === id);
-    if (hit) {
-      applyProfile(hit);
-      setProfileNameInput(hit.name);
-      setProfileHydratedId(id);
-    }
-  }
-
-  useEffect(() => {
-    if (!activeProfileId) {
-      setProfileHydratedId(null);
-      return;
-    }
-    if (profileHydratedId === activeProfileId) return;
-
-    const hit = profiles.find((p) => p.id === activeProfileId);
-    if (!hit) return;
-
-    applyProfile(hit);
-    setProfileNameInput(hit.name);
-    setProfileHydratedId(activeProfileId);
-  }, [activeProfileId, applyProfile, profileHydratedId, profiles]);
-
-  useEffect(() => {
-    if (!activeProfileId || profileHydratedId !== activeProfileId) return;
-    setProfiles((prev) => {
-      const idx = prev.findIndex((p) => p.id === activeProfileId);
-      if (idx < 0) return prev;
-      const nextPayload = currentProfilePayload();
-      const cur = prev[idx];
-      if (JSON.stringify(cur.payload) === JSON.stringify(nextPayload)) return prev;
-      const copy = [...prev];
-      copy[idx] = { ...cur, payload: nextPayload };
-      return copy;
-    });
-  }, [activeProfileId, currentProfilePayload, profileHydratedId]);
-
   /* ============================================================
      Roster editor: import/export roster.json
      (minimal editor – erweitert später um LP/Trikot/Positions etc.)
@@ -1442,429 +844,57 @@ export default function App() {
     return playerById.get(selectedPlayerId) ?? null;
   }, [selectedPlayerId, playerById]);
 
-  function updatePlayer(id: string, patch: Partial<Player>) {
-    if (id === "TBD") return;
-
-    setPlayers((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const next = { ...p, ...patch };
-
-        if (patch.firstName !== undefined || patch.lastName !== undefined) {
-          const fn = patch.firstName !== undefined ? patch.firstName : (p.firstName ?? "");
-          const ln = patch.lastName !== undefined ? patch.lastName : (p.lastName ?? "");
-          const computed = `${fn} ${ln}`.trim();
-          next.name = computed || next.name;
-        }
-
-        return next;
-      })
-    );
-  }
-
-  function addNewPlayer() {
-    const id = randomId("p_");
-    const p: Player = {
-      id,
-      firstName: t("firstName"),
-      lastName: t("name"),
-      name: `${t("firstName")} ${t("name")}`,
-      birthYear: 2009,
-      birthDate: "",
-      positions: [],
-      primaryYouthTeam: "",
-      primarySeniorTeam: "",
-      defaultTeams: [],
-      lizenzen: [],
-      isLocalPlayer: false,
-      group: "2009",
-    };
-    setPlayers((prev) => [...prev, p]);
-    setSelectedPlayerId(id);
-  }
-
-  function deletePlayer(id: string) {
-    if (id === "TBD") return;
-
-    setPlayers((prev) => prev.filter((p) => p.id !== id));
-    setPlan((prev) => ({
-      ...prev,
-      sessions: prev.sessions.map((s) => ({
-        ...s,
-        participants: (s.participants ?? []).filter((pid) => pid !== id),
-      })),
-    }));
-    setSelectedPlayerId((prev) => (prev === id ? null : prev));
-  }
+  const { updatePlayer, addNewPlayer, deletePlayer, importRosterFile, exportRoster } = usePlayerActions({
+    players,
+    setPlayers,
+    rosterMeta,
+    setRosterMeta,
+    setPlan,
+    setSelectedPlayerId,
+    setLastDropError,
+    t,
+  });
 
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
-
-  async function importRosterFile(file: File) {
-    const text = await file.text();
-    const json = JSON.parse(text);
-
-    // accept either new schema {season,ageGroups,players} or old {players:[...]} or raw array
-    let normalized = { season: "", ageGroups: null as unknown, players: [] as Player[] };
-
-    if (Array.isArray(json)) {
-      // Raw array -> enrich direkt
-      const { players: enriched } = enrichPlayersWithBirthFromDBBTA(json as Player[]);
-      normalized.players = enriched;
-    } else if (json?.players) {
-      normalized = normalizeRoster(json); // enrichment happens inside normalizeRoster
-    } else {
-      return;
-    }
-
-    // ensure we don't import TBD
-    const cleaned = normalized.players.filter((p) => String(p.id) !== "TBD");
-    setRosterMeta({ season: normalized.season || rosterMeta.season, ageGroups: normalized.ageGroups ?? rosterMeta.ageGroups });
-    setPlayers(cleaned);
-    setSelectedPlayerId(cleaned[0]?.id ?? null);
-  }
-
-  function exportRoster() {
-    const exportPlayers = players.filter((p) => p.id !== "TBD").map((p) => {
-      // keep roster.json schema + preserve extra fields for future
-      const y = birthYearOf(p);
-      return {
-        id: p.id,
-        name: p.name,
-        birthYear: y ?? null,
-        isLocalPlayer: !!p.isLocalPlayer,
-        lizenzen: (p.lizenzen ?? []).map((l) => ({
-          typ: l.typ,
-          tna: l.tna,
-          verein: l.verein ?? "UBC Münster",
-        })),
-        defaultTeams: p.defaultTeams ?? [],
-        // extensions (optional)
-        firstName: p.firstName ?? "",
-        lastName: p.lastName ?? "",
-        birthDate: p.birthDate ?? "",
-        positions: p.positions ?? [],
-        group: p.group ?? "",
-        lpCategory: p.lpCategory ?? "",
-        jerseyByTeam: p.jerseyByTeam ?? {},
-        historyLast6: p.historyLast6 ?? [],
-        yearColor: p.yearColor ?? null,
-      };
-    });
-
-    downloadJson("roster.json", {
-      season: rosterMeta.season,
-      ageGroups: rosterMeta.ageGroups,
-      players: exportPlayers,
-    });
-  }
-
-  /* ============================================================
-     Print / PDF
-     ============================================================ */
-
-  async function createPlanPdf() {
-    if (!exportPages || exportPages.length === 0) {
-      return;
-    }
-
-    const pagesHtml = exportPages
-      .map(
-        (p, i) => `
-          <section class="print-page" data-page-index="${i + 1}">
-            ${p.html}
-          </section>
-        `
-      )
-      .join("\n");
-
-    const html = `
-      <!doctype html>
-      <html lang="de">
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>UBC Weekplan PDF</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 10mm;
-            }
-
-            html, body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              color: #111;
-              font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-
-            .print-root {
-              width: 100%;
-            }
-
-            .print-page {
-              break-after: page;
-              page-break-after: always;
-              box-sizing: border-box;
-            }
-
-            .print-page:last-child {
-              break-after: auto;
-              page-break-after: auto;
-            }
-          </style>
-        </head>
-        <body>
-          <main class="print-root">${pagesHtml}</main>
-        </body>
-      </html>
-    `;
-
-    // Blob URL ist in modernen Browsern deutlich zuverlässiger als document.write()
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const blobUrl = URL.createObjectURL(blob);
-
-    const printWindow = window.open(blobUrl, "_blank");
-    if (!printWindow) {
-      URL.revokeObjectURL(blobUrl);
-      return;
-    }
-
-    printWindow.addEventListener(
-      "load",
-      () => {
-        setTimeout(() => {
-          printWindow.focus();
-          printWindow.print();
-          // Blob URL nach kurzem Delay freigeben (nach dem Drucken)
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-        }, 500);
-      },
-      { once: true }
-    );
-  }
-
-  async function createPlanPngPages() {
-    // lazy import (nur wenn genutzt)
-    const { toPng } = await import("html-to-image");
-
-    // Offscreen container (damit nichts im UI flackert)
-    const host = document.createElement("div");
-    host.style.position = "fixed";
-    host.style.left = "-10000px";
-    host.style.top = "0";
-    host.style.width = "900px";
-    host.style.background = "#ffffff";
-    host.style.padding = "0";
-    host.style.zIndex = "999999";
-    document.body.appendChild(host);
-
-    try {
-      // exportPages existieren bei dir bereits (useMemo)
-      const pages = exportPages ?? [];
-      if (pages.length === 0) return;
-
-      for (let i = 0; i < pages.length; i++) {
-        const p = pages[i];
-
-        // Wrapper pro Seite (A4-ish)
-        const pageEl = document.createElement("div");
-        pageEl.style.width = "820px";
-        pageEl.style.minHeight = "1060px";
-        pageEl.style.background = "#ffffff";
-        pageEl.style.color = "#111";
-        pageEl.style.fontFamily =
-          'system-ui, -apple-system, Segoe UI, Roboto, Arial';
-        pageEl.style.boxSizing = "border-box";
-        pageEl.style.padding = "0";
-        pageEl.innerHTML = p.html;
-
-        host.appendChild(pageEl);
-
-        // Render -> PNG
-        const dataUrl = await toPng(pageEl, {
-          backgroundColor: "#ffffff",
-          pixelRatio: 2, // bessere Schärfe
-        });
-
-        // Download
-        const a = document.createElement("a");
-        a.href = dataUrl;
-        a.download = `week_${plan.weekId}_page_${String(i + 1).padStart(2, "0")}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        // cleanup per page
-        host.removeChild(pageEl);
-      }
-    } finally {
-      host.remove();
-    }
-  }
 
   /* ============================================================
      New Week
      ============================================================ */
 
+  const {
+    weekLabel,
+    weekDates,
+    createNewWeek: createWeekFromMode,
+  } = useWeekManager({
+    plan,
+    setPlan,
+    masterPlan,
+    birthdayPlayerIds,
+    setNewWeekOpen,
+    resetForm,
+  });
+
   const closeNewWeek = useCallback(() => setNewWeekOpen(false), [setNewWeekOpen]);
 
-  function applyWeekDatesToSessions(sessions: Session[], weekStartMondayISO: string): Session[] {
-    return sessions
-      .map((s) => {
-        const off = weekdayOffsetFromDEShort(s.day);
-        // Fallback: wenn day fehlt, versuche aus vorhandenem date; sonst Mo
-        const effectiveOffset =
-          off !== null
-            ? off
-            : s.date
-              ? (new Date(s.date + "T00:00:00").getDay() + 6) % 7
-              : 0;
-
-        const nextDate = addDaysISO(weekStartMondayISO, effectiveOffset);
-
-        return {
-          ...s,
-          date: nextDate,
-          day: weekdayShortDE(nextDate), // konsistent
-          time: normalizeDash(String(s.time ?? "")),
-        };
-      })
-      .sort((a, b) => {
-        const ad = a.date.localeCompare(b.date);
-        if (ad !== 0) return ad;
-        return a.time.localeCompare(b.time);
-      });
-  }
-
-  function cloneWeekPlan(src: WeekPlan): WeekPlan {
-    return JSON.parse(JSON.stringify(src)) as WeekPlan;
-  }
-
-  function savePlanToArchive(targetPlan: WeekPlan, profileId: string, reason: "manual" | "auto" = "manual"): WeekArchiveEntry {
-    const reasonLabel = reason === "auto" ? t("weekArchiveLabelAuto") : t("weekArchiveLabelManual");
-    const weekLabel = kwLabelFromPlan(targetPlan);
-    const firstDate = targetPlan.sessions?.[0]?.date ?? "";
-    const firstDateLabel = firstDate ? dateToShortDE(firstDate) : "—";
-    const sessionCount = (targetPlan.sessions ?? []).length;
-    const label = `${reasonLabel} • ${weekLabel} • ${t("weekArchiveLabelStart")} ${firstDateLabel} • ${sessionCount} ${t("weekArchiveLabelEvents")}`;
-
-    const entry: WeekArchiveEntry = {
-      id: randomId("wk_arch_"),
-      savedAt: new Date().toISOString(),
-      label,
-      profileId,
-      plan: cloneWeekPlan(targetPlan),
-    };
-
-    setWeekArchiveByProfile((prev) => {
-      const cur = prev[profileId] ?? [];
-      const next = [entry, ...cur].slice(0, 30);
-      return { ...prev, [profileId]: next };
-    });
-
-    return entry;
-  }
-
-  function handleSaveCurrentWeekToArchive() {
-    if (!activeProfileId) {
-      return;
-    }
-    savePlanToArchive(plan, activeProfileId, "manual");
-  }
-
-  function handleLoadArchiveEntry(entry: WeekArchiveEntry) {
-    if (!activeProfileId || entry.profileId !== activeProfileId) return;
-    setPlan(cloneWeekPlan(entry.plan));
-    setWeekArchiveOpen(false);
-  }
-
-  function handleDeleteArchiveEntry(entry: WeekArchiveEntry) {
-    if (!activeProfileId || entry.profileId !== activeProfileId) return;
-    setWeekArchiveByProfile((prev) => {
-      const cur = prev[activeProfileId] ?? [];
-      return {
-        ...prev,
-        [activeProfileId]: cur.filter((e) => e.id !== entry.id),
-      };
-    });
-  }
-
-  function handleUseArchiveAsTemplate(entry: WeekArchiveEntry) {
-    if (!activeProfileId || entry.profileId !== activeProfileId) return;
-    const copied = (entry.plan.sessions ?? []).map((s) => ({
-      ...s,
-      id: randomId("sess_"),
-      participants: [...(s.participants ?? [])],
-    }));
-
-    const shifted = applyWeekDatesToSessions(copied, archiveTemplateStart);
-    setPlan({
-      weekId: `WEEK_${archiveTemplateStart}_tpl`,
-      sessions: shifted,
-    });
-    setWeekArchiveOpen(false);
-  }
-
-  async function createNewWeek(mode: NewWeekMode, keepParticipants: boolean, weekStartMondayISO: string) {
-    const hasDraft = (plan.sessions ?? []).length > 0;
-    if (hasDraft) {
-      if (!activeProfileId) {
-        const proceedNoProfile = await askConfirm(
-          t("profiles"),
-          t("weekArchiveNeedsProfile")
-        );
-        if (!proceedNoProfile) return;
-      } else {
-        const saveDraft = await askConfirm(
-          t("weekArchiveCreateQuestionTitle"),
-          t("weekArchiveCreateQuestionBody")
-        );
-
-        if (saveDraft) {
-          savePlanToArchive(plan, activeProfileId, "auto");
-        } else {
-          const discardDraft = await askConfirm(
-            t("weekArchiveDiscardTitle"),
-            t("weekArchiveDiscardBody")
-          );
-          if (!discardDraft) return;
-        }
-      }
-    }
-
-    if (mode === "MASTER") {
-      setPlan(() => {
-        const sessionsWithDates = applyWeekDatesToSessions(masterPlan.sessions, weekStartMondayISO);
-        return {
-          weekId: `WEEK_${weekStartMondayISO}`,
-          sessions: sessionsWithDates.map((s) => ({ ...s, participants: [] })), // master = without participants
-        };
-      });
-    } else if (mode === "EMPTY") {
-      setPlan({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });
-    } else {
-      // COPY_CURRENT
-      setPlan((prev) => {
-        const copied = prev.sessions.map((s) => ({
-          ...s,
-          id: randomId("sess_"),
-          participants: keepParticipants ? [...(s.participants ?? [])] : [],
-        }));
-
-        const shifted = applyWeekDatesToSessions(copied, weekStartMondayISO);
-
-        return {
-          weekId: `WEEK_${weekStartMondayISO}_copy`,
-          sessions: shifted,
-        };
-      });
-    }
-    setNewWeekOpen(false);
-    resetForm();
-  }
+  const {
+    weekArchiveOpen,
+    setWeekArchiveOpen,
+    archiveTemplateStart,
+    setArchiveTemplateStart,
+    activeArchiveEntries,
+    handleSaveCurrentWeekToArchive,
+    handleLoadArchiveEntry,
+    handleDeleteArchiveEntry,
+    handleUseArchiveAsTemplate,
+    createNewWeek,
+  } = useWeekArchiveManager({
+    plan,
+    setPlan,
+    activeProfileId,
+    t,
+    askConfirm,
+    createWeekFromMode,
+  });
 
   /* ============================================================
      Responsive CSS
@@ -2115,37 +1145,6 @@ export default function App() {
   /* ============================================================
      Render
      ============================================================ */
-
-  const weekLabel = useMemo(() => {
-    const base = kwLabelFromPlan(plan);
-    try {
-      return (birthdayPlayerIds && birthdayPlayerIds.size > 0) ? `${base} 🎂` : base;
-    } catch {
-      return base;
-    }
-  }, [plan, birthdayPlayerIds]);
-
-  const weekDates = useMemo(() => {
-    // Extrahiere Wochen-Start aus weekId (Format: WEEK_2026-02-17 oder ähnlich)
-    let base: string;
-    if (plan.weekId && plan.weekId.startsWith("WEEK_")) {
-      const dateMatch = plan.weekId.match(/WEEK_(\d{4}-\d{2}-\d{2})/);
-      if (dateMatch && dateMatch[1]) {
-        base = dateMatch[1];
-      } else {
-        // Fallback: nutze Sessions oder heutiges Datum
-        const dates = plan.sessions.map((s) => s.date).filter((d) => typeof d === "string" && d.length === 10).sort();
-        base = dates.length ? isoWeekMonday(dates[0]) : isoWeekMonday(new Date().toISOString().slice(0, 10));
-      }
-    } else {
-      // Fallback: nutze Sessions oder heutiges Datum
-      const dates = plan.sessions.map((s) => s.date).filter((d) => typeof d === "string" && d.length === 10).sort();
-      base = dates.length ? isoWeekMonday(dates[0]) : isoWeekMonday(new Date().toISOString().slice(0, 10));
-    }
-    const out: string[] = [];
-    for (let i = 0; i < 7; i++) out.push(addDaysISO(base, i));
-    return out;
-  }, [plan]);
 
   // DnD Sensors: separate mouse/touch improve Android drag reliability.
   const sensors = useSensors(
@@ -2936,150 +1935,57 @@ export default function App() {
         title={promptDialog.title}
         message={promptDialog.message}
         value={promptDialog.value}
-        onValueChange={(value) => setPromptDialog((prev) => ({ ...prev, value }))}
+        onValueChange={setPromptValue}
         placeholder={promptDialog.placeholder}
         onConfirm={() => resolvePrompt(promptDialog.value.trim())}
         onCancel={() => resolvePrompt(null)}
         t={t}
       />
 
-      {profilesOpen && (
-        <Modal title={t("profiles")} onClose={() => setProfilesOpen(false)} closeLabel={t("close")}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 900 }}>{t("profileActive")}</div>
-              <select
-                value={activeProfileId}
-                onChange={(e) => selectProfile(e.target.value)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid var(--ui-border)",
-                  background: "var(--ui-card)",
-                  color: "var(--ui-text)",
-                }}
-              >
-                <option value="">— {t("profileNone")} —</option>
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 900 }}>{t("name")}</div>
-              <Input
-                value={profileNameInput}
-                onChange={setProfileNameInput}
-                placeholder={t("profileNamePlaceholder")}
-              />
-            </div>
-
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 900 }}>Logo</div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <div
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 10,
-                    border: "1px solid var(--ui-border)",
-                    background: "var(--ui-card)",
-                    display: "grid",
-                    placeItems: "center",
-                    overflow: "hidden",
-                  }}
-                >
-                  {clubLogoDataUrl ? (
-                    <img src={clubLogoDataUrl} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                  ) : (
-                    <span style={{ color: "var(--ui-muted)", fontSize: 11, fontWeight: 900 }}>Logo</span>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Button variant="outline" onClick={() => logoFileRef.current?.click()}>
-                    {theme.locale === "de" ? "Logo hochladen" : "Upload logo"}
-                  </Button>
-                  <Button variant="danger" onClick={() => setClubLogoDataUrl(null)} disabled={!clubLogoDataUrl}>
-                    {theme.locale === "de" ? "Logo entfernen" : "Remove logo"}
-                  </Button>
-                </div>
-
-                <input
-                  ref={logoFileRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleClubLogoUpload(file);
-                    e.currentTarget.value = "";
-                  }}
-                />
-              </div>
-              <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-                {theme.locale === "de"
-                  ? `Empfohlen: quadratisches Logo, max. ${Math.round(CLUB_LOGO_MAX_BYTES / 1024)} KB.`
-                  : `Recommended: square logo, max ${Math.round(CLUB_LOGO_MAX_BYTES / 1024)} KB.`}
-              </div>
-              {logoUploadError && (
-                <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 800 }}>{logoUploadError}</div>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <Button variant="outline" onClick={createProfile}>
-                {t("profileSaveNew")}
-              </Button>
-              <Button variant="outline" onClick={updateActiveProfile} disabled={!activeProfileId}>
-                {t("profileUpdate")}
-              </Button>
-              <Button variant="danger" onClick={deleteActiveProfile} disabled={!activeProfileId}>
-                {t("profileDelete")}
-              </Button>
-            </div>
-
-            <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
-              {t("profileHint")}
-            </div>
-
-            <ProfileCloudSyncPanel
-              t={t}
-              lang={lang}
-              hasActiveProfile={Boolean(activeProfileId)}
-              profileName={activeProfileName}
-              syncMode={activeProfileSync.mode}
-              onSyncModeChange={(mode: ProfileSyncMode) => {
-                updateActiveProfileSync({ mode });
-              }}
-              cloudConfigured={cloudConfigured}
-              cloudUserEmail={cloudUserEmail}
-              cloudEmailInput={cloudEmailInput}
-              cloudStatusMsg={cloudStatusMsg}
-              cloudLastSyncAt={cloudLastSyncAt}
-              cloudBusy={cloudBusy}
-              cloudAutoSync={cloudAutoSync}
-              onEmailInputChange={setCloudEmailInput}
-              onSignIn={() => {
-                void signInToCloud();
-              }}
-              onLoad={() => {
-                void loadSnapshotFromCloud();
-              }}
-              onSave={() => {
-                void saveSnapshotToCloud(false);
-              }}
-              onToggleAutoSync={toggleCloudAutoSync}
-              onSignOut={() => {
-                void signOutFromCloud();
-              }}
-            />
-          </div>
-        </Modal>
-      )}
+      <ProfilesModal
+        open={profilesOpen}
+        onClose={() => setProfilesOpen(false)}
+        t={t}
+        tf={tf}
+        lang={lang}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        activeProfileName={activeProfileName}
+        profileNameInput={profileNameInput}
+        onProfileNameInputChange={setProfileNameInput}
+        onSelectProfile={selectProfile}
+        onCreateProfile={createProfile}
+        onUpdateProfile={updateActiveProfile}
+        onDeleteProfile={deleteActiveProfile}
+        clubLogoDataUrl={clubLogoDataUrl}
+        logoUploadError={logoUploadError}
+        logoMaxKb={Math.round(CLUB_LOGO_MAX_BYTES / 1024)}
+        onLogoUpload={handleClubLogoUpload}
+        onLogoRemove={() => setClubLogoDataUrl(null)}
+        syncMode={activeProfileSync.mode}
+        onSyncModeChange={(mode: ProfileSyncMode) => updateActiveProfileSync({ mode })}
+        cloudConfigured={cloudConfigured}
+        cloudUserEmail={cloudUserEmail}
+        cloudEmailInput={cloudEmailInput}
+        cloudStatusMsg={cloudStatusMsg}
+        cloudLastSyncAt={cloudLastSyncAt}
+        cloudBusy={cloudBusy}
+        cloudAutoSync={cloudAutoSync}
+        onEmailInputChange={setCloudEmailInput}
+        onSignIn={() => {
+          void signInToCloud();
+        }}
+        onLoad={() => {
+          void loadSnapshotFromCloud();
+        }}
+        onSave={() => {
+          void saveSnapshotToCloud(false);
+        }}
+        onToggleAutoSync={toggleCloudAutoSync}
+        onSignOut={() => {
+          void signOutFromCloud();
+        }}
+      />
 
       {weekArchiveOpen && (
         <Modal title={t("weekArchiveTitle")} onClose={() => setWeekArchiveOpen(false)} closeLabel={t("close")}>

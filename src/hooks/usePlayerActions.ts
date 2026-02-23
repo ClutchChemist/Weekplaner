@@ -21,7 +21,7 @@ export function usePlayerActions({
   rosterMeta: { season: string; ageGroups: unknown };
   setRosterMeta: Dispatch<SetStateAction<{ season: string; ageGroups: unknown }>>;
   setPlan: Dispatch<SetStateAction<WeekPlan>>;
-  setSelectedPlayerId: (id: string | null) => void;
+  setSelectedPlayerId: Dispatch<SetStateAction<string | null>>;
   setLastDropError: (err: string | null) => void;
   t: (k: string) => string;
 }) {
@@ -77,7 +77,7 @@ export function usePlayerActions({
         participants: (s.participants ?? []).filter((pid) => pid !== id),
       })),
     }));
-    setSelectedPlayerId(null);
+    setSelectedPlayerId((prev) => (prev === id ? null : prev));
   }
 
   async function importRosterFile(file: File) {
