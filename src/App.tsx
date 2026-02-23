@@ -47,6 +47,7 @@ import {
   useEventPlannerState,
   useLocationUsageMap,
   usePersistedState,
+  usePlayerActions,
   useRightSidebarPersistence,
   useSessionEditor,
   LOCATION_PRESETS,
@@ -72,7 +73,6 @@ import {
 } from "./state/playerGrouping";
 import {
   dbbDobMatchesBirthDate,
-  enrichPlayersWithBirthFromDBBTA,
   hasAnyTna,
   primaryTna,
 } from "./state/playerMeta";
@@ -1311,121 +1311,18 @@ export default function App() {
     return playerById.get(selectedPlayerId) ?? null;
   }, [selectedPlayerId, playerById]);
 
-  function updatePlayer(id: string, patch: Partial<Player>) {
-    if (id === "TBD") return;
-
-    setPlayers((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const next = { ...p, ...patch };
-
-        if (patch.firstName !== undefined || patch.lastName !== undefined) {
-          const fn = patch.firstName !== undefined ? patch.firstName : (p.firstName ?? "");
-          const ln = patch.lastName !== undefined ? patch.lastName : (p.lastName ?? "");
-          const computed = `${fn} ${ln}`.trim();
-          next.name = computed || next.name;
-        }
-
-        return next;
-      })
-    );
-  }
-
-  function addNewPlayer() {
-    const id = randomId("p_");
-    const p: Player = {
-      id,
-      firstName: t("firstName"),
-      lastName: t("name"),
-      name: `${t("firstName")} ${t("name")}`,
-      birthYear: 2009,
-      birthDate: "",
-      positions: [],
-      primaryYouthTeam: "",
-      primarySeniorTeam: "",
-      defaultTeams: [],
-      lizenzen: [],
-      isLocalPlayer: false,
-      group: "2009",
-    };
-    setPlayers((prev) => [...prev, p]);
-    setSelectedPlayerId(id);
-  }
-
-  function deletePlayer(id: string) {
-    if (id === "TBD") return;
-
-    setPlayers((prev) => prev.filter((p) => p.id !== id));
-    setPlan((prev) => ({
-      ...prev,
-      sessions: prev.sessions.map((s) => ({
-        ...s,
-        participants: (s.participants ?? []).filter((pid) => pid !== id),
-      })),
-    }));
-    setSelectedPlayerId((prev) => (prev === id ? null : prev));
-  }
+  const { updatePlayer, addNewPlayer, deletePlayer, importRosterFile, exportRoster } = usePlayerActions({
+    players,
+    setPlayers,
+    rosterMeta,
+    setRosterMeta,
+    setPlan,
+    setSelectedPlayerId,
+    setLastDropError,
+    t,
+  });
 
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
-
-  async function importRosterFile(file: File) {
-    const text = await file.text();
-    const json = JSON.parse(text);
-
-    // accept either new schema {season,ageGroups,players} or old {players:[...]} or raw array
-    let normalized = { season: "", ageGroups: null as unknown, players: [] as Player[] };
-
-    if (Array.isArray(json)) {
-      // Raw array -> enrich direkt
-      const { players: enriched } = enrichPlayersWithBirthFromDBBTA(json as Player[]);
-      normalized.players = enriched;
-    } else if (json?.players) {
-      normalized = normalizeRoster(json); // enrichment happens inside normalizeRoster
-    } else {
-      return;
-    }
-
-    // ensure we don't import TBD
-    const cleaned = normalized.players.filter((p) => String(p.id) !== "TBD");
-    setRosterMeta({ season: normalized.season || rosterMeta.season, ageGroups: normalized.ageGroups ?? rosterMeta.ageGroups });
-    setPlayers(cleaned);
-    setSelectedPlayerId(cleaned[0]?.id ?? null);
-  }
-
-  function exportRoster() {
-    const exportPlayers = players.filter((p) => p.id !== "TBD").map((p) => {
-      // keep roster.json schema + preserve extra fields for future
-      const y = birthYearOf(p);
-      return {
-        id: p.id,
-        name: p.name,
-        birthYear: y ?? null,
-        isLocalPlayer: !!p.isLocalPlayer,
-        lizenzen: (p.lizenzen ?? []).map((l) => ({
-          typ: l.typ,
-          tna: l.tna,
-          verein: l.verein ?? "UBC Münster",
-        })),
-        defaultTeams: p.defaultTeams ?? [],
-        // extensions (optional)
-        firstName: p.firstName ?? "",
-        lastName: p.lastName ?? "",
-        birthDate: p.birthDate ?? "",
-        positions: p.positions ?? [],
-        group: p.group ?? "",
-        lpCategory: p.lpCategory ?? "",
-        jerseyByTeam: p.jerseyByTeam ?? {},
-        historyLast6: p.historyLast6 ?? [],
-        yearColor: p.yearColor ?? null,
-      };
-    });
-
-    downloadJson("roster.json", {
-      season: rosterMeta.season,
-      ageGroups: rosterMeta.ageGroups,
-      players: exportPlayers,
-    });
-  }
 
   /* ============================================================
      Print / PDF
@@ -3471,3 +3368,4 @@ export default function App() {
     </>
   );
 }
+
