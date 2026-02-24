@@ -38,6 +38,21 @@ function isGameSession(s: Session): boolean {
   return info.includes("vs") || info.includes("@");
 }
 
+function requiredTaTypeForTeams(teams: string[]): "NBBL" | "JBBL" | "DBB" | null {
+  const normalized = (teams ?? []).map((t) => String(t ?? "").trim().toUpperCase());
+  if (normalized.includes("NBBL")) return "NBBL";
+  if (normalized.includes("JBBL")) return "JBBL";
+  if (normalized.some((t) => t === "U18" || t === "HOL" || t === "1RLH")) return "DBB";
+  return null;
+}
+
+function tnaByType(player: Player, typ: string): string {
+  const wanted = String(typ ?? "").trim().toUpperCase();
+  return (
+    (player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
+  ).trim();
+}
+
 function resolveLegendAddress(name: string, locations: ThemeLocations): string {
   const newLocs = locations?.locations || {};
   const customLocs = locations?.custom || {};
@@ -70,15 +85,25 @@ function buildLocationsLegendHtml(sessions: Session[], locations: ThemeLocations
         ? address.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ")
         : "";
       return `
-        <div style="display:grid; grid-template-columns:48px 1fr; column-gap:6px; align-items:start; font-size:9px; line-height:1.35; color:#374151;">
-          <div style="font-weight:900; text-align:right; white-space:nowrap;">${escapeHtml(abbr)}</div>
-          <div style="text-align:left;">${escapeHtml(fullName)}${addrShort ? ` | ${escapeHtml(addrShort)}` : ""}</div>
-        </div>
+        <tr>
+          <td style="width:56px; padding:1px 6px 2px 0; text-align:right; vertical-align:top; white-space:nowrap; font-weight:900;">
+            ${escapeHtml(abbr)}
+          </td>
+          <td style="padding:1px 0 2px 0; text-align:left; vertical-align:top; word-break:break-word;">
+            ${escapeHtml(fullName)}${addrShort ? ` | ${escapeHtml(addrShort)}` : ""}
+          </td>
+        </tr>
       `;
     })
     .join("");
 
-  return `<div style="display:grid; gap:2px; width:100%; max-width:340px;">${rows}</div>`;
+  return `
+    <table style="border-collapse:collapse; width:100%; max-width:360px; font-size:9px; line-height:1.45; color:#374151; table-layout:fixed;">
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
 }
 
 function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: string; locationsLegendHtml?: string; kwText?: string }): string {
@@ -172,10 +197,19 @@ function renderKaderColumnLayoutHtml(opts: {
   sessions: Session[];
   players: Player[];
   groupColors: Record<string, string>;
+  compactLevel?: 0 | 1 | 2;
 }): string {
-  const { sessions, players, groupColors } = opts;
+  const { sessions, players, groupColors, compactLevel = 0 } = opts;
 
   if (sessions.length === 0) return "";
+  const headerFont = compactLevel >= 2 ? 9 : compactLevel === 1 ? 10 : 11;
+  const cellFont = compactLevel >= 2 ? 9 : compactLevel === 1 ? 10 : 11;
+  const idxFont = compactLevel >= 2 ? 7 : compactLevel === 1 ? 8 : 9;
+  const padY = compactLevel >= 2 ? 1 : compactLevel === 1 ? 2 : 3;
+  const padX = compactLevel >= 2 ? 4 : compactLevel === 1 ? 5 : 7;
+  const rowGap = compactLevel >= 2 ? 10 : compactLevel === 1 ? 11 : 12;
+  const idxMinWidth = compactLevel >= 2 ? 10 : compactLevel === 1 ? 11 : 12;
+  const idxMargin = compactLevel >= 2 ? 3 : 4;
 
   const playerById = new Map(players.map((p) => [p.id, p] as const));
 
@@ -196,7 +230,7 @@ function renderKaderColumnLayoutHtml(opts: {
   const headerCells = columns
     .map((c) => {
       const label = abbrevEventHeader(c.session);
-      return `<th style="border:1px solid #bbb; padding:5px 7px; background:#f0f0f0; font-size:11px; font-weight:900; white-space:nowrap; text-align:left;">${escapeHtml(label)}</th>`;
+      return `<th style="border:1px solid #bbb; padding:${padY + 2}px ${padX}px; background:#f0f0f0; font-size:${headerFont}px; font-weight:900; white-space:nowrap; text-align:left;">${escapeHtml(label)}</th>`;
     })
     .join("");
 
@@ -206,12 +240,13 @@ function renderKaderColumnLayoutHtml(opts: {
     const cells = columns
       .map((c) => {
         const p = c.players[i];
-        if (!p) return `<td style="border:1px solid #ddd; padding:3px 7px;"></td>`;
+        if (!p) return `<td style="border:1px solid #ddd; padding:${padY}px ${padX}px; height:${rowGap}px;"></td>`;
         const group = getPlayerGroup(p);
         const bg = normalizeYearColor(p.yearColor) ?? groupColors[group] ?? "#eee";
         const fg = pickTextColor(bg);
         const name = formatPlayerShortName(p);
-        return `<td style="border:1px solid #ddd; padding:3px 7px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:11px; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact; forced-color-adjust:none;">${escapeHtml(name)}</td>`;
+        const nrColor = fg === "#fff" ? "rgba(255,255,255,0.82)" : "rgba(0,0,0,0.62)";
+        return `<td style="border:1px solid #ddd; padding:${padY}px ${padX}px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:${cellFont}px; white-space:nowrap; line-height:1.1; height:${rowGap}px; -webkit-print-color-adjust:exact; print-color-adjust:exact; forced-color-adjust:none;"><span style="display:inline-block; min-width:${idxMinWidth}px; margin-right:${idxMargin}px; font-size:${idxFont}px; font-weight:800; color:${nrColor}; text-align:right;">${i + 1}</span>${escapeHtml(name)}</td>`;
       })
       .join("");
     rows.push(`<tr>${cells}</tr>`);
@@ -352,8 +387,9 @@ function renderWeekScheduleOnlyHtml(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   kwText?: string;
+  compactLevel?: 0 | 1 | 2;
 }): string {
-  const { sessions, clubName, locale, locations, logoUrl, kwText } = opts;
+  const { sessions, clubName, locale, locations, logoUrl, kwText, compactLevel = 0 } = opts;
 
   const t = locale === "de"
     ? {
@@ -365,13 +401,16 @@ function renderWeekScheduleOnlyHtml(opts: {
 
   const locationsLegendHtml = buildLocationsLegendHtml(sessions, locations);
 
+  const scheduleFont = compactLevel >= 2 ? 8 : compactLevel === 1 ? 8.5 : 9;
+  const schedulePadY = compactLevel >= 2 ? 2 : 3;
+  const schedulePadX = compactLevel >= 2 ? 4 : 5;
   const rows = sessions
     .map((s, i, arr) => {
       const isGame = isGameSession(s);
       const prev = arr[i - 1];
       const sameDayAsPrev = prev ? prev.date === s.date : false;
       const topBorder = !sameDayAsPrev ? "border-top: 2px solid #aaa;" : "border-top: 1px solid #ddd;";
-      const baseCell = "border: 1px solid #ccc; padding: 3px 5px; font-size: 9px; overflow: hidden; text-overflow: ellipsis;";
+      const baseCell = `border: 1px solid #ccc; padding: ${schedulePadY}px ${schedulePadX}px; font-size: ${scheduleFont}px; overflow: hidden; text-overflow: ellipsis; line-height:1.15;`;
       const cellBg = s.rowColor ? `background: ${escapeHtml(s.rowColor)};` : (isGame ? "background: #F59E0B;" : "");
       const dateTdCss = `${baseCell} white-space: nowrap; ${topBorder}`;
       const dataCellCss = `${baseCell} white-space: nowrap; ${cellBg} color: #111; ${topBorder}`;
@@ -390,7 +429,7 @@ function renderWeekScheduleOnlyHtml(opts: {
     })
     .join("");
 
-  const thBase = "border: 1px solid #ccc; padding: 4px 5px; background: #f5f5f5; font-size: 9px; font-weight: bold; white-space: nowrap; overflow: hidden;";
+  const thBase = `border: 1px solid #ccc; padding: ${schedulePadY + 1}px ${schedulePadX}px; background: #f5f5f5; font-size: ${scheduleFont}px; font-weight: bold; white-space: nowrap; overflow: hidden;`;
 
   return `
     <div class="page">
@@ -497,7 +536,26 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
   const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {}, kwText } = opts;
   const scheduleSessions = sessions;
 
-  const scheduleHtml = renderWeekScheduleOnlyHtml({ sessions: scheduleSessions, clubName, locale, locations, logoUrl, kwText });
+  const rosterSessions = scheduleSessions.filter((s) => !s.excludeFromRoster);
+  const isGameOrWeekend = (s: Session) => isGameSession(s) || /^(sa|so)/i.test(s.day || "");
+  const trainingRoster = rosterSessions.filter(s => !isGameOrWeekend(s));
+  const gameRoster = rosterSessions.filter(s => isGameOrWeekend(s));
+
+  const trainingMaxRows = Math.max(0, ...trainingRoster.map((s) => (s.participants ?? []).length));
+  const gameMaxRows = Math.max(0, ...gameRoster.map((s) => (s.participants ?? []).length));
+  const totalCols = trainingRoster.length + gameRoster.length;
+  const pressure = Math.max(trainingMaxRows, gameMaxRows) + Math.ceil(totalCols / 2);
+  const compactLevel: 0 | 1 | 2 = pressure > 24 ? 2 : pressure > 17 ? 1 : 0;
+
+  const scheduleHtml = renderWeekScheduleOnlyHtml({
+    sessions: scheduleSessions,
+    clubName,
+    locale,
+    locations,
+    logoUrl,
+    kwText,
+    compactLevel,
+  });
   const scheduleInner = scheduleHtml
     .replace(/^\s*<div class="page">/, "")
     .replace(/<\/div>\s*$/, "")
@@ -507,23 +565,20 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
     ? { rosterTitle: "Kader-Listen", trainingMoFr: "Training (Mo-Fr)", gamesWeekends: "Spiele / Weekend" }
     : { rosterTitle: "Roster lists", trainingMoFr: "Practice (Mon-Fri)", gamesWeekends: "Games / Weekend" };
 
-  const rosterSessions = scheduleSessions.filter((s) => !s.excludeFromRoster);
-  const isGameOrWeekend = (s: Session) => isGameSession(s) || /^(sa|so)/i.test(s.day || "");
-
-  const trainingRoster = rosterSessions.filter(s => !isGameOrWeekend(s));
-  const gameRoster = rosterSessions.filter(s => isGameOrWeekend(s));
-
-  const kaderColumnsTraining = renderKaderColumnLayoutHtml({ sessions: trainingRoster, players, groupColors });
-  const kaderColumnsGames = renderKaderColumnLayoutHtml({ sessions: gameRoster, players, groupColors });
+  const kaderColumnsTraining = renderKaderColumnLayoutHtml({ sessions: trainingRoster, players, groupColors, compactLevel });
+  const kaderColumnsGames = renderKaderColumnLayoutHtml({ sessions: gameRoster, players, groupColors, compactLevel });
+  const titleSize = compactLevel >= 2 ? 11 : compactLevel === 1 ? 12 : 13;
+  const blockGap = compactLevel >= 2 ? 8 : 14;
+  const splitGap = compactLevel >= 2 ? 8 : 14;
 
   const rosterSection = `
-    <div style="margin-top: 14px;">
-      <div style="font-weight:900; font-size:13px; margin-bottom:8px;">${escapeHtml(t.rosterTitle)} &middot; ${escapeHtml(t.trainingMoFr)}:</div>
+    <div style="margin-top:${blockGap}px; break-inside:avoid; page-break-inside:avoid;">
+      <div style="font-weight:900; font-size:${titleSize}px; margin-bottom:${compactLevel >= 2 ? 4 : 8}px;">${escapeHtml(t.rosterTitle)} &middot; ${escapeHtml(t.trainingMoFr)}:</div>
       ${kaderColumnsTraining || '<div style="font-size:11px; color:#666;">Keine Termine</div>'}
     </div>
     ${gameRoster.length > 0 ? `
-    <div style="margin-top: 14px; padding-top: 14px; border-top: 2px dashed #eee;">
-      <div style="font-weight:900; font-size:13px; margin-bottom:8px;">${escapeHtml(t.rosterTitle)} &middot; ${escapeHtml(t.gamesWeekends)}:</div>
+    <div style="margin-top:${splitGap}px; padding-top:${splitGap}px; border-top: 2px dashed #eee; break-inside:avoid; page-break-inside:avoid;">
+      <div style="font-weight:900; font-size:${titleSize}px; margin-bottom:${compactLevel >= 2 ? 4 : 8}px;">${escapeHtml(t.rosterTitle)} &middot; ${escapeHtml(t.gamesWeekends)}:</div>
       ${kaderColumnsGames}
     </div>
     ` : ""}
@@ -573,7 +628,8 @@ function renderGameSheetHtml(opts: {
       const vorname = parts.length > 1 ? parts[0] : "";
       const nachname = parts.length > 1 ? parts.slice(1).join(" ") : full;
 
-      const ta = p?.taNumber ?? "";
+      const requiredTa = requiredTaTypeForTeams(game.teams ?? []);
+      const ta = p ? (requiredTa ? tnaByType(p, requiredTa) : (tnaByType(p, "DBB") || tnaByType(p, "NBBL") || tnaByType(p, "JBBL"))) : "";
       const jerseyVal = p?.jerseyByTeam?.[firstTeam] ?? "";
 
       return `
