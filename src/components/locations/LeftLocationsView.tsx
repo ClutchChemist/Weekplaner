@@ -441,6 +441,9 @@ function LocationsPanel({
     <div style={{ padding: 12, display: "grid", gap: 14 }}>
       <div>
         <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("home")}</div>
+        <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+          {t("homeTravelHint")}
+        </div>
         <div style={{ display: "grid", gap: 8, marginBottom: 8 }}>
           <Select
             value=""
@@ -464,6 +467,12 @@ function LocationsPanel({
           placeholder={t("startPointOptional")}
           openMapsLabel={t("openInGoogleMaps")}
         />
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--ui-border)" }}>
+          <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("homeSaveAsLocationTitle")}</div>
+          <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+            {t("homeSaveAsLocationHint")}
+          </div>
+        </div>
         <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
           <Input
             value={homeLocationName}
