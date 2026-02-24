@@ -6,7 +6,8 @@ import type {
   Player,
   ThemeLocations,
 } from "../state/types";
-import { pickTextColor } from "./color";
+import { getPlayerGroup } from "../state/playerGrouping";
+import { normalizeYearColor, pickTextColor } from "./color";
 
 export interface PrintPage {
   type: "overview" | "rosters" | "game";
@@ -116,8 +117,8 @@ function groupSortKey(group: GroupId | undefined): number {
 
 function sortPlayersByGroup(players: Player[]): Player[] {
   return [...players].sort((a, b) => {
-    const ka = groupSortKey(a.group);
-    const kb = groupSortKey(b.group);
+    const ka = groupSortKey(getPlayerGroup(a));
+    const kb = groupSortKey(getPlayerGroup(b));
     if (ka !== kb) return ka - kb;
     return (a.name ?? "").localeCompare(b.name ?? "", "de");
   });
@@ -163,7 +164,8 @@ function renderKaderColumnLayoutHtml(opts: {
       .map((c) => {
         const p = c.players[i];
         if (!p) return `<td style="border:1px solid #ddd; padding:3px 7px;"></td>`;
-        const bg = groupColors[p.group ?? "TBD"] ?? "#eee";
+        const group = getPlayerGroup(p);
+        const bg = normalizeYearColor(p.yearColor) ?? groupColors[group] ?? "#eee";
         const fg = pickTextColor(bg);
         const name = formatPlayerShortName(p);
         return `<td style="border:1px solid #ddd; padding:3px 7px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:11px; white-space:nowrap;">${escapeHtml(name)}</td>`;

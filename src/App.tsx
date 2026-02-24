@@ -108,6 +108,7 @@ import {
 } from "./utils/locations";
 import { fetchTravelMinutes } from "./utils/mapsApi";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
+import { normalizeYearColor, pickTextColor } from "./utils/color";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
@@ -2123,6 +2124,9 @@ export default function App() {
                     return list.map((p) => {
                       const active = p.id === selectedPlayerId;
                       const gid = getPlayerGroup(p);
+                      const bg = normalizeYearColor(p.yearColor) ?? groupBg[gid] ?? groupBg.TBD;
+                      const text = pickTextColor(bg);
+                      const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.72)";
                       const tna = primaryTna(p);
                       return (
                         <button
@@ -2130,9 +2134,9 @@ export default function App() {
                           onClick={() => setSelectedPlayerId(p.id)}
                           style={{
                             textAlign: "left",
-                            border: `1px solid ${active ? "var(--ui-soft)" : "var(--ui-border)"}`,
-                            background: active ? "var(--ui-panel)" : "var(--ui-card)",
-                            color: "var(--ui-text)",
+                            border: `1px solid ${active ? "var(--ui-soft)" : "rgba(0,0,0,0.18)"}`,
+                            background: bg,
+                            color: text,
                             borderRadius: 12,
                             padding: "10px 10px",
                             cursor: "pointer",
@@ -2145,7 +2149,7 @@ export default function App() {
                           <span style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {p.name}
                           </span>
-                          <span style={{ fontWeight: 900, color: "var(--ui-muted)" }}>{gid}</span>
+                          <span style={{ fontWeight: 900, color: subText }}>{gid}</span>
                         </button>
                       );
                     });

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { Lang } from "@/i18n/types";
 import type { CalendarEvent as Session, GroupId, Player } from "@/types";
+import { getPlayerGroup } from "@/state/playerGrouping";
 import { weekdayShortLocalized } from "@/utils/date";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
 import { Button } from "@/components/ui";
@@ -63,7 +64,7 @@ function ParticipantCard({
   isBirthday: boolean;
   t: (k: string) => string;
 }) {
-  const group = (player.group ?? "TBD") as GroupId;
+  const group = getPlayerGroup(player);
   const bg = normalizeYearColor(player.yearColor) ?? groupBg[group] ?? groupBg.TBD;
   const text = pickTextColor(bg);
 
