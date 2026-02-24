@@ -42,7 +42,37 @@ export function useDndPlan(params: {
 	} = params;
 
 	function requiresTaForTeams(teams: string[]): boolean {
-		return teams.some((team) => team === "U18" || team === "HOL" || team === "1RLH");
+		return getRequiredTaTypeForTeams(teams) !== null;
+	}
+
+	function getRequiredTaTypeForTeams(teams: string[]): string | null {
+		const normalized = teams.map((team) => String(team ?? "").trim().toUpperCase());
+		if (normalized.includes("NBBL")) return "NBBL";
+		if (normalized.includes("JBBL")) return "JBBL";
+		if (normalized.some((team) => team === "U18" || team === "HOL" || team === "1RLH")) return "DBB";
+		return null;
+	}
+
+	function getLicenseTnaByType(player: Player, typ: string): string {
+		const wanted = String(typ ?? "").trim().toUpperCase();
+		if (!wanted) return "";
+		return (
+			(player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
+		).trim();
+	}
+
+	function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {
+		const wanted = String(typ ?? "").trim().toUpperCase();
+		const nextTna = String(tna ?? "").trim();
+		const list = [...(player.lizenzen ?? [])];
+		const idx = list.findIndex((x) => String(x.typ ?? "").trim().toUpperCase() === wanted);
+		const entry = { typ: wanted, tna: nextTna, verein: list[idx]?.verein ?? "" };
+		if (idx >= 0) {
+			list[idx] = { ...list[idx], ...entry };
+		} else {
+			list.push(entry);
+		}
+		return { ...player, lizenzen: list };
 	}
 
 	function addPlayerToSession(sessionId: string, playerId: string) {
@@ -99,10 +129,11 @@ export function useDndPlan(params: {
 			const targetIsGame = isGameSession(target);
 			if (targetIsGame && requiresTaForTeams(target.teams)) {
 				const player = players.find((p) => p.id === playerId);
-				if (player && !player.taNumber) {
+				const requiredTaType = getRequiredTaTypeForTeams(target.teams);
+				if (player && requiredTaType && !getLicenseTnaByType(player, requiredTaType)) {
 					const input = await prompt(
 						t("confirm"),
-						tf("promptTaNumber", { playerName: player.name, teams: target.teams.join("·") }),
+						tf("promptTaNumber", { playerName: player.name, teams: target.teams.join("·"), type: requiredTaType }),
 						"",
 						t("taNumber")
 					);
@@ -115,7 +146,7 @@ export function useDndPlan(params: {
 					}
 
 					setPlayers((prev) =>
-						prev.map((p) => (p.id === playerId ? { ...p, taNumber: input.trim() } : p))
+						prev.map((p) => (p.id === playerId ? upsertPlayerLicenseTna(p, requiredTaType, input.trim()) : p))
 					);
 				}
 			}

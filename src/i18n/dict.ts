@@ -57,7 +57,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
 
     confirmDeleteEvent: "Event wirklich löschen?\n{label}",
     confirmPresetOverwrite: "Du hast ein User-Preset ausgewählt.\n\nOK = Preset überschreiben\nAbbrechen = als neues Preset speichern",
-    promptTaNumber: 'TA-Nummer erforderlich für {playerName} in {teams}-Spiel.\n\nBitte TA-Nummer eingeben (oder leer lassen um abzubrechen):',
+    promptTaNumber: '{type}-TA erforderlich für {playerName} in {teams}-Spiel.\n\nBitte {type}-TA eingeben (oder leer lassen um abzubrechen):',
     confirmRemovePlayerFromGame: "Keine TA-Nummer eingegeben. Möchten Sie den Spieler aus dem Spiel entfernen?",
 
     preview: "Preview",
@@ -366,7 +366,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
 
     confirmDeleteEvent: "Delete event?\n{label}",
     confirmPresetOverwrite: "You selected a user preset.\n\nOK = Overwrite preset\nCancel = Save as new preset",
-    promptTaNumber: 'TA number required for {playerName} in {teams} game.\n\nPlease enter TA number (or leave empty to cancel):',
+    promptTaNumber: '{type} TA required for {playerName} in {teams} game.\n\nPlease enter {type} TA (or leave empty to cancel):',
     confirmRemovePlayerFromGame: "No TA number entered. Do you want to remove the player from the game?",
 
     preview: "Preview",
