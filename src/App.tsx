@@ -35,9 +35,6 @@ import { DraggablePlayerRow } from "@/components/roster";
 
 import { ConfirmModal, EventEditorModal, NewWeekModal, ProfilesModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import {
-  composeOpponentInfo,
-  getOpponentMode,
-  getOpponentName,
   useConfirmDialog,
   useDndPlan,
   useCloudSync,
@@ -99,7 +96,6 @@ import {
   sessionsOverlap,
 } from "./utils/session";
 import {
-  ensureLocationSaved,
   getCachedTravelMinutes,
   getLocationOptions,
   resolveLocationAddress,
@@ -619,7 +615,6 @@ export default function App() {
     formDate,
     formTeams,
     locationMode,
-    customLocation,
     formStart,
     formDuration,
     formOpponent,
@@ -641,13 +636,6 @@ export default function App() {
     if (!current || current === "-") {
       setOpenLocationName(null);
       return;
-    }
-
-    const known = Object.prototype.hasOwnProperty.call(theme.locations?.locations ?? {}, current);
-    const isPreset = LOCATION_PRESETS.includes(current as (typeof LOCATION_PRESETS)[number]);
-
-    if (!known && !isPreset) {
-      ensureLocationSaved(theme, setTheme, current);
     }
 
     setOpenLocationName(current);
@@ -684,17 +672,10 @@ export default function App() {
     });
 
     const loc = (s.location ?? "").trim();
-    // Check if location is a preset or saved location
     const savedLocations = Object.keys(theme.locations?.locations ?? {});
     const isKnownLocation = LOCATION_PRESETS.includes(loc as (typeof LOCATION_PRESETS)[number]) || savedLocations.includes(loc);
-
-    if (isKnownLocation) {
-      setLocationMode(loc);
-      setCustomLocation("");
-    } else {
-      setLocationMode("__CUSTOM__");
-      setCustomLocation(loc);
-    }
+    setLocationMode(isKnownLocation ? loc : "");
+    setCustomLocation("");
 
     const tr = splitTimeRange(s.time ?? "");
     const start = tr ? tr[0] : "18:00";
@@ -1486,99 +1467,50 @@ export default function App() {
                       <div style={{ fontWeight: 900 }}>{t("location")}</div>
                       <div style={{ display: "grid", gap: 8 }}>
                         {(() => {
-                          const locationOptions = getLocationOptions(theme, t, locationUsageMap);
+                          const locationOptions = getLocationOptions(theme, t, locationUsageMap).filter((o) => o.kind !== "custom");
                           return (
-                            <select
-                              value={locationMode === "__CUSTOM__" ? "__CUSTOM__" : locationMode}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                if (v === "__CUSTOM__") {
-                                  setLocationMode("__CUSTOM__");
-                                  setCustomLocation("");
-                                } else {
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <select
+                                value={locationMode}
+                                onChange={(e) => {
+                                  const v = e.target.value;
                                   setLocationMode(v);
                                   setCustomLocation("");
-                                }
-                              }}
-                              style={{
-                                padding: "10px 12px",
-                                borderRadius: 12,
-                                border: "1px solid var(--ui-border)",
-                                background: "var(--ui-card)",
-                                color: "var(--ui-text)",
-                                fontWeight: 900,
-                                width: "100%",
-                              }}
-                            >
-                              <option value="">{t("selectPlaceholder")}</option>
-                              {locationOptions.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
+                                }}
+                                style={{
+                                  padding: "10px 12px",
+                                  borderRadius: 12,
+                                  border: "1px solid var(--ui-border)",
+                                  background: "var(--ui-card)",
+                                  color: "var(--ui-text)",
+                                  fontWeight: 900,
+                                  width: "100%",
+                                }}
+                              >
+                                <option value="">{t("selectPlaceholder")}</option>
+                                {locationOptions.map((o) => (
+                                  <option key={o.value} value={o.value}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setLeftTab("locations");
+                                  setLeftEditMode(true);
+                                  setOpenLocationName(locationMode || null);
+                                }}
+                                style={{ padding: "8px 10px", whiteSpace: "nowrap" }}
+                              >
+                                {lang === "de" ? "Orte bearbeiten" : "Edit locations"}
+                              </Button>
+                            </div>
                           );
                         })()}
-                        {locationMode === "__CUSTOM__" && (
-                          <div style={{ display: "grid", gap: 6 }}>
-                            <Input
-                              value={customLocation}
-                              onChange={(v) => setCustomLocation(v)}
-                              placeholder={t("customLocationPlaceholder")}
-                            />
-
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-                              <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
-                                {t("customLocationHint")}
-                              </div>
-
-                              {(() => {
-                                const name = customLocation.trim().replace(/\s+/g, " ");
-                                const locationOptions = getLocationOptions(theme, t, locationUsageMap);
-                                const alreadyExists = locationOptions.some(
-                                  (o) => o.value.toLowerCase() === name.toLowerCase() && o.kind !== "custom"
-                                );
-
-                                if (alreadyExists && name) {
-                                  return (
-                                    <div style={{ fontSize: 11, color: "var(--ui-accent)", fontWeight: 900, whiteSpace: "nowrap" }}>
-                                      ✓ {t("locationAlreadyExists")}
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (!name) return;
-
-                                      ensureLocationSaved(theme, setTheme, name);
-
-                                      // Optional: direkt auf Orte springen und aufklappen
-                                      setLeftTab("locations");
-                                      setLeftEditMode(true);
-                                      setOpenLocationName(name);
-                                    }}
-                                    disabled={!name}
-                                    style={{
-                                      padding: "8px 10px",
-                                      borderRadius: 10,
-                                      border: "1px solid var(--ui-border)",
-                                      background: "transparent",
-                                      color: "var(--ui-text)",
-                                      fontWeight: 900,
-                                      cursor: name ? "pointer" : "not-allowed",
-                                      opacity: name ? 1 : 0.5,
-                                      whiteSpace: "nowrap",
-                                    }}
-                                    title={t("saveCustomLocationTitle")}
-                                  >
-                                    {t("saveAsLocation")}
-                                  </button>
-                                );
-                              })()}
-                            </div>
+                        {!locationMode && (
+                          <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
+                            {lang === "de" ? "Ort zuerst links unter Orte anlegen, dann hier auswahlen." : "Create a location in the left Locations panel first, then select it here."}
                           </div>
                         )}
                       </div>
@@ -1597,70 +1529,30 @@ export default function App() {
 
                       <div style={{ fontWeight: 900 }}>{t("eventOpponent")}</div>
                       <div style={{ display: "grid", gap: 8 }}>
-                        {(() => {
-                          const opponentMode = getOpponentMode(formOpponent);
-                          const opponentName = getOpponentName(formOpponent);
-
-                          return (
-                            <>
-                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextMode = opponentMode === "home" ? null : "home";
-                                    setFormOpponent(composeOpponentInfo(nextMode, opponentName));
-                                  }}
-                                  style={{
-                                    ...segBtn(opponentMode === "home"),
-                                    padding: "8px 10px",
-                                    fontSize: 12,
-                                  }}
-                                  title={t("eventModeHomeTitle")}
-                                >
-                                  vs {t("eventModeHome")}
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextMode = opponentMode === "away" ? null : "away";
-                                    setFormOpponent(composeOpponentInfo(nextMode, opponentName));
-                                  }}
-                                  style={{
-                                    ...segBtn(opponentMode === "away"),
-                                    padding: "8px 10px",
-                                    fontSize: 12,
-                                  }}
-                                  title={t("eventModeAwayTitle")}
-                                >
-                                  @ {t("eventModeAway")}
-                                </button>
-
-                                {opponentMode === "away" && (
-                                  <button
-                                    type="button"
-                                    onClick={handleRecallLocationEdit}
-                                    style={{
-                                      ...segBtn(false),
-                                      padding: "8px 10px",
-                                      fontSize: 12,
-                                    }}
-                                    title={t("eventRecallLocationTitle")}
-                                  >
-                                    📍 {t("eventRecallLocation")}
-                                  </button>
-                                )}
-                              </div>
-
-                              <Input
-                                ref={opponentInputRef}
-                                value={opponentName}
-                                onChange={(v) => setFormOpponent(composeOpponentInfo(opponentMode, v))}
-                                placeholder={t("eventOpponentExample")}
-                              />
-                            </>
-                          );
-                        })()}
+                        <Input
+                          ref={opponentInputRef}
+                          value={formOpponent}
+                          onChange={setFormOpponent}
+                          placeholder={t("eventOpponentExample")}
+                        />
+                        <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
+                          {lang === "de" ? "Freitext. Fuer Spiel-Logik 'vs ...' (Heim) oder '@ ...' (Auswaerts) verwenden." : "Free text. For game logic use 'vs ...' (home) or '@ ...' (away)."}
+                        </div>
+                        {normalizeOpponentInfo(formOpponent).startsWith("@") && (
+                          <button
+                            type="button"
+                            onClick={handleRecallLocationEdit}
+                            style={{
+                              ...segBtn(false),
+                              padding: "8px 10px",
+                              fontSize: 12,
+                              width: "fit-content",
+                            }}
+                            title={t("eventRecallLocationTitle")}
+                          >
+                            📍 {t("eventRecallLocation")}
+                          </button>
+                        )}
                       </div>
 
                       {(() => {

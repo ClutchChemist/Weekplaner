@@ -74,10 +74,7 @@ export function getLocationOptions(
     return { value: name, label: `${d.name || name}${abbr}${hall}`, kind: isPreset ? "preset" : "saved" };
   });
 
-  return [
-    ...items,
-    { value: "__CUSTOM__", label: `— ${t("custom")} / ${t("freeText")} —`, kind: "custom" },
-  ];
+  return items;
 }
 
 export function ensureLocationSaved(

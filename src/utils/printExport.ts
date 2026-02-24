@@ -38,6 +38,49 @@ function isGameSession(s: Session): boolean {
   return info.includes("vs") || info.includes("@");
 }
 
+function resolveLegendAddress(name: string, locations: ThemeLocations): string {
+  const newLocs = locations?.locations || {};
+  const customLocs = locations?.custom || {};
+  if (newLocs?.[name]?.address) return newLocs[name].address;
+  if (name === "BSH") return locations?.bsh || "";
+  if (name === "SHP") return locations?.shp || "";
+  if (name === "Seminarraum") return locations?.seminarraum || "";
+  return customLocs?.[name] || "";
+}
+
+function buildLocationsLegendHtml(sessions: Session[], locations: ThemeLocations): string {
+  const defs = locations?.definitions || {};
+  const usedNames = Array.from(
+    new Set(
+      sessions
+        .map((s) => (s.location || "").trim())
+        .filter((loc) => Boolean(loc && loc !== "TBD"))
+    )
+  ).sort((a, b) => a.localeCompare(b, "de"));
+
+  if (usedNames.length === 0) return "";
+
+  const rows = usedNames
+    .map((name) => {
+      const def = defs[name] ?? { abbr: name, name, hallNo: "" };
+      const abbr = (def.abbr || name).trim();
+      const fullName = (def.name || name).trim();
+      const address = resolveLegendAddress(name, locations).trim();
+      const addrShort = address
+        ? address.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ")
+        : "";
+      return `
+        <div style="display:grid; grid-template-columns:48px 1fr; column-gap:6px; align-items:start; font-size:9px; line-height:1.35; color:#374151;">
+          <div style="font-weight:900; text-align:right; white-space:nowrap;">${escapeHtml(abbr)}</div>
+          <div style="text-align:left;">${escapeHtml(fullName)}${addrShort ? ` | ${escapeHtml(addrShort)}` : ""}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `<div style="display:grid; gap:2px; width:100%; max-width:340px;">${rows}</div>`;
+}
+
 function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: string; locationsLegendHtml?: string; kwText?: string }): string {
   const { title, clubName, logoUrl, locationsLegendHtml, kwText } = opts;
   const logoHtml = logoUrl
@@ -60,7 +103,7 @@ function pageHeaderHtml(opts: { title: string; clubName: string; logoUrl?: strin
       <!-- RECHTS: VEREIN & ORTE -->
       <div style="flex: 1; text-align: right; display: flex; flex-direction: column; align-items: flex-end;">
         <div style="font-size: 14px; font-weight: 900; margin-bottom: 2px;">${escapeHtml(clubName)}</div>
-        ${locationsLegendHtml ? `<div style="font-size: 10px; color: #374151; font-weight: 700;">${locationsLegendHtml}</div>` : ""}
+        ${locationsLegendHtml ? `<div style="margin-top:2px;">${locationsLegendHtml}</div>` : ""}
       </div>
     </div>
   `;
@@ -201,34 +244,7 @@ export function renderWeekOverviewHtml(opts: {
     ? { training: "Training", trainingShort: "Tr", game: "Spiel", gameShort: "Sp", roster: "Kader", legend: "Legende", date: "Datum", day: "Tag", teams: "Teams", time: "Zeit" }
     : { training: "Training", trainingShort: "Tr", game: "Game", gameShort: "Gm", roster: "Roster", legend: "Legend", date: "Date", day: "Day", teams: "Teams", time: "Time" };
 
-  const locationsLegendHtml = (() => {
-    const defs = locations?.definitions || {};
-    const newLocs = locations?.locations || {};
-    const customLocs = locations?.custom || {};
-    const allLocNames = new Set<string>();
-
-    sessions.forEach((s) => {
-      const loc = s.location || "";
-      if (loc && loc !== "TBD") allLocNames.add(loc);
-    });
-
-    if (allLocNames.size === 0) return "";
-
-    const legendItems: string[] = [];
-    for (const name of Array.from(allLocNames).sort()) {
-      const def = defs[name];
-      const abbr = (def?.abbr ?? "").trim() || name.substring(0, 3).toUpperCase();
-      const fullName = (def?.name ?? name).trim();
-      const resolvedAddr = (newLocs[name]?.address) || customLocs[name] || "";
-      const addrShort = resolvedAddr ? resolvedAddr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ") : "";
-      let text = `<strong>${escapeHtml(abbr)}</strong> = ${escapeHtml(fullName)}`;
-      if (addrShort) text += ` | ${escapeHtml(addrShort)}`;
-      legendItems.push(text);
-    }
-
-    if (legendItems.length === 0) return "";
-    return legendItems.map((line) => `<div style="font-size:9px; line-height:1.5; color:#444;">${line}</div>`).join("");
-  })();
+  const locationsLegendHtml = buildLocationsLegendHtml(sessions, locations);
 
   const buildRosterTable = (session: Session): string => {
     const sessionPlayers = players.filter((p) =>
@@ -347,44 +363,7 @@ function renderWeekScheduleOnlyHtml(opts: {
       title: "Training week", date: "Date", day: "Day", teams: "Teams", time: "Time", loc: "Location", info: "Info"
     };
 
-  const locationsLegendHtml = (() => {
-    const defs = locations?.definitions || {};
-    const customLocs = locations?.custom || {};
-    const newLocs = locations?.locations || {};
-    const allLocNames = new Set<string>();
-
-    sessions.forEach((s) => {
-      const loc = s.location || "";
-      if (loc && loc !== "TBD") allLocNames.add(loc);
-    });
-    if (allLocNames.size === 0) return "";
-
-    const resolveAddr = (name: string) => {
-      if (newLocs?.[name]?.address) return newLocs[name].address;
-      if (name === "BSH") return locations?.bsh || "";
-      if (name === "SHP") return locations?.shp || "";
-      if (name === "Seminarraum") return locations?.seminarraum || "";
-      return customLocs?.[name] || "";
-    };
-
-    const lines = Array.from(allLocNames)
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => {
-        const d = defs[name] ?? { abbr: name, name, hallNo: "" };
-        const abbr = d.abbr || name;
-        const fullName = d.name || name;
-        const addr = resolveAddr(name);
-        const addrShort = addr
-          ? addr.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ")
-          : "";
-        let text = `<strong>${escapeHtml(abbr)}</strong> = ${escapeHtml(fullName)}`;
-        if (addrShort) text += ` | ${escapeHtml(addrShort)}`;
-        return `<div style="font-size:9px; line-height:1.5; color:#444;">${text}</div>`;
-      })
-      .join("");
-
-    return lines;
-  })();
+  const locationsLegendHtml = buildLocationsLegendHtml(sessions, locations);
 
   const rows = sessions
     .map((s, i, arr) => {
