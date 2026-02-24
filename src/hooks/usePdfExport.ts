@@ -37,8 +37,14 @@ export function usePdfExport({
         margin: 0; padding: 0;
         background: #fff; color: #111;
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        forced-color-adjust: none;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        forced-color-adjust: none;
       }
       .print-root { width: 100%; }
       .print-page { break-after: page; page-break-after: always; box-sizing: border-box; }

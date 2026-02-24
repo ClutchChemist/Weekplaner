@@ -168,7 +168,7 @@ function renderKaderColumnLayoutHtml(opts: {
         const bg = normalizeYearColor(p.yearColor) ?? groupColors[group] ?? "#eee";
         const fg = pickTextColor(bg);
         const name = formatPlayerShortName(p);
-        return `<td style="border:1px solid #ddd; padding:3px 7px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:11px; white-space:nowrap;">${escapeHtml(name)}</td>`;
+        return `<td style="border:1px solid #ddd; padding:3px 7px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:11px; white-space:nowrap; -webkit-print-color-adjust:exact; print-color-adjust:exact; forced-color-adjust:none;">${escapeHtml(name)}</td>`;
       })
       .join("");
     rows.push(`<tr>${cells}</tr>`);
