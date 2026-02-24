@@ -35,6 +35,9 @@ import { DraggablePlayerRow } from "@/components/roster";
 
 import { ConfirmModal, EventEditorModal, NewWeekModal, ProfilesModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
 import {
+  composeOpponentInfo,
+  getOpponentMode,
+  getOpponentName,
   useConfirmDialog,
   useDndPlan,
   useCloudSync,
@@ -239,6 +242,12 @@ function MinutePicker({
    ============================================================ */
 
 export default function App() {
+  const AUTO_MEETING_SUFFIX_RE = /\s*\|\s*(Treffpunkt|Meeting point):\s*\d{2}:\d{2}\s*$/i;
+
+  function stripAutoMeetingSuffix(info: string): string {
+    return String(info ?? "").replace(AUTO_MEETING_SUFFIX_RE, "").trim();
+  }
+
   /* ============================================================
     STATE (useState...)
     ============================================================ */
@@ -691,7 +700,7 @@ export default function App() {
       setFormDuration(90);
     }
 
-    setFormOpponent(s.info ?? "");
+    setFormOpponent(stripAutoMeetingSuffix(s.info ?? ""));
 
     const game = isGameInfo(s.info ?? "");
     setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
@@ -1529,30 +1538,70 @@ export default function App() {
 
                       <div style={{ fontWeight: 900 }}>{t("eventOpponent")}</div>
                       <div style={{ display: "grid", gap: 8 }}>
-                        <Input
-                          ref={opponentInputRef}
-                          value={formOpponent}
-                          onChange={setFormOpponent}
-                          placeholder={t("eventOpponentExample")}
-                        />
-                        <div style={{ fontSize: 11, color: "var(--ui-muted)", fontWeight: 800 }}>
-                          {lang === "de" ? "Freitext. Fuer Spiel-Logik 'vs ...' (Heim) oder '@ ...' (Auswaerts) verwenden." : "Free text. For game logic use 'vs ...' (home) or '@ ...' (away)."}
-                        </div>
-                        {normalizeOpponentInfo(formOpponent).startsWith("@") && (
-                          <button
-                            type="button"
-                            onClick={handleRecallLocationEdit}
-                            style={{
-                              ...segBtn(false),
-                              padding: "8px 10px",
-                              fontSize: 12,
-                              width: "fit-content",
-                            }}
-                            title={t("eventRecallLocationTitle")}
-                          >
-                            📍 {t("eventRecallLocation")}
-                          </button>
-                        )}
+                        {(() => {
+                          const opponentMode = getOpponentMode(formOpponent);
+                          const opponentName = getOpponentName(formOpponent);
+
+                          return (
+                            <>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextMode = opponentMode === "home" ? null : "home";
+                                    setFormOpponent(composeOpponentInfo(nextMode, opponentName));
+                                  }}
+                                  style={{
+                                    ...segBtn(opponentMode === "home"),
+                                    padding: "8px 10px",
+                                    fontSize: 12,
+                                  }}
+                                  title={t("eventModeHomeTitle")}
+                                >
+                                  vs {t("eventModeHome")}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextMode = opponentMode === "away" ? null : "away";
+                                    setFormOpponent(composeOpponentInfo(nextMode, opponentName));
+                                  }}
+                                  style={{
+                                    ...segBtn(opponentMode === "away"),
+                                    padding: "8px 10px",
+                                    fontSize: 12,
+                                  }}
+                                  title={t("eventModeAwayTitle")}
+                                >
+                                  @ {t("eventModeAway")}
+                                </button>
+
+                                {opponentMode === "away" && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRecallLocationEdit}
+                                    style={{
+                                      ...segBtn(false),
+                                      padding: "8px 10px",
+                                      fontSize: 12,
+                                    }}
+                                    title={t("eventRecallLocationTitle")}
+                                  >
+                                    📍 {t("eventRecallLocation")}
+                                  </button>
+                                )}
+                              </div>
+
+                              <Input
+                                ref={opponentInputRef}
+                                value={opponentName}
+                                onChange={(v) => setFormOpponent(composeOpponentInfo(opponentMode, v))}
+                                placeholder={t("eventOpponentExample")}
+                              />
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {(() => {
@@ -1568,7 +1617,7 @@ export default function App() {
                               value={formWarmupMin}
                               onChange={setFormWarmupMin}
                               presets={[45, 60, 75, 90, 105, 120]}
-                              allowZero={false}
+                              allowZero={true}
                               placeholder={t("minutesExample")}
                             />
 

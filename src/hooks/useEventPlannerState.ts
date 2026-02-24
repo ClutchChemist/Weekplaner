@@ -10,6 +10,12 @@ export const LOCATION_PRESETS = ["BSH", "SHP", "Seminarraum"] as const;
 
 export type LocationMode = string;
 
+const AUTO_MEETING_SUFFIX_RE = /\s*\|\s*(Treffpunkt|Meeting point):\s*\d{2}:\d{2}\s*$/i;
+
+function stripAutoMeetingSuffix(info: string): string {
+  return String(info ?? "").replace(AUTO_MEETING_SUFFIX_RE, "").trim();
+}
+
 type EditorState = {
   editingSessionId: string | null;
   formDate: string;
@@ -84,10 +90,8 @@ export function useEventPlannerState() {
       let nextTravelMin = prev.formTravelMin;
 
       if (game) {
-        if (nextWarmupMin <= 0) nextWarmupMin = 90;
-
         if (away) {
-          if (nextTravelMin <= 0) nextTravelMin = 90;
+          if (nextTravelMin < 0) nextTravelMin = 0;
         } else if (nextTravelMin !== 0) {
           nextTravelMin = 0;
         }
@@ -130,10 +134,16 @@ export function useEventPlannerState() {
   }
 
   function buildSessionFromForm(existingId?: string, keepParticipants?: string[]): Session {
-    const info = normalizeOpponentInfo(editorState.formOpponent);
-    const game = isGameInfo(info);
+    const rawInfo = normalizeOpponentInfo(stripAutoMeetingSuffix(editorState.formOpponent));
+    const game = isGameInfo(rawInfo);
     const duration = game ? 120 : editorState.formDuration;
     const end = addMinutesToHHMM(editorState.formStart, duration);
+    const away = rawInfo.startsWith("@");
+    const warmup = Math.max(0, Math.floor(editorState.formWarmupMin));
+    const travel = away ? Math.max(0, Math.floor(editorState.formTravelMin)) : 0;
+    const meetingOffset = game ? warmup + travel : 0;
+    const meetingTime = addMinutesToHHMM(editorState.formStart, -meetingOffset);
+    const info = game ? `${rawInfo} | Treffpunkt: ${meetingTime}` : rawInfo;
 
     return {
       id: existingId ?? randomId("sess_"),
