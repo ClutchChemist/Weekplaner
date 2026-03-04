@@ -74,6 +74,8 @@ export function useCloudSnapshotHandlers({
               coaches: data.coaches,
               locations: data.theme.locations ?? p.payload.locations,
               clubLogoDataUrl: data.clubLogoDataUrl,
+              theme: data.theme,
+              plan: data.plan,
             },
           }
           : p

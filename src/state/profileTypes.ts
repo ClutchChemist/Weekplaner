@@ -15,6 +15,8 @@ export type ProfilePayload = {
   coaches: Coach[];
   locations: NonNullable<ThemeSettings["locations"]>;
   clubLogoDataUrl: string | null;
+  theme?: ThemeSettings;
+  plan?: WeekPlan;
 };
 
 export type SavedProfile = {

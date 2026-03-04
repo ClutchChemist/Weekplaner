@@ -5,6 +5,12 @@ type AuthUserInfo = {
   email: string | null;
 };
 
+export type CloudSnapshotRecord = {
+  profileId: string;
+  snapshot: unknown;
+  updatedAt: string | null;
+};
+
 let supabaseClient: SupabaseClient | null = null;
 
 function getSupabaseUrl(): string {
@@ -143,4 +149,45 @@ export async function loadCloudSnapshot(profileId: string): Promise<{ snapshot: 
     snapshot: data.snapshot,
     updatedAt: typeof data.updated_at === "string" ? data.updated_at : null,
   };
+}
+
+export async function listCloudSnapshots(): Promise<CloudSnapshotRecord[]> {
+  const client = getCloudSyncClient();
+  if (!client) throw new Error("Cloud sync is not configured.");
+
+  const user = await getCurrentCloudUser();
+  if (!user) throw new Error("No authenticated cloud user.");
+
+  const { data, error } = await client
+    .from("planner_profile_snapshots")
+    .select("profile_id, snapshot, updated_at")
+    .eq("user_id", user.id)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    profileId: String(row.profile_id ?? ""),
+    snapshot: row.snapshot,
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+  }));
+}
+
+export async function deleteCloudSnapshot(profileId: string): Promise<void> {
+  const client = getCloudSyncClient();
+  if (!client) throw new Error("Cloud sync is not configured.");
+
+  const user = await getCurrentCloudUser();
+  if (!user) throw new Error("No authenticated cloud user.");
+
+  const pid = profileId.trim();
+  if (!pid) throw new Error("Missing profile id for cloud delete.");
+
+  const { error } = await client
+    .from("planner_profile_snapshots")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("profile_id", pid);
+
+  if (error) throw error;
 }

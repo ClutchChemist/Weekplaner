@@ -46,6 +46,7 @@ export function ProfileCloudSyncPanel({
   onSignOut,
 }: Props) {
   const cloudMode = syncMode === "cloud";
+  const cloudUiEnabled = !hasActiveProfile || cloudMode;
 
   return (
     <div
@@ -61,7 +62,7 @@ export function ProfileCloudSyncPanel({
       <div style={{ fontWeight: 900 }}>{t("cloudSync")}</div>
 
       {!hasActiveProfile && (
-        <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 800 }}>{t("cloudProfilePickFirst")}</div>
+        <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>{t("cloudNoProfileStartHint")}</div>
       )}
 
       {hasActiveProfile && (
@@ -92,7 +93,7 @@ export function ProfileCloudSyncPanel({
         </>
       )}
 
-      {!cloudMode ? (
+      {!cloudUiEnabled ? (
         <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>{t("cloudLocalModeHint")}</div>
       ) : !cloudConfigured ? (
         <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 800 }}>{t("cloudNotConfiguredHint")}</div>
@@ -118,22 +119,34 @@ export function ProfileCloudSyncPanel({
 
           {cloudUserEmail && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button variant="outline" onClick={onLoad} disabled={cloudBusy}>
-                {t("cloudLoad")}
-              </Button>
-              <Button variant="outline" onClick={onSave} disabled={cloudBusy}>
-                {t("cloudSave")}
-              </Button>
-              <Button variant="outline" onClick={onToggleAutoSync} disabled={cloudBusy}>
-                {cloudAutoSync ? t("cloudAutoSyncOn") : t("cloudAutoSyncOff")}
-              </Button>
+              {hasActiveProfile && (
+                <Button variant="outline" onClick={onLoad} disabled={cloudBusy}>
+                  {t("cloudLoad")}
+                </Button>
+              )}
+              {hasActiveProfile && (
+                <Button variant="outline" onClick={onSave} disabled={cloudBusy}>
+                  {t("cloudSave")}
+                </Button>
+              )}
+              {hasActiveProfile && (
+                <Button variant="outline" onClick={onToggleAutoSync} disabled={cloudBusy}>
+                  {cloudAutoSync ? t("cloudAutoSyncOn") : t("cloudAutoSyncOff")}
+                </Button>
+              )}
               <Button variant="danger" onClick={onSignOut} disabled={cloudBusy}>
                 {t("cloudSignOut")}
               </Button>
             </div>
           )}
 
-          {cloudLastSyncAt && (
+          {!hasActiveProfile && cloudUserEmail && (
+            <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+              {t("cloudNoProfileSignedInHint")}
+            </div>
+          )}
+
+          {hasActiveProfile && cloudLastSyncAt && (
             <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
               {t("cloudLastSync")}: {new Date(cloudLastSyncAt).toLocaleString(lang === "de" ? "de-DE" : "en-GB")}
             </div>

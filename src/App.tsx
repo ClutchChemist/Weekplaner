@@ -81,6 +81,7 @@ import {
   type ProfileSyncMode,
   type CloudSnapshotV1,
   type ProfilePayload,
+  type SavedProfile,
 } from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
 import { DEFAULT_THEME } from "./state/themeDefaults";
@@ -108,6 +109,8 @@ import {
 import { fetchTravelMinutes } from "./utils/mapsApi";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
 import { normalizeYearColor, pickTextColor } from "./utils/color";
+import { deleteCloudSnapshot, listCloudSnapshots } from "./utils/cloudSync";
+import { randomId } from "./utils/id";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
@@ -390,16 +393,29 @@ export default function App() {
   });
 
   const [players, setPlayers] = useState<Player[]>(() => normalizedRoster.players);
+  const masterPlan = useMemo(() => normalizeMasterWeek(weekMasterRaw as unknown), []);
+  const [plan, setPlan] = usePersistedState<WeekPlan>(
+    LAST_PLAN_STORAGE_KEY,
+    masterPlan,
+    reviveWeekPlan
+  );
 
   const applyProfileData = useCallback((payload: ProfilePayload) => {
     setRosterMeta(payload.rosterMeta);
     setPlayers(payload.players);
     setCoaches(payload.coaches);
-    setTheme((prev) => ({
-      ...prev,
-      locations: payload.locations,
-    }));
-  }, [setCoaches]);
+    if (payload.theme) {
+      setTheme(payload.theme);
+    } else {
+      setTheme((prev) => ({
+        ...prev,
+        locations: payload.locations,
+      }));
+    }
+    if (payload.plan) {
+      setPlan(payload.plan);
+    }
+  }, [setCoaches, setPlan, setTheme]);
 
   const {
     profiles,
@@ -419,6 +435,7 @@ export default function App() {
     setClubLogoDataUrl,
     activeProfileName,
     activeProfileSync,
+    currentProfilePayload,
     handleClubLogoUpload,
     createProfile,
     updateActiveProfile,
@@ -430,6 +447,8 @@ export default function App() {
     rosterMeta,
     players,
     coaches,
+    theme,
+    plan,
     locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
     clubLogoStorageKey: CLUB_LOGO_STORAGE_KEY,
     clubLogoMaxBytes: CLUB_LOGO_MAX_BYTES,
@@ -462,13 +481,6 @@ export default function App() {
   /* ----------------------
      Plan: use last plan if exists, else master
      ---------------------- */
-  const masterPlan = useMemo(() => normalizeMasterWeek(weekMasterRaw as unknown), []);
-
-  const [plan, setPlan] = usePersistedState<WeekPlan>(
-    LAST_PLAN_STORAGE_KEY,
-    masterPlan,
-    reviveWeekPlan
-  );
   const scheduleSessions = useMemo(() => selectScheduleSessions(plan), [plan]);
 
   /* ----------------------
@@ -824,6 +836,149 @@ export default function App() {
     isSnapshot: isCloudSnapshotV1,
     autoSyncSignal: cloudSyncSignal,
   });
+  const cloudFirstSetupDoneForEmailRef = useRef<string | null>(null);
+  const [cloudBootstrapPendingProfileId, setCloudBootstrapPendingProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!cloudConfigured || !cloudUserEmail) return;
+    if (cloudFirstSetupDoneForEmailRef.current === cloudUserEmail) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const cloudRows = await listCloudSnapshots();
+        if (cancelled) return;
+
+        const cloudProfiles: SavedProfile[] = [];
+        for (const row of cloudRows) {
+          if (!isCloudSnapshotV1(row.snapshot)) continue;
+          const snap = row.snapshot;
+          cloudProfiles.push({
+            id: row.profileId || snap.profileId,
+            name: snap.profileName || row.profileId || t("profileNamePlaceholder"),
+            payload: {
+              rosterMeta: snap.data.rosterMeta,
+              players: snap.data.players,
+              coaches: snap.data.coaches,
+              locations: (snap.data.theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
+              clubLogoDataUrl: snap.data.clubLogoDataUrl ?? null,
+              theme: snap.data.theme,
+              plan: snap.data.plan,
+            },
+            sync: { mode: "cloud", provider: "supabase", autoSync: true },
+          });
+        }
+
+        if (cloudProfiles.length === 0) {
+          let bootstrapProfileId = "";
+
+          if (profiles.length > 0) {
+            const source = profiles.find((p) => p.id === activeProfileId) ?? profiles[0];
+            bootstrapProfileId = source.id;
+
+            setProfiles((prev) =>
+              prev.map((p) =>
+                p.id === source.id
+                  ? {
+                    ...p,
+                    payload: currentProfilePayload,
+                    sync: {
+                      ...p.sync,
+                      mode: "cloud",
+                      provider: "supabase",
+                    },
+                  }
+                  : p
+              )
+            );
+          } else {
+            bootstrapProfileId = randomId("profile_");
+            const starter: SavedProfile = {
+              id: bootstrapProfileId,
+              name: t("profileDefaultName"),
+              payload: currentProfilePayload,
+              sync: { mode: "cloud", provider: "supabase", autoSync: true },
+            };
+            setProfiles([starter]);
+          }
+
+          if (bootstrapProfileId) {
+            setActiveProfileId(bootstrapProfileId);
+            setCloudBootstrapPendingProfileId(bootstrapProfileId);
+          }
+
+          cloudFirstSetupDoneForEmailRef.current = cloudUserEmail;
+          return;
+        }
+
+        setProfiles((prev) => {
+          const byId = new Map(prev.map((p) => [p.id, p] as const));
+          for (const cloudProfile of cloudProfiles) {
+            const existing = byId.get(cloudProfile.id);
+            byId.set(cloudProfile.id, {
+              ...(existing ?? cloudProfile),
+              ...cloudProfile,
+              sync: {
+                mode: "cloud",
+                provider: "supabase",
+                autoSync: existing?.sync.autoSync ?? cloudProfile.sync.autoSync,
+              },
+            });
+          }
+          return Array.from(byId.values());
+        });
+
+        setActiveProfileId((prev) => prev || cloudProfiles[0].id);
+        cloudFirstSetupDoneForEmailRef.current = cloudUserEmail;
+      } catch {
+        // keep local profiles if cloud listing fails
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeProfileId,
+    cloudConfigured,
+    cloudUserEmail,
+    currentProfilePayload,
+    isCloudSnapshotV1,
+    profiles,
+    setActiveProfileId,
+    setProfiles,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (!cloudBootstrapPendingProfileId) return;
+    if (activeProfileId !== cloudBootstrapPendingProfileId) return;
+    if (!cloudSyncEnabledForActiveProfile || !cloudUserEmail) return;
+
+    void saveSnapshotToCloud(false).finally(() => {
+      setCloudBootstrapPendingProfileId(null);
+    });
+  }, [
+    activeProfileId,
+    cloudBootstrapPendingProfileId,
+    cloudSyncEnabledForActiveProfile,
+    cloudUserEmail,
+    saveSnapshotToCloud,
+  ]);
+
+  const handleDeleteProfile = useCallback(() => {
+    const profileIdToDelete = activeProfileId;
+    const deleteCloudCopy = Boolean(
+      profileIdToDelete && activeProfileSync.mode === "cloud" && cloudUserEmail
+    );
+
+    deleteActiveProfile();
+
+    if (!deleteCloudCopy || !profileIdToDelete) return;
+    void deleteCloudSnapshot(profileIdToDelete).catch(() => {
+      // local deletion should still succeed even if cloud delete fails
+    });
+  }, [activeProfileId, activeProfileSync.mode, cloudUserEmail, deleteActiveProfile]);
 
   /* ============================================================
      Roster editor: import/export roster.json
@@ -1898,7 +2053,7 @@ export default function App() {
         onSelectProfile={selectProfile}
         onCreateProfile={createProfile}
         onUpdateProfile={updateActiveProfile}
-        onDeleteProfile={deleteActiveProfile}
+        onDeleteProfile={handleDeleteProfile}
         clubLogoDataUrl={clubLogoDataUrl}
         logoUploadError={logoUploadError}
         logoMaxKb={Math.round(CLUB_LOGO_MAX_BYTES / 1024)}

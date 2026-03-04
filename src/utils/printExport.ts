@@ -80,6 +80,7 @@ function buildLocationsLegendHtml(sessions: Session[], locations: ThemeLocations
       const def = defs[name] ?? { abbr: name, name, hallNo: "" };
       const abbr = (def.abbr || name).trim();
       const fullName = (def.name || name).trim();
+      const sameLabel = abbr.localeCompare(fullName, "de", { sensitivity: "base" }) === 0;
       const address = resolveLegendAddress(name, locations).trim();
       const addrShort = address
         ? address.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 2).join(", ")
@@ -90,7 +91,7 @@ function buildLocationsLegendHtml(sessions: Session[], locations: ThemeLocations
             ${escapeHtml(abbr)}
           </td>
           <td style="padding:1px 0 2px 0; text-align:left; vertical-align:top; word-break:break-word;">
-            ${escapeHtml(fullName)}${addrShort ? ` | ${escapeHtml(addrShort)}` : ""}
+            ${sameLabel ? "" : escapeHtml(fullName)}${addrShort ? `${sameLabel ? "" : " | "}${escapeHtml(addrShort)}` : ""}
           </td>
         </tr>
       `;

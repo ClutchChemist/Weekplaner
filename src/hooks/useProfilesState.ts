@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Coach, Player, ThemeSettings } from "@/types";
+import type { WeekPlan } from "@/types";
 import {
   ACTIVE_PROFILE_STORAGE_KEY,
   DEFAULT_PROFILE_SYNC,
@@ -17,6 +18,8 @@ type Args = {
   rosterMeta: { season: string; ageGroups: unknown };
   players: Player[];
   coaches: Coach[];
+  theme: ThemeSettings;
+  plan: WeekPlan;
   locations: NonNullable<ThemeSettings["locations"]>;
   clubLogoStorageKey: string;
   clubLogoMaxBytes: number;
@@ -29,6 +32,8 @@ export function useProfilesState({
   rosterMeta,
   players,
   coaches,
+  theme,
+  plan,
   locations,
   clubLogoStorageKey,
   clubLogoMaxBytes,
@@ -77,8 +82,10 @@ export function useProfilesState({
       coaches,
       locations,
       clubLogoDataUrl,
+      theme,
+      plan,
     };
-  }, [rosterMeta, players, coaches, locations, clubLogoDataUrl]);
+  }, [rosterMeta, players, coaches, locations, clubLogoDataUrl, theme, plan]);
 
   const applyProfile = useCallback(
     (profile: SavedProfile) => {

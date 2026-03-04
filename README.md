@@ -222,6 +222,12 @@ for update
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+create policy "Users can delete own profile snapshots"
+on public.planner_profile_snapshots
+for delete
+to authenticated
+using (auth.uid() = user_id);
 ```
 
 ### 3) Use in app
@@ -229,7 +235,8 @@ with check (auth.uid() = user_id);
 Open **Profiles** and use **Cloud sync** section:
 
 - enter email + send magic link
-- after sign-in: load or save snapshot
+- after sign-in: cloud profiles are discovered automatically from Supabase
+- load/save keeps roster, coaches, locations, theme and current week plan attached to the profile
 - enable auto-sync for seamless device switching
 
 ## Running tests
