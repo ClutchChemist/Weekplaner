@@ -13,6 +13,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import "./App.css";
 
 import type { Lang } from "./i18n/types";
 import type {
