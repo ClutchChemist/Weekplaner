@@ -1,4 +1,17 @@
 import type { ThemeState } from "@/types";
+import { YEAR_GROUPS } from "@/config";
+
+function buildGroupColors(colors: string[], herrenBg: string, tbdBg: string) {
+  const groups: ThemeState["groups"] = {
+    Herren: { bg: herrenBg },
+    TBD: { bg: tbdBg },
+  };
+  for (let i = 0; i < YEAR_GROUPS.length; i += 1) {
+    const year = YEAR_GROUPS[i];
+    groups[year] = { bg: colors[i] ?? colors[colors.length - 1] };
+  }
+  return groups;
+}
 
 export const THEME_PRESETS: Record<string, ThemeState> = {
   "default-dark": {
@@ -15,13 +28,7 @@ export const THEME_PRESETS: Record<string, ThemeState> = {
       primary: "#3d3d3d",
       primaryText: "#ffffff",
     },
-    groups: {
-      "2007": { bg: "#4b5563" },
-      "2008": { bg: "#6b7280" },
-      "2009": { bg: "#9ca3af" },
-      Herren: { bg: "#ffffff" },
-      TBD: { bg: "#4b5563" },
-    },
+    groups: buildGroupColors(["#4b5563", "#6b7280", "#9ca3af"], "#ffffff", "#4b5563"),
     locations: {
       home: "",
       bsh: "",
@@ -34,7 +41,7 @@ export const THEME_PRESETS: Record<string, ThemeState> = {
         Seminarraum: { abbr: "Seminarraum", name: "Seminarraum" },
       },
     },
-    clubName: "UBC Münster",
+    clubName: "UBC MÃ¼nster",
     locale: "de",
   },
   "slate-dark": {
@@ -51,14 +58,8 @@ export const THEME_PRESETS: Record<string, ThemeState> = {
       primary: "#3f3f3f",
       primaryText: "#ffffff",
     },
-    groups: {
-      "2007": { bg: "#4b5563" },
-      "2008": { bg: "#6b7280" },
-      "2009": { bg: "#9ca3af" },
-      Herren: { bg: "#ffffff" },
-      TBD: { bg: "#4b5563" },
-    },
-    clubName: "UBC Münster",
+    groups: buildGroupColors(["#4b5563", "#6b7280", "#9ca3af"], "#ffffff", "#4b5563"),
+    clubName: "UBC MÃ¼nster",
     locale: "de",
   },
   light: {
@@ -73,14 +74,9 @@ export const THEME_PRESETS: Record<string, ThemeState> = {
       black: "#111111",
       white: "#ffffff",
     },
-    groups: {
-      "2007": { bg: "#9ca3af" },
-      "2008": { bg: "#d1d5db" },
-      "2009": { bg: "#e5e7eb" },
-      Herren: { bg: "#2b2b2b" },
-      TBD: { bg: "#9ca3af" },
-    },
-    clubName: "UBC Münster",
+    groups: buildGroupColors(["#9ca3af", "#d1d5db", "#e5e7eb"], "#2b2b2b", "#9ca3af"),
+    clubName: "UBC MÃ¼nster",
     locale: "de",
   },
 };
+

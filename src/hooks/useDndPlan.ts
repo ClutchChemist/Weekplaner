@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { addMinutesToHHMM, splitTimeRange, weekdayShortDE } from "../utils/date";
 import { isGameInfo } from "../utils/session";
 import type { CalendarEvent as Session, Player, WeekPlan } from "../state/types";
+import { getLicenseTnaByType, getRequiredTaTypeForTeams } from "@/utils/team";
 
 export type DndPlanHandlers = {
 	onDragStart: (event: DragStartEvent) => void;
@@ -43,22 +44,6 @@ export function useDndPlan(params: {
 
 	function requiresTaForTeams(teams: string[]): boolean {
 		return getRequiredTaTypeForTeams(teams) !== null;
-	}
-
-	function getRequiredTaTypeForTeams(teams: string[]): string | null {
-		const normalized = teams.map((team) => String(team ?? "").trim().toUpperCase());
-		if (normalized.includes("NBBL")) return "NBBL";
-		if (normalized.includes("JBBL")) return "JBBL";
-		if (normalized.some((team) => team === "U18" || team === "HOL" || team === "1RLH")) return "DBB";
-		return null;
-	}
-
-	function getLicenseTnaByType(player: Player, typ: string): string {
-		const wanted = String(typ ?? "").trim().toUpperCase();
-		if (!wanted) return "";
-		return (
-			(player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
-		).trim();
 	}
 
 	function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {

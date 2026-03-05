@@ -1,12 +1,15 @@
 import type { GroupId, ThemeSettings } from "./types";
+import { YEAR_GROUPS } from "@/config";
 
-export const DEFAULT_GROUP_COLORS: Record<GroupId, { bg: string }> = {
-  "2007": { bg: "#4b5563" },
-  "2008": { bg: "#6b7280" },
-  "2009": { bg: "#9ca3af" },
-  Herren: { bg: "#ffffff" },
-  TBD: { bg: "#4b5563" },
-};
+const YEAR_BG_FALLBACK = ["#4b5563", "#6b7280", "#9ca3af"];
+
+export const DEFAULT_GROUP_COLORS: Record<GroupId, { bg: string }> = Object.fromEntries(
+  [
+    ...YEAR_GROUPS.map((year, idx) => [year, { bg: YEAR_BG_FALLBACK[idx] ?? YEAR_BG_FALLBACK[YEAR_BG_FALLBACK.length - 1] }]),
+    ["Herren", { bg: "#ffffff" }],
+    ["TBD", { bg: "#4b5563" }],
+  ]
+) as Record<GroupId, { bg: string }>;
 
 export const DEFAULT_THEME: ThemeSettings = {
   ui: {

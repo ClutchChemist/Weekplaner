@@ -6,8 +6,9 @@ import type {
   Player,
   ThemeLocations,
 } from "../state/types";
-import { getPlayerGroup } from "../state/playerGrouping";
+import { getPlayerGroup, PRINT_GROUP_ORDER } from "../state/playerGrouping";
 import { normalizeYearColor, pickTextColor } from "./color";
+import { getRequiredTaTypeForTeams } from "./team";
 
 export interface PrintPage {
   type: "overview" | "rosters" | "game";
@@ -36,14 +37,6 @@ function dateToDDMon(dateStr: string): string {
 function isGameSession(s: Session): boolean {
   const info = s.info || "";
   return info.includes("vs") || info.includes("@");
-}
-
-function requiredTaTypeForTeams(teams: string[]): "NBBL" | "JBBL" | "DBB" | null {
-  const normalized = (teams ?? []).map((t) => String(t ?? "").trim().toUpperCase());
-  if (normalized.includes("NBBL")) return "NBBL";
-  if (normalized.includes("JBBL")) return "JBBL";
-  if (normalized.some((t) => t === "U18" || t === "HOL" || t === "1RLH")) return "DBB";
-  return null;
 }
 
 function tnaByType(player: Player, typ: string): string {
@@ -176,7 +169,7 @@ function abbrevEventHeader(s: Session): string {
   return `${day}-${teams}`;
 }
 
-const GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
+const GROUP_ORDER: GroupId[] = PRINT_GROUP_ORDER;
 
 function groupSortKey(group: GroupId | undefined): number {
   if (!group) return GROUP_ORDER.length;
@@ -637,7 +630,7 @@ function renderGameSheetHtml(opts: {
       const vorname = parts.length > 1 ? parts[0] : "";
       const nachname = parts.length > 1 ? parts.slice(1).join(" ") : full;
 
-      const requiredTa = requiredTaTypeForTeams(game.teams ?? []);
+      const requiredTa = getRequiredTaTypeForTeams(game.teams ?? []);
       const ta = p ? (requiredTa ? tnaByType(p, requiredTa) : (tnaByType(p, "DBB") || tnaByType(p, "NBBL") || tnaByType(p, "JBBL"))) : "";
       const jerseyVal = p?.jerseyByTeam?.[firstTeam] ?? "";
 

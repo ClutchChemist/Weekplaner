@@ -1,20 +1,19 @@
-import type { GroupId, Player } from "./types";
+import { YEAR_GROUPS, type GroupId } from "@/config";
+import type { Player } from "./types";
 
 export const GROUPS: Array<{
   id: GroupId;
   label: string;
   order: number;
 }> = [
-  { id: "2007", label: "2007", order: 0 },
-  { id: "2008", label: "2008", order: 1 },
-  { id: "2009", label: "2009", order: 2 },
-  { id: "Herren", label: "Herren", order: 3 },
-  { id: "TBD", label: "TBD", order: 4 },
+  ...YEAR_GROUPS.map((year, idx) => ({ id: year, label: year, order: idx })),
+  { id: "Herren", label: "Herren", order: YEAR_GROUPS.length },
+  { id: "TBD", label: "TBD", order: YEAR_GROUPS.length + 1 },
 ];
 
 const GROUP_ORDER = new Map<GroupId, number>(GROUPS.map((g) => [g.id, g.order]));
 
-export const PRINT_GROUP_ORDER: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
+export const PRINT_GROUP_ORDER: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
 
 export function birthYearOf(p: Player): number | null {
   if (p.birthDate && p.birthDate.length >= 4) {
@@ -31,9 +30,10 @@ export function getPlayerGroup(p: Player): GroupId {
   const teams = (p.defaultTeams ?? []).map((x) => String(x).toUpperCase());
   const y = birthYearOf(p);
 
-  if (y === 2007) return "2007";
-  if (y === 2008) return "2008";
-  if (y === 2009) return "2009";
+  if (y !== null) {
+    const yStr = String(y);
+    if (YEAR_GROUPS.includes(yStr)) return yStr;
+  }
 
   if (p.group) return p.group;
 
@@ -65,12 +65,13 @@ export function isHolOnly(p: Player): boolean {
 }
 
 export function makeParticipantSorter(playerById: Map<string, Player>) {
+  const fallbackGroup = YEAR_GROUPS[YEAR_GROUPS.length - 1] ?? "TBD";
   return (aId: string, bId: string) => {
     const a = playerById.get(aId);
     const b = playerById.get(bId);
 
-    const ga = a ? getPlayerGroup(a) : "2009";
-    const gb = b ? getPlayerGroup(b) : "2009";
+    const ga = a ? getPlayerGroup(a) : fallbackGroup;
+    const gb = b ? getPlayerGroup(b) : fallbackGroup;
 
     const oa = GROUP_ORDER.get(ga) ?? 999;
     const ob = GROUP_ORDER.get(gb) ?? 999;
@@ -81,3 +82,4 @@ export function makeParticipantSorter(playerById: Map<string, Player>) {
     return aName.localeCompare(bName, "de");
   };
 }
+

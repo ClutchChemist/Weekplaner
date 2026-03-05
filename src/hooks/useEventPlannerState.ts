@@ -3,8 +3,9 @@ import type { CalendarEvent as Session } from "@/types";
 import { addMinutesToHHMM, weekdayShortDE } from "@/utils/date";
 import { isGameInfo, normalizeOpponentInfo } from "@/utils/session";
 import { randomId } from "@/utils/id";
+import { BASE_TEAM_OPTIONS } from "@/utils/team";
 
-export const TEAM_OPTIONS = ["U18", "NBBL", "HOL", "1RLH"];
+export const TEAM_OPTIONS = [...BASE_TEAM_OPTIONS];
 
 export const LOCATION_PRESETS = ["BSH", "SHP", "Seminarraum"] as const;
 

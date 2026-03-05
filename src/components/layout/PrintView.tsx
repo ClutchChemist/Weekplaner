@@ -93,13 +93,9 @@ export function PrintView({
   function sortedParticipantsForSession(s: Session): Player[] {
     const players: Player[] = (s.participants ?? []).map((pid) => playerById.get(pid)).filter(Boolean) as Player[];
 
-    const byGroup: Record<GroupId, Player[]> = {
-      "2007": [],
-      "2008": [],
-      "2009": [],
-      Herren: [],
-      TBD: [],
-    };
+    const byGroup: Record<GroupId, Player[]> = Object.fromEntries(
+      PRINT_GROUP_ORDER.map((gid) => [gid, [] as Player[]])
+    ) as Record<GroupId, Player[]>;
 
     for (const p of players) byGroup[getPlayerGroup(p)].push(p);
     for (const gid of PRINT_GROUP_ORDER) byGroup[gid].sort((a, b) => a.name.localeCompare(b.name, "de"));

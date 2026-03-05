@@ -11,6 +11,8 @@ import {
   parseMmbImportFile,
   splitImportedName,
 } from "@/utils/mmbImport";
+import { resolveEligibility } from "@/rules/eligibility";
+import { normalizeTeamCode } from "@/utils/team";
 
 export function usePlayerActions({
   players,
@@ -37,9 +39,8 @@ export function usePlayerActions({
     return Array.from(
       new Set(
         input
-          .map((x) => String(x ?? "").trim().toUpperCase())
+          .map((x) => normalizeTeamCode(String(x ?? "")))
           .filter(Boolean)
-          .map((x) => (x === "RLH" ? "1RLH" : x))
       )
     );
   }
@@ -54,7 +55,12 @@ export function usePlayerActions({
   function sanitizeDefaultTeamsByAge(player: Player, defaultTeams: string[]): string[] {
     const teams = normalizeTeamCodes(defaultTeams);
     const year = birthYearOf(player);
-    if (year === 2007) {
+    const u18 = resolveEligibility({
+      referenceDate: new Date(),
+      competition: "WBV",
+      ageClass: "U18",
+    });
+    if (typeof year === "number" && !u18.autoEligibleYears.includes(year)) {
       return teams.filter((team) => team !== "U18");
     }
     return teams;

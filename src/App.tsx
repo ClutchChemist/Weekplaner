@@ -56,7 +56,6 @@ import {
   useSessionEditor,
   useWeekManager,
   LOCATION_PRESETS,
-  TEAM_OPTIONS,
 } from "@/hooks";
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
@@ -114,6 +113,7 @@ import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
 import { normalizeYearColor, pickTextColor } from "./utils/color";
 import { deleteCloudSnapshot, listCloudSnapshots } from "./utils/cloudSync";
 import { randomId } from "./utils/id";
+import { BASE_TEAM_OPTIONS, getLicenseTnaByType, getRequiredTaTypeForTeams, normalizeTeamCode } from "./utils/team";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
@@ -156,6 +156,14 @@ import weekMasterRaw from "./data/weekplan_master.json";
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
+
+function fallbackYearGroupsByFormula(referenceDate: Date = new Date()): string[] {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth() + 1;
+  const day = referenceDate.getDate();
+  const seasonStartYear = month > 8 || (month === 8 && day >= 1) ? year : year - 1;
+  return [seasonStartYear - 18, seasonStartYear - 17, seasonStartYear - 16].map(String);
+}
 
 function MinutePicker({
   value,
@@ -293,25 +301,31 @@ export default function App() {
     localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(theme));
   }, [theme]);
 
+  const activeYearGroups = YEAR_GROUPS.length > 0 ? YEAR_GROUPS : fallbackYearGroupsByFormula();
+
   const groupBg = useMemo(() => {
-    return {
-      "2007": theme.groups["2007"].bg,
-      "2008": theme.groups["2008"].bg,
-      "2009": theme.groups["2009"].bg,
-      Herren: theme.groups["Herren"].bg,
-      TBD: theme.groups["TBD"].bg,
-    } as Record<GroupId, string>;
-  }, [theme]);
+    const yearFallbackKey = activeYearGroups[0] ?? "TBD";
+    const fallback = theme.groups[yearFallbackKey]?.bg ?? DEFAULT_THEME.groups[yearFallbackKey]?.bg ?? "#6b7280";
+    const next: Record<GroupId, string> = {
+      Herren: theme.groups["Herren"]?.bg ?? DEFAULT_THEME.groups["Herren"].bg,
+      TBD: theme.groups["TBD"]?.bg ?? DEFAULT_THEME.groups["TBD"].bg,
+    };
+    for (const year of activeYearGroups) {
+      next[year] = theme.groups[year]?.bg ?? fallback;
+    }
+    return next;
+  }, [activeYearGroups, theme.groups]);
 
   const groupText = useMemo(() => {
-    return {
-      "2007": theme.groups["2007"].fg,
-      "2008": theme.groups["2008"].fg,
-      "2009": theme.groups["2009"].fg,
-      Herren: theme.groups["Herren"].fg,
-      TBD: theme.groups["TBD"].fg,
-    } as Record<GroupId, string | undefined>;
-  }, [theme]);
+    const next: Record<GroupId, string | undefined> = {
+      Herren: theme.groups["Herren"]?.fg,
+      TBD: theme.groups["TBD"]?.fg,
+    };
+    for (const year of activeYearGroups) {
+      next[year] = theme.groups[year]?.fg;
+    }
+    return next;
+  }, [activeYearGroups, theme.groups]);
 
   // Initialize i18n early so it's available for all functions
   const lang: Lang = (theme.locale ?? "de") as Lang;
@@ -701,8 +715,9 @@ export default function App() {
   const editorTopRef = useRef<HTMLDivElement | null>(null);
   const [quickRosterOpen, setQuickRosterOpen] = useState(false);
   const [quickRosterSearch, setQuickRosterSearch] = useState("");
+  const [teamCodeDraft, setTeamCodeDraft] = useState("");
   const [formParticipants, setFormParticipants] = useState<string[]>([]);
-  const [quickRosterTab, setQuickRosterTab] = useState<string>(YEAR_GROUPS[0]);
+  const [quickRosterFilters, setQuickRosterFilters] = useState<string[]>([activeYearGroups[0] ?? "TBD"]);
 
   function handleRecallLocationEdit() {
     const current = currentLocationValue().trim();
@@ -833,22 +848,6 @@ export default function App() {
     });
   }
 
-  function getRequiredTaTypeForTeams(teams: string[]): string | null {
-    const normalized = teams.map((team) => String(team ?? "").trim().toUpperCase());
-    if (normalized.includes("NBBL")) return "NBBL";
-    if (normalized.includes("JBBL")) return "JBBL";
-    if (normalized.some((team) => team === "U18" || team === "HOL" || team === "1RLH")) return "DBB";
-    return null;
-  }
-
-  function getLicenseTnaByType(player: Player, typ: string): string {
-    const wanted = String(typ ?? "").trim().toUpperCase();
-    if (!wanted) return "";
-    return (
-      (player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
-    ).trim();
-  }
-
   function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {
     const wanted = String(typ ?? "").trim().toUpperCase();
     const nextTna = String(tna ?? "").trim();
@@ -863,31 +862,46 @@ export default function App() {
     return { ...player, lizenzen: list };
   }
 
+  const allTeamOptions = useMemo(() => {
+    const fromPlayers = players.flatMap((p) => p.defaultTeams ?? []);
+    const fromPlan = plan.sessions.flatMap((s) => s.teams ?? []);
+    const options = [...BASE_TEAM_OPTIONS, ...fromPlayers, ...fromPlan, ...(formTeams ?? [])]
+      .map((team) => normalizeTeamCode(team))
+      .filter(Boolean);
+    return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, "de"));
+  }, [formTeams, plan.sessions, players]);
+
+  function addTeamCodeFromDraft(applyTo: "event" | "player") {
+    const teamCode = normalizeTeamCode(teamCodeDraft);
+    if (!teamCode) return;
+    if (applyTo === "event") {
+      setFormTeams((prev) => (prev.includes(teamCode) ? prev : [...prev, teamCode]));
+    } else if (selectedPlayerId) {
+      const selected = players.find((p) => p.id === selectedPlayerId);
+      const current = selected?.defaultTeams ?? [];
+      if (!current.includes(teamCode)) {
+        updatePlayer(selectedPlayerId, { defaultTeams: [...current, teamCode] });
+      }
+    }
+    setTeamCodeDraft("");
+  }
+
   const quickRosterTabs = useMemo(() => {
-    const yearTabs = YEAR_GROUPS.map((year) => ({
+    const yearTabs = activeYearGroups.map((year) => ({
       id: year,
-      label: t(`rosterQuickPickerTabYear${year}`),
+      label: year,
     }));
 
     const dynamicTeamCodes = Array.from(
       new Set(
         players
           .flatMap((p) => p.defaultTeams ?? [])
-          .map((code) => String(code ?? "").trim().toUpperCase())
+          .map((code) => normalizeTeamCode(String(code ?? "")))
           .filter(Boolean)
-          .map((code) => (code === "RLH" ? "1RLH" : code))
       )
     );
 
-    const teamCodes = Array.from(
-      new Set(
-        [...TEAM_OPTIONS, ...dynamicTeamCodes].map((code) =>
-          String(code ?? "")
-            .trim()
-            .toUpperCase()
-        )
-      )
-    );
+    const teamCodes = Array.from(new Set([...allTeamOptions, ...dynamicTeamCodes].map((code) => normalizeTeamCode(code))));
 
     const teamLabelByCode: Record<string, string> = {
       HOL: t("rosterQuickPickerTabHol"),
@@ -906,13 +920,16 @@ export default function App() {
       ...teamTabs,
       { id: "TBD", label: t("rosterQuickPickerTabTbd") },
     ];
-  }, [players, t]);
+  }, [activeYearGroups, allTeamOptions, players, t]);
 
   useEffect(() => {
-    const tabExists = quickRosterTabs.some((tab) => tab.id === quickRosterTab);
-    if (tabExists) return;
-    setQuickRosterTab(quickRosterTabs[0]?.id ?? YEAR_GROUPS[0]);
-  }, [quickRosterTab, quickRosterTabs]);
+    const available = new Set(quickRosterTabs.map((tab) => tab.id));
+    setQuickRosterFilters((prev) => {
+      const next = prev.filter((id) => available.has(id));
+      if (next.length > 0) return next;
+      return [quickRosterTabs[0]?.id ?? activeYearGroups[0] ?? "TBD"];
+    });
+  }, [activeYearGroups, quickRosterTabs]);
 
   const quickRosterPlayers = useMemo(() => {
     const q = quickRosterSearch.trim().toLowerCase();
@@ -933,22 +950,24 @@ export default function App() {
     };
 
     const inTab = (p: Player) => {
-      if (YEAR_GROUPS.includes(quickRosterTab as (typeof YEAR_GROUPS)[number])) {
-        const g = getPlayerGroup(p);
-        return g === quickRosterTab;
-      }
-      if (quickRosterTab === "TBD") return p.id === "TBD";
-      const defaults = (p.defaultTeams ?? [])
-        .map((code) => String(code ?? "").trim().toUpperCase())
-        .map((code) => (code === "RLH" ? "1RLH" : code));
-      return defaults.includes(String(quickRosterTab ?? "").toUpperCase());
+      if (quickRosterFilters.length === 0) return true;
+      return quickRosterFilters.every((filter) => {
+        if (activeYearGroups.includes(String(filter))) {
+          const g = getPlayerGroup(p);
+          return g === filter;
+        }
+        if (filter === "TBD") return p.id === "TBD";
+        const defaults = (p.defaultTeams ?? [])
+          .map((code) => normalizeTeamCode(String(code ?? "")));
+        return defaults.includes(normalizeTeamCode(String(filter ?? "")));
+      });
     };
 
     return players
       .filter(inTab)
       .filter(inSearch)
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }, [players, quickRosterSearch, quickRosterTab]);
+  }, [activeYearGroups, players, quickRosterFilters, quickRosterSearch]);
 
   function countInFormParticipants(playerId: string): number {
     return formParticipants.reduce((acc, id) => acc + (id === playerId ? 1 : 0), 0);
@@ -1744,8 +1763,9 @@ export default function App() {
                       </div>
 
                       <div style={{ fontWeight: 900 }}>{t("teams")}</div>
-                      <div className="flexRow">
-                        {TEAM_OPTIONS.map((teamOption) => {
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div className="flexRow">
+                        {allTeamOptions.map((teamOption) => {
                           const active = formTeams.includes(teamOption);
                           return (
                             <Button
@@ -1758,6 +1778,23 @@ export default function App() {
                             </Button>
                           );
                         })}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <Input
+                            value={teamCodeDraft}
+                            onChange={setTeamCodeDraft}
+                            placeholder={lang === "de" ? "Team hinzufügen (z. B. U20)" : "Add team (e.g. U20)"}
+                            style={{ maxWidth: 260 }}
+                          />
+                          <Button
+                            variant="outline"
+                            onClick={() => addTeamCodeFromDraft("event")}
+                            disabled={!teamCodeDraft.trim()}
+                            style={{ padding: "8px 10px" }}
+                          >
+                            + Team
+                          </Button>
+                        </div>
                       </div>
 
                       <div style={{ fontWeight: 900 }}>{t("location")}</div>
@@ -2076,12 +2113,18 @@ export default function App() {
                   <div style={{ display: "grid", gap: 10 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {quickRosterTabs.map((tab) => {
-                        const active = quickRosterTab === tab.id;
+                        const active = quickRosterFilters.includes(tab.id);
                         return (
                           <button
                             key={tab.id}
                             type="button"
-                            onClick={() => setQuickRosterTab(tab.id)}
+                            onClick={() =>
+                              setQuickRosterFilters((prev) =>
+                                prev.includes(tab.id)
+                                  ? prev.filter((x) => x !== tab.id)
+                                  : [...prev, tab.id]
+                              )
+                            }
                             style={{
                               padding: "8px 10px",
                               borderRadius: 999,
@@ -2096,6 +2139,13 @@ export default function App() {
                           </button>
                         );
                       })}
+                      <Button
+                        variant="outline"
+                        onClick={() => setQuickRosterFilters([])}
+                        style={{ padding: "8px 10px" }}
+                      >
+                        {t("reset")}
+                      </Button>
                     </div>
 
                     <Input
@@ -2122,7 +2172,7 @@ export default function App() {
                         const teamsLabel = Array.from(
                           new Set(
                             (p.defaultTeams ?? [])
-                              .map((code) => String(code ?? "").trim().toUpperCase())
+                              .map((code) => normalizeTeamCode(String(code ?? "")))
                               .filter(Boolean)
                               .map((code) => (code === "1RLH" ? "RLH" : code))
                           )
@@ -2580,7 +2630,7 @@ export default function App() {
                         <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("group")}</div>
                         {(() => {
                           const y = birthYearOf(selectedPlayer);
-                          const yearLocked = y === 2007 || y === 2008 || y === 2009;
+                          const yearLocked = typeof y === "number" && activeYearGroups.includes(String(y));
                           return (
                             <Select
                               value={selectedPlayer.group ?? getPlayerGroup(selectedPlayer)}
@@ -2589,9 +2639,7 @@ export default function App() {
                                 yearLocked
                                   ? [{ value: String(y), label: String(y) }]
                                   : [
-                                    { value: "2007", label: "2007" },
-                                    { value: "2008", label: "2008" },
-                                    { value: "2009", label: "2009" },
+                                    ...activeYearGroups.map((year) => ({ value: year, label: year })),
                                     { value: "Herren", label: "Herren" },
                                   ]
                               }
@@ -2646,7 +2694,7 @@ export default function App() {
                             value={(selectedPlayer.lizenzen ?? []).find((x) => String(x.typ).toUpperCase() === "DBB")?.tna ?? ""}
                             onChange={(v) => {
                               const list = [...(selectedPlayer.lizenzen ?? [])].filter((x) => String(x.typ).toUpperCase() !== "DBB");
-                              if (v.trim()) list.push({ typ: "DBB", tna: v.trim(), verein: "UBC Münster" });
+                              if (v.trim()) list.push({ typ: "DBB", tna: v.trim(), verein: theme.clubName });
                               updatePlayer(selectedPlayer.id, { lizenzen: list });
                             }}
                             placeholder={t("dbbTnaExample")}
@@ -2658,7 +2706,7 @@ export default function App() {
                             value={(selectedPlayer.lizenzen ?? []).find((x) => String(x.typ).toUpperCase() === "NBBL")?.tna ?? ""}
                             onChange={(v) => {
                               const list = [...(selectedPlayer.lizenzen ?? [])].filter((x) => String(x.typ).toUpperCase() !== "NBBL");
-                              if (v.trim()) list.push({ typ: "NBBL", tna: v.trim(), verein: "UBC Münster" });
+                              if (v.trim()) list.push({ typ: "NBBL", tna: v.trim(), verein: theme.clubName });
                               updatePlayer(selectedPlayer.id, { lizenzen: list });
                             }}
                             placeholder={t("nbblTnaExample")}
@@ -2712,7 +2760,7 @@ export default function App() {
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("defaultTeams")}</div>
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {TEAM_OPTIONS.map((t) => {
+                      {allTeamOptions.map((t) => {
                         const current = selectedPlayer.defaultTeams ?? [];
                         const active = current.includes(t);
 
@@ -2730,6 +2778,22 @@ export default function App() {
                           </Button>
                         );
                       })}
+                    </div>
+                    <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <Input
+                        value={teamCodeDraft}
+                        onChange={setTeamCodeDraft}
+                        placeholder={lang === "de" ? "Team hinzufügen (z. B. U20)" : "Add team (e.g. U20)"}
+                        style={{ maxWidth: 260 }}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => addTeamCodeFromDraft("player")}
+                        disabled={!teamCodeDraft.trim() || !selectedPlayerId}
+                        style={{ padding: "8px 10px" }}
+                      >
+                        + Team
+                      </Button>
                     </div>
 
                     <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
@@ -2761,7 +2825,7 @@ export default function App() {
                         alignItems: "center",
                       }}
                     >
-                      {TEAM_OPTIONS.map((teamCode) => {
+                      {allTeamOptions.map((teamCode) => {
                         const current = selectedPlayer.jerseyByTeam ?? {};
                         const value = current[teamCode];
 

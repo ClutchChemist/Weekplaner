@@ -1,4 +1,9 @@
-import type { GroupId, ThemeSettings, UiTheme } from "./types";
+import { YEAR_GROUPS, type GroupId } from "@/config";
+import type { ThemeSettings, UiTheme } from "./types";
+
+function activeGroupIds(): GroupId[] {
+  return [...YEAR_GROUPS, "Herren", "TBD"];
+}
 
 export function safeParseTheme(raw: string | null, fallbackTheme: ThemeSettings): ThemeSettings | null {
   if (!raw) return null;
@@ -26,11 +31,18 @@ export function safeParseTheme(raw: string | null, fallbackTheme: ThemeSettings)
       if (typeof ui[k] !== "string" || !ui[k]) return null;
     }
 
-    const gids: GroupId[] = ["2007", "2008", "2009", "Herren", "TBD"];
+    const gids = activeGroupIds();
     if (!groups || typeof groups !== "object") return null;
     for (const gid of gids) {
-      if (!groups[gid] || typeof groups[gid].bg !== "string" || !groups[gid].bg)
-        return null;
+      if (!groups[gid] || typeof groups[gid].bg !== "string" || !groups[gid].bg) return null;
+    }
+
+    const parsedGroups: ThemeSettings["groups"] = {};
+    for (const gid of gids) {
+      parsedGroups[gid] = {
+        bg: groups[gid].bg,
+        fg: typeof groups[gid].fg === "string" ? groups[gid].fg : undefined,
+      };
     }
 
     return {
@@ -45,18 +57,11 @@ export function safeParseTheme(raw: string | null, fallbackTheme: ThemeSettings)
         black: ui.black,
         white: ui.white,
         primary: typeof ui.primary === "string" && ui.primary ? ui.primary : undefined,
-        primaryText:
-          typeof ui.primaryText === "string" && ui.primaryText ? ui.primaryText : undefined,
+        primaryText: typeof ui.primaryText === "string" && ui.primaryText ? ui.primaryText : undefined,
       },
-      groups: {
-        "2007": { bg: groups["2007"].bg, fg: typeof groups["2007"].fg === "string" ? groups["2007"].fg : undefined },
-        "2008": { bg: groups["2008"].bg, fg: typeof groups["2008"].fg === "string" ? groups["2008"].fg : undefined },
-        "2009": { bg: groups["2009"].bg, fg: typeof groups["2009"].fg === "string" ? groups["2009"].fg : undefined },
-        Herren: { bg: groups["Herren"].bg, fg: typeof groups["Herren"].fg === "string" ? groups["Herren"].fg : undefined },
-        TBD: { bg: groups["TBD"].bg, fg: typeof groups["TBD"].fg === "string" ? groups["TBD"].fg : undefined },
-      },
+      groups: parsedGroups,
       clubName: typeof obj.clubName === "string" ? obj.clubName : fallbackTheme.clubName,
-      locale: (obj.locale === "de" || obj.locale === "en") ? obj.locale : fallbackTheme.locale,
+      locale: obj.locale === "de" || obj.locale === "en" ? obj.locale : fallbackTheme.locale,
     };
   } catch {
     return null;
@@ -80,10 +85,9 @@ export function migrateLegacyBlueTheme(theme: ThemeSettings, fallbackTheme: Them
     "#16a34a": "#9ca3af",
   };
 
-  const hasLegacyBlueBase =
-    [theme.ui.bg, theme.ui.panel, theme.ui.card].map((x) => x.toLowerCase()).some((x) =>
-      ["#0b0f19", "#111827", "#0f172a"].includes(x)
-    );
+  const hasLegacyBlueBase = [theme.ui.bg, theme.ui.panel, theme.ui.card]
+    .map((x) => x.toLowerCase())
+    .some((x) => ["#0b0f19", "#111827", "#0f172a"].includes(x));
 
   const mapColor = (hex: string) => legacyMap[hex.toLowerCase()] ?? hex;
 
@@ -106,16 +110,21 @@ export function migrateLegacyBlueTheme(theme: ThemeSettings, fallbackTheme: Them
     return { ...theme, ui: migratedUi };
   }
 
+  const gids = activeGroupIds();
+  const migratedGroups: ThemeSettings["groups"] = {};
+  for (const gid of gids) {
+    const current = theme.groups[gid] ?? fallbackTheme.groups[gid];
+    migratedGroups[gid] = {
+      bg: mapColor(current?.bg ?? "#6b7280"),
+      fg: current?.fg ? mapColor(current.fg) : undefined,
+    };
+  }
+
   return {
     ui: migratedUi,
-    groups: {
-      "2007": { bg: mapColor(theme.groups["2007"].bg), fg: theme.groups["2007"].fg ? mapColor(theme.groups["2007"].fg) : undefined },
-      "2008": { bg: mapColor(theme.groups["2008"].bg), fg: theme.groups["2008"].fg ? mapColor(theme.groups["2008"].fg) : undefined },
-      "2009": { bg: mapColor(theme.groups["2009"].bg), fg: theme.groups["2009"].fg ? mapColor(theme.groups["2009"].fg) : undefined },
-      Herren: { bg: mapColor(theme.groups["Herren"].bg), fg: theme.groups["Herren"].fg ? mapColor(theme.groups["Herren"].fg) : undefined },
-      TBD: { bg: mapColor(theme.groups["TBD"].bg), fg: theme.groups["TBD"].fg ? mapColor(theme.groups["TBD"].fg) : undefined },
-    },
+    groups: migratedGroups,
     clubName: theme.clubName ?? fallbackTheme.clubName,
     locale: theme.locale ?? fallbackTheme.locale,
   };
 }
+

@@ -3,6 +3,7 @@ import type { GroupId, Player, Position } from "@/types";
 import { birthYearOf, getPlayerGroup } from "@/state/playerGrouping";
 import { dbbDobMatchesBirthDate, primaryTna } from "@/state/playerMeta";
 import { Button, Input, Modal, Select } from "@/components/ui";
+import { YEAR_GROUPS } from "@/config";
 
 type Props = {
   open: boolean;
@@ -211,7 +212,7 @@ export function RosterEditorModal({
                     <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("group")}</div>
                     {(() => {
                       const y = birthYearOf(selectedPlayer);
-                      const yearLocked = y === 2007 || y === 2008 || y === 2009;
+                      const yearLocked = typeof y === "number" && YEAR_GROUPS.includes(String(y));
                       return (
                         <Select
                           value={selectedPlayer.group ?? getPlayerGroup(selectedPlayer)}
@@ -220,9 +221,7 @@ export function RosterEditorModal({
                             yearLocked
                               ? [{ value: String(y), label: String(y) }]
                               : [
-                                  { value: "2007", label: "2007" },
-                                  { value: "2008", label: "2008" },
-                                  { value: "2009", label: "2009" },
+                                  ...YEAR_GROUPS.map((year) => ({ value: year, label: year })),
                                   { value: "Herren", label: "Herren" },
                                 ]
                           }
