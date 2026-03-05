@@ -1,51 +1,68 @@
-import { useMemo, useRef } from "react";
+﻿import { useMemo, useRef } from "react";
 import type { GroupId, Player, Position } from "@/types";
 import { birthYearOf, getPlayerGroup } from "@/state/playerGrouping";
 import { dbbDobMatchesBirthDate, primaryTna } from "@/state/playerMeta";
+import { normalizeYearColor, pickTextColor } from "@/utils/color";
 import { Button, Input, Modal, Select } from "@/components/ui";
-import { YEAR_GROUPS } from "@/config";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   t: (key: string) => string;
+  lang: "de" | "en";
   players: Player[];
   selectedPlayerId: string | null;
-  onSelectPlayer: (id: string | null) => void;
+  onSelectPlayerId: (id: string) => void;
   rosterSearch: string;
   onRosterSearchChange: (value: string) => void;
   addNewPlayer: () => void;
   exportRoster: () => void;
   importRosterFile: (file: File) => void | Promise<void>;
+  importMmbFile: (file: File) => void | Promise<void>;
   deletePlayer: (id: string) => void;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
-  teamOptions: string[];
+  activeYearGroups: string[];
+  allTeamOptions: string[];
+  teamCodeDraft: string;
+  onTeamCodeDraftChange: (value: string) => void;
+  onAddTeamCodeFromDraft: () => void;
   clubName: string;
+  groupBg: Record<string, string>;
+  groupText: Record<string, string | undefined>;
 };
 
 export function RosterEditorModal({
   open,
   onClose,
   t,
+  lang,
   players,
   selectedPlayerId,
-  onSelectPlayer,
+  onSelectPlayerId,
   rosterSearch,
   onRosterSearchChange,
   addNewPlayer,
   exportRoster,
   importRosterFile,
+  importMmbFile,
   deletePlayer,
   updatePlayer,
-  teamOptions,
+  activeYearGroups,
+  allTeamOptions,
+  teamCodeDraft,
+  onTeamCodeDraftChange,
+  onAddTeamCodeFromDraft,
   clubName,
+  groupBg,
+  groupText,
 }: Props) {
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
+  const mmbFileRef = useRef<HTMLInputElement | null>(null);
 
   const selectedPlayer = useMemo(() => {
     if (!selectedPlayerId) return null;
     return players.find((p) => p.id === selectedPlayerId) ?? null;
-  }, [selectedPlayerId, players]);
+  }, [players, selectedPlayerId]);
 
   if (!open) return null;
 
@@ -66,6 +83,13 @@ export function RosterEditorModal({
               >
                 {t("import")} roster.json
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => mmbFileRef.current?.click()}
+                style={{ padding: "8px 10px" }}
+              >
+                {t("import")} MMB (Excel/PDF)
+              </Button>
               <input
                 ref={rosterFileRef}
                 type="file"
@@ -73,9 +97,18 @@ export function RosterEditorModal({
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) {
-                    void importRosterFile(f);
-                  }
+                  if (f) void importRosterFile(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+              <input
+                ref={mmbFileRef}
+                type="file"
+                accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importMmbFile(f);
                   e.currentTarget.value = "";
                 }}
               />
@@ -83,6 +116,9 @@ export function RosterEditorModal({
 
             <div style={{ marginTop: 10, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
               {t("rosterHintTbd")}
+            </div>
+            <div style={{ marginTop: 6, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+              {t("importMmbHint")}
             </div>
           </div>
 
@@ -95,7 +131,7 @@ export function RosterEditorModal({
               style={{ marginBottom: 8 }}
             />
             <div style={{ fontSize: 12, color: "var(--ui-muted)", fontWeight: 800, marginBottom: 8 }}>
-              {t("filter")}: {rosterSearch.trim() ? `"${rosterSearch.trim()}"` : "—"}
+              {t("filter")}: {rosterSearch.trim() ? `"${rosterSearch.trim()}"` : "-"}
             </div>
             <div style={{ display: "grid", gap: 6, maxHeight: "60vh", overflow: "auto" }}>
               {(() => {
@@ -124,16 +160,19 @@ export function RosterEditorModal({
                 return list.map((p) => {
                   const active = p.id === selectedPlayerId;
                   const gid = getPlayerGroup(p);
+                  const bg = normalizeYearColor(p.yearColor) ?? groupBg[gid] ?? groupBg.TBD;
+                  const text = p.yearColor ? pickTextColor(bg) : (groupText[gid] ?? pickTextColor(bg));
+                  const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.72)";
                   const tna = primaryTna(p);
                   return (
                     <button
                       key={p.id}
-                      onClick={() => onSelectPlayer(p.id)}
+                      onClick={() => onSelectPlayerId(p.id)}
                       style={{
                         textAlign: "left",
-                        border: `1px solid ${active ? "var(--ui-soft)" : "var(--ui-border)"}`,
-                        background: active ? "var(--ui-panel)" : "var(--ui-card)",
-                        color: "var(--ui-text)",
+                        border: `1px solid ${active ? "var(--ui-soft)" : "rgba(0,0,0,0.18)"}`,
+                        background: bg,
+                        color: text,
                         borderRadius: 12,
                         padding: "10px 10px",
                         cursor: "pointer",
@@ -146,7 +185,7 @@ export function RosterEditorModal({
                       <span style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {p.name}
                       </span>
-                      <span style={{ fontWeight: 900, color: "var(--ui-muted)" }}>{gid}</span>
+                      <span style={{ fontWeight: 900, color: subText }}>{gid}</span>
                     </button>
                   );
                 });
@@ -189,18 +228,7 @@ export function RosterEditorModal({
                     <Input
                       type="number"
                       value={String(selectedPlayer.birthYear ?? "")}
-                      onChange={(v) => {
-                        const raw = v.trim();
-                        if (!raw) {
-                          updatePlayer(selectedPlayer.id, { birthYear: undefined });
-                          return;
-                        }
-                        const parsed = Number.parseInt(raw, 10);
-                        if (!Number.isFinite(parsed)) return;
-                        const currentYear = new Date().getFullYear();
-                        const clamped = Math.max(1900, Math.min(currentYear, parsed));
-                        updatePlayer(selectedPlayer.id, { birthYear: clamped });
-                      }}
+                      onChange={(v) => updatePlayer(selectedPlayer.id, { birthYear: v ? parseInt(v, 10) : undefined })}
                     />
                   </div>
                   <div>
@@ -212,7 +240,7 @@ export function RosterEditorModal({
                     <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("group")}</div>
                     {(() => {
                       const y = birthYearOf(selectedPlayer);
-                      const yearLocked = typeof y === "number" && YEAR_GROUPS.includes(String(y));
+                      const yearLocked = typeof y === "number" && activeYearGroups.includes(String(y));
                       return (
                         <Select
                           value={selectedPlayer.group ?? getPlayerGroup(selectedPlayer)}
@@ -221,9 +249,9 @@ export function RosterEditorModal({
                             yearLocked
                               ? [{ value: String(y), label: String(y) }]
                               : [
-                                  ...YEAR_GROUPS.map((year) => ({ value: year, label: year })),
-                                  { value: "Herren", label: "Herren" },
-                                ]
+                                ...activeYearGroups.map((year) => ({ value: year, label: year })),
+                                { value: "Herren", label: "Herren" },
+                              ]
                           }
                           disabled={yearLocked}
                         />
@@ -264,7 +292,7 @@ export function RosterEditorModal({
                           color: "var(--ui-text)",
                         }}
                       >
-                        ⚠️ {t("dbbTaBirthMismatch")}: {check?.reason}
+                        {t("dbbTaBirthMismatch")}: {check?.reason}
                       </div>
                     );
                   })()}
@@ -336,7 +364,7 @@ export function RosterEditorModal({
                 <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("defaultTeams")}</div>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {teamOptions.map((teamCode) => {
+                  {allTeamOptions.map((teamCode) => {
                     const current = selectedPlayer.defaultTeams ?? [];
                     const active = current.includes(teamCode);
 
@@ -354,6 +382,22 @@ export function RosterEditorModal({
                       </Button>
                     );
                   })}
+                </div>
+                <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <Input
+                    value={teamCodeDraft}
+                    onChange={onTeamCodeDraftChange}
+                    placeholder={lang === "de" ? "Team hinzufugen (z. B. U20)" : "Add team (e.g. U20)"}
+                    style={{ maxWidth: 260 }}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={onAddTeamCodeFromDraft}
+                    disabled={!teamCodeDraft.trim() || !selectedPlayerId}
+                    style={{ padding: "8px 10px" }}
+                  >
+                    + Team
+                  </Button>
                 </div>
 
                 <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
@@ -379,7 +423,7 @@ export function RosterEditorModal({
                     alignItems: "center",
                   }}
                 >
-                  {teamOptions.map((teamCode) => {
+                  {allTeamOptions.map((teamCode) => {
                     const current = selectedPlayer.jerseyByTeam ?? {};
                     const value = current[teamCode];
 
@@ -496,3 +540,4 @@ export function RosterEditorModal({
     </Modal>
   );
 }
+

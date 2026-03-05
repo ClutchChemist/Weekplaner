@@ -6,4 +6,5 @@ export { AppTopBar } from "./AppTopBar";
 export { WeekPlanBoard } from "./WeekPlanBoard";
 export { LeftSidebar } from "./LeftSidebar";
 export { CalendarOverviewPanel } from "./CalendarOverviewPanel";
+export { MainWorkspace } from "./MainWorkspace";
 export type { SidebarModule } from "./RightSidebar";
