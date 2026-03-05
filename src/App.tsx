@@ -156,14 +156,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTheme((prev) => {
-      const next = migrateLegacyBlueTheme(prev, DEFAULT_THEME);
-      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
-    });
-  }, []);
-
-  useEffect(() => {
     applyThemeToCssVars(theme);
     localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(theme));
   }, [theme]);
@@ -780,15 +772,12 @@ export default function App() {
     ];
   }, [activeYearGroups, allTeamOptions, players, t]);
 
-  useEffect(() => {
+  const effectiveQuickRosterFilters = useMemo(() => {
     const available = new Set(quickRosterTabs.map((tab) => tab.id));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setQuickRosterFilters((prev) => {
-      const next = prev.filter((id) => available.has(id));
-      if (next.length > 0) return next;
-      return [quickRosterTabs[0]?.id ?? activeYearGroups[0] ?? "TBD"];
-    });
-  }, [activeYearGroups, quickRosterTabs]);
+    const next = quickRosterFilters.filter((id) => available.has(id));
+    if (next.length > 0) return next;
+    return [quickRosterTabs[0]?.id ?? activeYearGroups[0] ?? "TBD"];
+  }, [activeYearGroups, quickRosterFilters, quickRosterTabs]);
 
   // Deferred search prevents filtering on every keystroke (performance)
   const deferredRosterSearch = useDeferredValue(quickRosterSearch);
@@ -796,8 +785,8 @@ export default function App() {
   const quickRosterPlayers = useMemo(() => {
     const searchQuery = deferredRosterSearch;
     const inTab = (p: Player) => {
-      if (quickRosterFilters.length === 0) return true;
-      return quickRosterFilters.every((filter) => {
+      if (effectiveQuickRosterFilters.length === 0) return true;
+      return effectiveQuickRosterFilters.every((filter) => {
         if (activeYearGroups.includes(String(filter))) return getPlayerGroup(p) === filter;
         if (filter === "TBD") return p.id === "TBD";
         const defaults = (p.defaultTeams ?? []).map((code) => normalizeTeamCode(String(code ?? "")));
@@ -808,7 +797,7 @@ export default function App() {
       .filter(inTab)
       .filter((p) => matchesPlayerSearch(p, searchQuery))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }, [activeYearGroups, players, quickRosterFilters, deferredRosterSearch]);
+  }, [activeYearGroups, players, effectiveQuickRosterFilters, deferredRosterSearch]);
 
   function countInFormParticipants(playerId: string): number {
     return formParticipants.reduce((acc, id) => acc + (id === playerId ? 1 : 0), 0);
@@ -1232,7 +1221,7 @@ export default function App() {
                   quickRosterOpen={quickRosterOpen}
                   onCloseQuickRoster={() => setQuickRosterOpen(false)}
                   quickRosterTabs={quickRosterTabs}
-                  quickRosterFilters={quickRosterFilters}
+                  quickRosterFilters={effectiveQuickRosterFilters}
                   onToggleQuickRosterFilter={(id) =>
                     setQuickRosterFilters((prev) =>
                       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]

@@ -77,6 +77,8 @@ Diese Liste sammelt bewusst geparkte Refactor-/Qualitätsaufgaben, die wir in kl
 
 ## Neue Feature-TODOs (2026-03-05)
 
+- [ ] Niels Westphal tip
+
 - [x] Kader-Schnellauswahl im Event-Editor erweitern
   - Add/Delete von Spielern direkt im Event-Editor ermöglichen (ohne Umweg über andere Panels)
 
