@@ -217,10 +217,26 @@ export function LeftSidebar({
                 <div key={g.id} style={{ borderRadius: 14 }}>
                   <button
                     onClick={() => onToggleGroup(g.id)}
-                    className="groupHeaderBtn"
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      border: `1px solid var(--ui-border)`,
+                      background: "var(--ui-card)",
+                      color: "var(--ui-text)",
+                      borderRadius: 14,
+                      padding: "12px 12px",
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                      fontWeight: 900,
+                    }}
                   >
-                    <span className="groupHeaderLeft">{g.label}</span>
-                    <span className="groupHeaderRight">{groupRightLabel}</span>
+                    <span style={{ minWidth: 0, flex: "1 1 auto" }}>{g.label}</span>
+                    <span style={{ color: "var(--ui-muted)", fontSize: 13, whiteSpace: "nowrap" }}>
+                      {groupRightLabel}
+                    </span>
                   </button>
 
                   {isOpen && (
