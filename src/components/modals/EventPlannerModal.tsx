@@ -96,6 +96,7 @@ type Props = {
   quickRosterPlayers: Player[];
   countInFormParticipants: (playerId: string) => number;
   birthdayPlayerIds: Set<string>;
+  plannedDaysByPlayer: Map<string, string[]>;
   removeFromFormParticipants: (playerId: string) => void;
   addToFormParticipants: (playerId: string) => void | Promise<void>;
 };
@@ -161,6 +162,7 @@ export function EventPlannerModal({
   quickRosterPlayers,
   countInFormParticipants,
   birthdayPlayerIds,
+  plannedDaysByPlayer,
   removeFromFormParticipants,
   addToFormParticipants,
 }: Props) {
@@ -629,6 +631,7 @@ export function EventPlannerModal({
                 const selectedCount = countInFormParticipants(p.id);
                 const isSelected = selectedCount > 0;
                 const group = getPlayerGroup(p);
+                const plannedDays = plannedDaysByPlayer.get(p.id) ?? [];
                 const teamsLabel = Array.from(
                   new Set(
                     (p.defaultTeams ?? [])
@@ -661,6 +664,11 @@ export function EventPlannerModal({
                       <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
                         {group} {teamsLabel ? `| ${teamsLabel}` : ""}
                       </div>
+                      {plannedDays.length > 0 && (
+                        <div style={{ color: "var(--ui-soft)", fontSize: 11, fontWeight: 800, marginTop: 2 }}>
+                          {t("rosterQuickPickerPlannedDays")}: {plannedDays.join(" · ")}
+                        </div>
+                      )}
                     </div>
 
                     {isSelected ? (

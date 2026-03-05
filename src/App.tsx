@@ -95,6 +95,7 @@ import {
   isoWeekMonday,
   kwLabelFromPlan,
   splitTimeRange,
+  weekdayShortLocalized,
 } from "./utils/date";
 import {
   computeConflictsBySession,
@@ -466,6 +467,35 @@ export default function App() {
 
   const sortParticipants = useMemo(() => makeParticipantSorter(playerById), [playerById]);
   const trainingCounts = useMemo(() => computeTrainingCounts(plan), [plan]);
+  const plannedDaysByPlayer = useMemo(() => {
+    const result = new Map<string, string[]>();
+    const seenByPlayer = new Map<string, Set<string>>();
+
+    const sessions = [...scheduleSessions].sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (a.time ?? "").localeCompare(b.time ?? "");
+    });
+
+    for (const session of sessions) {
+      const dayLabel = `${weekdayShortLocalized(session.date, lang)} ${session.date.slice(8, 10)}.${session.date.slice(5, 7)}`;
+      for (const playerId of session.participants ?? []) {
+        if (!playerId || playerId === "TBD") continue;
+
+        const seen = seenByPlayer.get(playerId) ?? new Set<string>();
+        if (seen.has(dayLabel)) continue;
+
+        seen.add(dayLabel);
+        seenByPlayer.set(playerId, seen);
+
+        const list = result.get(playerId) ?? [];
+        list.push(dayLabel);
+        result.set(playerId, list);
+      }
+    }
+
+    return result;
+  }, [scheduleSessions, lang]);
   const locationUsageMap = useLocationUsageMap(scheduleSessions);
 
   // Plan date set & birthdays for players present in the plan
@@ -1234,6 +1264,7 @@ export default function App() {
                   quickRosterPlayers={quickRosterPlayers}
                   countInFormParticipants={countInFormParticipants}
                   birthdayPlayerIds={birthdayPlayerIds}
+                  plannedDaysByPlayer={plannedDaysByPlayer}
                   removeFromFormParticipants={removeFromFormParticipants}
                   addToFormParticipants={addToFormParticipants}
                 />
