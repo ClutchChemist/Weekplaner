@@ -1,5 +1,6 @@
 ﻿import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -124,11 +125,19 @@ import { deleteCloudSnapshot, listCloudSnapshots } from "./utils/cloudSync";
 import { randomId } from "./utils/id";
 import { BASE_TEAM_OPTIONS, getLicenseTnaByType, getRequiredTaTypeForTeams, normalizeTeamCode } from "./utils/team";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
+import { matchesPlayerSearch } from "./utils/player";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
+
+/** Default session duration in minutes for non-game events */
+const DEFAULT_SESSION_DURATION_MIN = 90;
+/** Default warmup time in minutes */
+const DEFAULT_WARMUP_MIN = 30;
+/** Delay before focusing a form element after scroll (ms) */
+const FOCUS_SCROLL_DELAY_MS = 500;
 
 /* ============================================================
    APP
@@ -638,7 +647,7 @@ export default function App() {
       setTimeout(() => {
         opponentInputRef.current?.focus();
         opponentInputRef.current?.select();
-      }, 500);
+      }, FOCUS_SCROLL_DELAY_MS);
     });
 
     const loc = (s.location ?? "").trim();
@@ -656,7 +665,7 @@ export default function App() {
       const startMin = parseInt(st.slice(0, 2), 10) * 60 + parseInt(st.slice(3, 5), 10);
       const endMin = parseInt(en.slice(0, 2), 10) * 60 + parseInt(en.slice(3, 5), 10);
       const dur = Math.max(0, endMin - startMin);
-      setFormDuration(dur || 90);
+      setFormDuration(dur || DEFAULT_SESSION_DURATION_MIN);
     } else {
       setFormDuration(90);
     }
@@ -665,7 +674,7 @@ export default function App() {
     setFormParticipants([...(s.participants ?? [])]);
 
     const game = isGameInfo(s.info ?? "");
-    setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
+    setFormWarmupMin(game ? Number(s.warmupMin ?? DEFAULT_WARMUP_MIN) : DEFAULT_WARMUP_MIN);
     setFormTravelMin(game ? Number(s.travelMin ?? 0) : 0);
     setFormExcludeFromRoster(s.excludeFromRoster === true);
     setFormRowColor(s.rowColor ?? "");
@@ -718,7 +727,7 @@ export default function App() {
       setTimeout(() => {
         const dateEl = document.getElementById("event_form_date") as HTMLInputElement | null;
         if (dateEl) dateEl.focus();
-      }, 500);
+      }, FOCUS_SCROLL_DELAY_MS);
     });
   }
 
@@ -793,43 +802,25 @@ export default function App() {
     });
   }, [activeYearGroups, quickRosterTabs]);
 
-  const quickRosterPlayers = useMemo(() => {
-    const q = quickRosterSearch.trim().toLowerCase();
-    const inSearch = (p: Player) => {
-      if (!q) return true;
-      const text = [
-        p.name,
-        p.firstName,
-        p.lastName,
-        p.primaryYouthTeam,
-        p.primarySeniorTeam,
-        ...(p.defaultTeams ?? []),
-        primaryTna(p),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return text.includes(q);
-    };
+  // Deferred search prevents filtering on every keystroke (performance)
+  const deferredRosterSearch = useDeferredValue(quickRosterSearch);
 
+  const quickRosterPlayers = useMemo(() => {
+    const searchQuery = deferredRosterSearch;
     const inTab = (p: Player) => {
       if (quickRosterFilters.length === 0) return true;
       return quickRosterFilters.every((filter) => {
-        if (activeYearGroups.includes(String(filter))) {
-          const g = getPlayerGroup(p);
-          return g === filter;
-        }
+        if (activeYearGroups.includes(String(filter))) return getPlayerGroup(p) === filter;
         if (filter === "TBD") return p.id === "TBD";
-        const defaults = (p.defaultTeams ?? [])
-          .map((code) => normalizeTeamCode(String(code ?? "")));
+        const defaults = (p.defaultTeams ?? []).map((code) => normalizeTeamCode(String(code ?? "")));
         return defaults.includes(normalizeTeamCode(String(filter ?? "")));
       });
     };
-
     return players
       .filter(inTab)
-      .filter(inSearch)
+      .filter((p) => matchesPlayerSearch(p, searchQuery))
       .sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }, [activeYearGroups, players, quickRosterFilters, quickRosterSearch]);
+  }, [activeYearGroups, players, quickRosterFilters, deferredRosterSearch]);
 
   function countInFormParticipants(playerId: string): number {
     return formParticipants.reduce((acc, id) => acc + (id === playerId ? 1 : 0), 0);
