@@ -1,9 +1,11 @@
-﻿import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { GroupId, Player, Position } from "@/types";
 import { birthYearOf, getPlayerGroup } from "@/state/playerGrouping";
 import { dbbDobMatchesBirthDate, primaryTna } from "@/state/playerMeta";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
+import { downloadJson } from "@/utils/json";
 import { Button, Input, Modal, Select } from "@/components/ui";
+import type { MmbImportFeedback } from "@/hooks/usePlayerActions";
 
 type Props = {
   open: boolean;
@@ -19,6 +21,8 @@ type Props = {
   exportRoster: () => void;
   importRosterFile: (file: File) => void | Promise<void>;
   importMmbFile: (file: File) => void | Promise<void>;
+  mmbImportFeedback: MmbImportFeedback | null;
+  clearMmbImportFeedback: () => void;
   deletePlayer: (id: string) => void;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
   activeYearGroups: string[];
@@ -45,6 +49,8 @@ export function RosterEditorModal({
   exportRoster,
   importRosterFile,
   importMmbFile,
+  mmbImportFeedback,
+  clearMmbImportFeedback,
   deletePlayer,
   updatePlayer,
   activeYearGroups,
@@ -58,6 +64,87 @@ export function RosterEditorModal({
 }: Props) {
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
   const mmbFileRef = useRef<HTMLInputElement | null>(null);
+  const [selectedIssueIdx, setSelectedIssueIdx] = useState<number | null>(null);
+
+  const filteredPreviewRows = useMemo(() => {
+    if (!mmbImportFeedback) return [];
+    const selectedIssue =
+      selectedIssueIdx !== null ? mmbImportFeedback.issueDetails[selectedIssueIdx] : null;
+    if (!selectedIssue) return mmbImportFeedback.previewRows;
+    return mmbImportFeedback.previewRows.filter(
+      (row) =>
+        row.sheetName === selectedIssue.sheetName &&
+        row.rowNumber === selectedIssue.rowNumber
+    );
+  }, [mmbImportFeedback, selectedIssueIdx]);
+
+  function downloadIssueRowsCsv(filename: string, rows: Array<Record<string, string>>) {
+    const headers = ["issue", "sheet", "row", "name", "taNumber", "birthDate"];
+    const escapeCsv = (value: string) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const lines = [
+      headers.join(","),
+      ...rows.map((row) => headers.map((h) => escapeCsv(row[h] ?? "")).join(",")),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function buildIssueExportRows() {
+    if (!mmbImportFeedback) return [];
+    const issueRows = mmbImportFeedback.issueDetails.map((issue) => {
+      const match = mmbImportFeedback.previewRows.find(
+        (row) => row.sheetName === issue.sheetName && row.rowNumber === issue.rowNumber
+      );
+      return {
+        issue: issue.label,
+        sheet: issue.sheetName ?? "",
+        row: issue.rowNumber ? String(issue.rowNumber) : "",
+        name: match?.name ?? "",
+        taNumber: match?.taNumber ?? "",
+        birthDate: match?.birthDate ?? "",
+      };
+    });
+    const missingSheetRows = mmbImportFeedback.missingColumnsSheets.map((sheet) => ({
+      issue: t("importMmbIssueMissingColumns"),
+      sheet,
+      row: "",
+      name: "",
+      taNumber: "",
+      birthDate: "",
+    }));
+    return [...issueRows, ...missingSheetRows];
+  }
+
+  function buildFilteredIssueExportRows() {
+    if (!mmbImportFeedback || selectedIssueIdx === null) return [];
+    const selectedIssue = mmbImportFeedback.issueDetails[selectedIssueIdx];
+    if (!selectedIssue) return [];
+    if (filteredPreviewRows.length === 0) {
+      return [
+        {
+          issue: selectedIssue.label,
+          sheet: selectedIssue.sheetName ?? "",
+          row: selectedIssue.rowNumber ? String(selectedIssue.rowNumber) : "",
+          name: "",
+          taNumber: "",
+          birthDate: "",
+        },
+      ];
+    }
+    return filteredPreviewRows.map((row) => ({
+      issue: selectedIssue.label,
+      sheet: row.sheetName ?? "",
+      row: row.rowNumber ? String(row.rowNumber) : "",
+      name: row.name ?? "",
+      taNumber: row.taNumber ?? "",
+      birthDate: row.birthDate ?? "",
+    }));
+  }
 
   const selectedPlayer = useMemo(() => {
     if (!selectedPlayerId) return null;
@@ -104,7 +191,7 @@ export function RosterEditorModal({
               <input
                 ref={mmbFileRef}
                 type="file"
-                accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                accept=".xlsx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -120,6 +207,145 @@ export function RosterEditorModal({
             <div style={{ marginTop: 6, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
               {t("importMmbHint")}
             </div>
+            {mmbImportFeedback && (
+              <div
+                style={{
+                  marginTop: 10,
+                  border: `1px solid ${mmbImportFeedback.kind === "success" ? "#10b981" : "#ef4444"}`,
+                  background: mmbImportFeedback.kind === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+                  borderRadius: 12,
+                  padding: 10,
+                  fontSize: 12,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                  <div style={{ fontWeight: 900 }}>{t("importMmbReportTitle")}</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const exportRows = buildIssueExportRows();
+                        if (!exportRows.length) return;
+                        downloadJson(
+                          `mmb-import-issues-${Date.now()}.json`,
+                          { fileName: mmbImportFeedback.fileName, issues: exportRows }
+                        );
+                      }}
+                      style={{ padding: "4px 8px" }}
+                      disabled={buildIssueExportRows().length === 0}
+                    >
+                      {t("importMmbExportIssuesJson")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const exportRows = buildIssueExportRows();
+                        if (!exportRows.length) return;
+                        downloadIssueRowsCsv(`mmb-import-issues-${Date.now()}.csv`, exportRows);
+                      }}
+                      style={{ padding: "4px 8px" }}
+                      disabled={buildIssueExportRows().length === 0}
+                    >
+                      {t("importMmbExportIssuesCsv")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const exportRows = buildFilteredIssueExportRows();
+                        if (!exportRows.length) return;
+                        downloadIssueRowsCsv(`mmb-import-issues-filtered-${Date.now()}.csv`, exportRows);
+                      }}
+                      style={{ padding: "4px 8px" }}
+                      disabled={selectedIssueIdx === null || buildFilteredIssueExportRows().length === 0}
+                    >
+                      {t("importMmbExportFilteredIssuesCsv")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedIssueIdx(null);
+                        clearMmbImportFeedback();
+                      }}
+                      style={{ padding: "4px 8px" }}
+                    >
+                      {t("close")}
+                    </Button>
+                  </div>
+                </div>
+                <div style={{ marginTop: 6, fontWeight: 800 }}>
+                  {mmbImportFeedback.message ?? t("importMmbReportSuccess")}
+                </div>
+                <div style={{ marginTop: 6, color: "var(--ui-muted)", fontWeight: 700 }}>
+                  {t("importMmbReportFile")}: {mmbImportFeedback.fileName}
+                </div>
+                <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 4 }}>
+                  <div>{t("importMmbReportCreated")}: {mmbImportFeedback.createdCount}</div>
+                  <div>{t("importMmbReportUpdated")}: {mmbImportFeedback.updatedCount}</div>
+                  <div>{t("importMmbReportImportedRows")}: {mmbImportFeedback.importedRows}</div>
+                  <div>{t("importMmbReportDuplicates")}: {mmbImportFeedback.duplicateRowsSkipped}</div>
+                </div>
+                {mmbImportFeedback.missingColumnsSheets.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontWeight: 900 }}>{t("importMmbReportMissingCols")}</div>
+                    <div>{mmbImportFeedback.missingColumnsSheets.join(", ")}</div>
+                  </div>
+                )}
+                {mmbImportFeedback.issueDetails.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontWeight: 900 }}>{t("importMmbReportRowIssues")}</div>
+                    <div style={{ display: "grid", gap: 2, marginTop: 4 }}>
+                      {mmbImportFeedback.issueDetails.map((issue, idx) => (
+                        <button
+                          key={`${issue.label}-${idx}`}
+                          onClick={() => setSelectedIssueIdx((prev) => (prev === idx ? null : idx))}
+                          style={{
+                            textAlign: "left",
+                            border: `1px solid ${selectedIssueIdx === idx ? "var(--ui-soft)" : "var(--ui-border)"}`,
+                            borderRadius: 8,
+                            background: selectedIssueIdx === idx ? "rgba(59,130,246,0.15)" : "transparent",
+                            color: "var(--ui-text)",
+                            padding: "4px 6px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {issue.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {mmbImportFeedback.previewRows.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                      <div style={{ fontWeight: 900 }}>{t("importMmbReportPreviewRows")}</div>
+                      {selectedIssueIdx !== null && (
+                        <Button variant="outline" onClick={() => setSelectedIssueIdx(null)} style={{ padding: "4px 8px" }}>
+                          {t("importMmbReportClearIssueFilter")}
+                        </Button>
+                      )}
+                    </div>
+                    <div style={{ marginTop: 6, maxHeight: 180, overflow: "auto", display: "grid", gap: 4 }}>
+                      {filteredPreviewRows.map((row, idx) => (
+                        <div
+                          key={`${row.sheetName ?? "sheet"}-${row.rowNumber ?? 0}-${row.name}-${idx}`}
+                          style={{
+                            border: "1px solid var(--ui-border)",
+                            borderRadius: 8,
+                            padding: "4px 6px",
+                            fontSize: 12,
+                          }}
+                        >
+                          <div style={{ fontWeight: 800 }}>{row.name}</div>
+                          <div style={{ color: "var(--ui-muted)" }}>
+                            {row.sheetName ?? "?"} #{row.rowNumber ?? "?"} | TA: {row.taNumber ?? "-"} | DOB: {row.birthDate ?? "-"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 10 }}>
@@ -540,4 +766,5 @@ export function RosterEditorModal({
     </Modal>
   );
 }
+
 

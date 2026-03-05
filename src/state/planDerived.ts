@@ -10,6 +10,30 @@ export function computeTrainingCounts(plan: WeekPlan) {
   return m;
 }
 
+/**
+ * Returns a map from playerId to active dates in the current week.
+ * Only dates included in `weekDates` are considered.
+ */
+export function computePlayerActiveDays(
+  plan: WeekPlan,
+  weekDates: string[]
+): Map<string, Set<string>> {
+  const weekDateSet = new Set(weekDates);
+  const activeByPlayer = new Map<string, Set<string>>();
+
+  for (const session of plan.sessions ?? []) {
+    if (!weekDateSet.has(session.date)) continue;
+    for (const playerId of session.participants ?? []) {
+      if (!activeByPlayer.has(playerId)) {
+        activeByPlayer.set(playerId, new Set<string>());
+      }
+      activeByPlayer.get(playerId)?.add(session.date);
+    }
+  }
+
+  return activeByPlayer;
+}
+
 export function planDateSet(plan: WeekPlan): Set<string> {
   return new Set((plan.sessions ?? []).map((s) => String(s.date ?? "")).filter(Boolean));
 }

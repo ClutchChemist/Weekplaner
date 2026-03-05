@@ -2,12 +2,15 @@ import React, { type CSSProperties } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { GroupId, Player } from "@/types";
 import { getPlayerGroup } from "@/state/playerGrouping";
-import { dbbDobMatchesBirthDate, hasAnyTna } from "@/state/playerMeta";
+import { dbbDobMatchesBirthDate } from "@/state/playerMeta";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
+import { PlayerBadge } from "@/components/ui";
 
 type Props = {
   player: Player;
   trainingCount: number;
+  activeDays: Set<string>;
+  weekDates: string[];
   groupBg: Record<GroupId, string>;
   groupText?: Record<GroupId, string | undefined>;
   isBirthday: boolean;
@@ -17,6 +20,8 @@ type Props = {
 export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
   player,
   trainingCount,
+  activeDays,
+  weekDates,
   groupBg,
   groupText,
   isBirthday,
@@ -42,10 +47,8 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
   const text = player.yearColor ? pickTextColor(bg) : (groupText?.[group] ?? pickTextColor(bg));
   const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
 
-  const pos = (player.positions ?? []).join("/") || "—";
+  const pos = (player.positions ?? []).join("/") || "-";
   const isTbd = player.id === "TBD";
-
-  const taOk = hasAnyTna(player);
   const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
 
   return (
@@ -64,8 +67,8 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
           isTbd
             ? t("placeholder")
             : (player.lizenzen ?? [])
-                .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
-                .join(" | ") || t("noTaTnaSaved")
+              .map((l) => `${String(l.typ).toUpperCase()}: ${l.tna}`)
+              .join(" | ") || t("noTaTnaSaved")
         }
       >
         <div style={{ minWidth: 0 }}>
@@ -80,15 +83,13 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
             title={!taDobCheck.ok ? taDobCheck.reason : undefined}
           >
             {player.name}
-            {isBirthday ? " 🎂" : ""}
-            {!taDobCheck.ok ? " ⚠️" : ""}
+            {isBirthday ? " *" : ""}
+            {!taDobCheck.ok ? " !" : ""}
           </div>
           <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
             {isTbd
               ? t("placeholder")
-              : `${player.primaryYouthTeam || ""}${
-                  player.primarySeniorTeam ? ` • ${player.primarySeniorTeam}` : ""
-                }`}
+              : `${player.primaryYouthTeam || ""}${player.primarySeniorTeam ? ` / ${player.primarySeniorTeam}` : ""}`}
           </div>
         </div>
 
@@ -100,9 +101,14 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
             </>
           ) : (
             <>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{pos}</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>{trainingCount}x</div>
-              <div style={{ fontWeight: 900, color: text, fontSize: 12 }}>TA {taOk ? "✓" : "—"}</div>
+              <div style={{ fontWeight: 900, color: text, fontSize: 12, marginBottom: 3 }}>{pos}</div>
+              <PlayerBadge
+                player={player}
+                trainingCount={trainingCount}
+                activeDays={activeDays}
+                weekDates={weekDates}
+                textColor={text}
+              />
             </>
           )}
         </div>

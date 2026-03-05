@@ -42,6 +42,8 @@ import {
 } from "@/components/modals";
 import {
   useConfirmDialog,
+  useCloudBootstrap,
+  useCloudBootstrapUpload,
   useDndPlan,
   useCloudSync,
   useCloudSnapshotHandlers,
@@ -62,6 +64,7 @@ import {
 import { useAppUiState } from "./state/useAppUiState";
 import { reviveWeekPlan } from "./state/planReviver";
 import {
+  computePlayerActiveDays,
   computeHistoryFlagsBySession,
   computeTrainingCounts,
   isBirthdayOnAnyPlanDate,
@@ -84,7 +87,6 @@ import {
   type ProfileSyncMode,
   type CloudSnapshotV1,
   type ProfilePayload,
-  type SavedProfile,
 } from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
 import { DEFAULT_THEME } from "./state/themeDefaults";
@@ -103,8 +105,7 @@ import {
 }
   from "./utils/session";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
-import { deleteCloudSnapshot, listCloudSnapshots } from "./utils/cloudSync";
-import { randomId } from "./utils/id";
+import { deleteCloudSnapshot } from "./utils/cloudSync";
 import { BASE_TEAM_OPTIONS, getLicenseTnaByType, getRequiredTaTypeForTeams, normalizeTeamCode } from "./utils/team";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import { matchesPlayerSearch } from "./utils/player";
@@ -220,25 +221,27 @@ export default function App() {
     setSelectedPlayerId,
   } = useAppUiState();
 
-  const settingsOpen = appUiState.settingsOpen;
-  const eventEditorOpen = appUiState.eventEditorOpen;
-  const rightOpen = appUiState.rightSidebarOpen;
-  const newWeekOpen = appUiState.newWeekOpen;
-  const rightLayout = appUiState.rightLayout;
-  const rightTop = appUiState.rightTop;
-  const rightBottom = appUiState.rightBottom;
-  const rightSplitPct = appUiState.rightSplitPct;
-  const openGroup = appUiState.openGroup;
-  const openExtra = appUiState.openExtra;
-  const leftTab = appUiState.leftTab;
-  const leftEditMode = appUiState.leftEditMode;
-  const openLocationName = appUiState.openLocationName;
-  const rosterOpen = appUiState.rosterOpen;
-  const autoTravelLoading = appUiState.autoTravelLoading;
+  const {
+    settingsOpen,
+    eventEditorOpen,
+    rightSidebarOpen: rightOpen,
+    newWeekOpen,
+    rightLayout,
+    rightTop,
+    rightBottom,
+    rightSplitPct,
+    openGroup,
+    openExtra,
+    leftTab,
+    leftEditMode,
+    openLocationName,
+    rosterOpen,
+    autoTravelLoading,
+    confirmDialog,
+    rosterSearch,
+    selectedPlayerId,
+  } = appUiState;
   const [autoTravelError, setAutoTravelError] = useState<string | null>(null);
-  const confirmDialog = appUiState.confirmDialog;
-  const rosterSearch = appUiState.rosterSearch;
-  const selectedPlayerId = appUiState.selectedPlayerId;
   const { askConfirm, resolveConfirm } = useConfirmDialog(setConfirmDialog);
   const { promptDialog, setPromptValue, askPrompt, resolvePrompt } = usePromptDialog();
   const [lastDropError, setLastDropError] = useState<string | null>(null);
@@ -937,146 +940,32 @@ export default function App() {
     isSnapshot: isCloudSnapshotV1,
     autoSyncSignal: cloudSyncSignal,
   });
-  const cloudFirstSetupDoneForEmailRef = useRef<string | null>(null);
   const [cloudBootstrapPendingProfileId, setCloudBootstrapPendingProfileId] = useState<string | null>(null);
   const [cloudProfileStatusMsg, setCloudProfileStatusMsg] = useState("");
 
-  useEffect(() => {
-    if (!cloudConfigured || !cloudUserEmail) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCloudProfileStatusMsg("");
-      return;
-    }
-    if (cloudFirstSetupDoneForEmailRef.current === cloudUserEmail) return;
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const cloudRows = await listCloudSnapshots();
-        if (cancelled) return;
-
-        const cloudProfiles: SavedProfile[] = [];
-        for (const row of cloudRows) {
-          if (!isCloudSnapshotV1(row.snapshot)) continue;
-          const snap = row.snapshot;
-          cloudProfiles.push({
-            id: row.profileId || snap.profileId,
-            name: snap.profileName || row.profileId || t("profileNamePlaceholder"),
-            payload: {
-              rosterMeta: snap.data.rosterMeta,
-              players: snap.data.players,
-              coaches: snap.data.coaches,
-              locations: (snap.data.theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
-              clubLogoDataUrl: snap.data.clubLogoDataUrl ?? null,
-              theme: snap.data.theme,
-              plan: snap.data.plan,
-            },
-            sync: { mode: "cloud", provider: "supabase", autoSync: true },
-          });
-        }
-
-        if (cloudProfiles.length === 0) {
-          let bootstrapProfileId = "";
-
-          if (profiles.length > 0) {
-            const source = profiles.find((p) => p.id === activeProfileId) ?? profiles[0];
-            bootstrapProfileId = source.id;
-
-            setProfiles((prev) =>
-              prev.map((p) =>
-                p.id === source.id
-                  ? {
-                    ...p,
-                    payload: currentProfilePayload,
-                    sync: {
-                      ...p.sync,
-                      mode: "cloud",
-                      provider: "supabase",
-                    },
-                  }
-                  : p
-              )
-            );
-          } else {
-            bootstrapProfileId = randomId("profile_");
-            const starter: SavedProfile = {
-              id: bootstrapProfileId,
-              name: t("profileDefaultName"),
-              payload: buildNewProfilePayload(),
-              sync: { mode: "cloud", provider: "supabase", autoSync: true },
-            };
-            setProfiles([starter]);
-          }
-
-          if (bootstrapProfileId) {
-            setActiveProfileId(bootstrapProfileId);
-            setCloudBootstrapPendingProfileId(bootstrapProfileId);
-          }
-
-          cloudFirstSetupDoneForEmailRef.current = cloudUserEmail;
-          return;
-        }
-
-        setProfiles((prev) => {
-          const byId = new Map(prev.map((p) => [p.id, p] as const));
-          for (const cloudProfile of cloudProfiles) {
-            const existing = byId.get(cloudProfile.id);
-            byId.set(cloudProfile.id, {
-              ...(existing ?? cloudProfile),
-              ...cloudProfile,
-              sync: {
-                mode: "cloud",
-                provider: "supabase",
-                autoSync: existing?.sync.autoSync ?? cloudProfile.sync.autoSync,
-              },
-            });
-          }
-          return Array.from(byId.values());
-        });
-
-        setActiveProfileId((prev) => prev || cloudProfiles[0].id);
-        cloudFirstSetupDoneForEmailRef.current = cloudUserEmail;
-        setCloudProfileStatusMsg("");
-      } catch (err) {
-        // keep local profiles if cloud listing fails
-        const msg = err instanceof Error ? err.message : String(err ?? "");
-        const full = `${t("cloudProfileSyncError")}: ${msg || "unknown error"}`;
-        setCloudProfileStatusMsg(full);
-        console.error(full);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeProfileId,
+  useCloudBootstrap({
     cloudConfigured,
     cloudUserEmail,
-    currentProfilePayload,
-    buildNewProfilePayload,
     isCloudSnapshotV1,
     profiles,
-    setActiveProfileId,
-    setProfiles,
-    t,
-  ]);
-
-  useEffect(() => {
-    if (!cloudBootstrapPendingProfileId) return;
-    if (activeProfileId !== cloudBootstrapPendingProfileId) return;
-    if (!cloudSyncEnabledForActiveProfile || !cloudUserEmail) return;
-
-    void saveSnapshotToCloud(false).finally(() => {
-      setCloudBootstrapPendingProfileId(null);
-    });
-  }, [
     activeProfileId,
+    currentProfilePayload,
+    buildNewProfilePayload,
+    setProfiles,
+    setActiveProfileId,
+    setCloudBootstrapPendingProfileId,
+    setCloudProfileStatusMsg,
+    t,
+  });
+
+  useCloudBootstrapUpload({
     cloudBootstrapPendingProfileId,
+    activeProfileId,
     cloudSyncEnabledForActiveProfile,
     cloudUserEmail,
     saveSnapshotToCloud,
-  ]);
+    setCloudBootstrapPendingProfileId,
+  });
 
   const handleDeleteProfile = useCallback(() => {
     const profileIdToDelete = activeProfileId;
@@ -1101,7 +990,16 @@ export default function App() {
      (minimal editor – erweitert später um LP/Trikot/Positions etc.)
      ============================================================ */
 
-  const { updatePlayer, addNewPlayer, deletePlayer, importRosterFile, importMmbFile, exportRoster } = usePlayerActions({
+  const {
+    updatePlayer,
+    addNewPlayer,
+    deletePlayer,
+    importRosterFile,
+    importMmbFile,
+    mmbImportFeedback,
+    clearMmbImportFeedback,
+    exportRoster,
+  } = usePlayerActions({
     players,
     setPlayers,
     rosterMeta,
@@ -1129,6 +1027,7 @@ export default function App() {
     setNewWeekOpen,
     resetForm,
   });
+  const activeDaysByPlayer = useMemo(() => computePlayerActiveDays(plan, weekDates), [plan, weekDates]);
 
   const closeNewWeek = useCallback(() => setNewWeekOpen(false), [setNewWeekOpen]);
 
@@ -1220,6 +1119,8 @@ export default function App() {
                   key={p.id}
                   player={p}
                   trainingCount={trainingCounts.get(p.id) ?? 0}
+                  activeDays={activeDaysByPlayer.get(p.id) ?? new Set<string>()}
+                  weekDates={weekDates}
                   groupBg={groupBg}
                   groupText={groupText}
                   isBirthday={birthdayPlayerIds.has(p.id)}
@@ -1367,6 +1268,9 @@ export default function App() {
                 groupBg,
                 groupText,
                 birthdayPlayerIds,
+                weekDates,
+                trainingCounts,
+                activeDaysByPlayer,
               }}
               onCreatePlanPdf={createPlanPdf}
               onCreatePlanPngPages={createPlanPngPages}
@@ -1516,6 +1420,8 @@ export default function App() {
         exportRoster={exportRoster}
         importRosterFile={importRosterFile}
         importMmbFile={importMmbFile}
+        mmbImportFeedback={mmbImportFeedback}
+        clearMmbImportFeedback={clearMmbImportFeedback}
         deletePlayer={deletePlayer}
         updatePlayer={updatePlayer}
         activeYearGroups={activeYearGroups}

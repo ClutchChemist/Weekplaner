@@ -3,6 +3,35 @@ export type ImportedMmbRow = {
   taNumber?: string;
   birthDate?: string;
   lpStatus?: string;
+  sourceSheet?: string;
+  sourceRow?: number;
+};
+
+export type MmbImportIssueCode =
+  | "missing_required_columns"
+  | "row_missing_name"
+  | "row_invalid_ta"
+  | "row_invalid_birth_date";
+
+export type MmbImportIssue = {
+  code: MmbImportIssueCode;
+  sheetName?: string;
+  rowNumber?: number;
+};
+
+export type MmbImportReport = {
+  sourceType: "xlsx" | "pdf";
+  totalRowsBeforeDedupe: number;
+  importedRows: number;
+  duplicateRowsSkipped: number;
+  sheetsScanned: number;
+  sheetsParsed: number;
+  issues: MmbImportIssue[];
+};
+
+export type MmbImportResult = {
+  rows: ImportedMmbRow[];
+  report: MmbImportReport;
 };
 
 const HEADER_KEYS = {
@@ -103,18 +132,22 @@ function normalizeLpStatus(value: unknown): string | undefined {
   return text || undefined;
 }
 
-function dedupeRows(rows: ImportedMmbRow[]): ImportedMmbRow[] {
+function dedupeRows(rows: ImportedMmbRow[]): { rows: ImportedMmbRow[]; duplicateRowsSkipped: number } {
   const seen = new Set<string>();
   const result: ImportedMmbRow[] = [];
+  let duplicateRowsSkipped = 0;
   for (const row of rows) {
     const nameKey = normalizeWhitespace(row.name).toLowerCase();
     const key = `${row.taNumber ?? ""}|${row.birthDate ?? ""}|${nameKey}`;
     if (!nameKey) continue;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      duplicateRowsSkipped += 1;
+      continue;
+    }
     seen.add(key);
     result.push(row);
   }
-  return result;
+  return { rows: result, duplicateRowsSkipped };
 }
 
 function findColumnIndex(headers: string[], candidates: string[]): number {
@@ -125,8 +158,11 @@ function findColumnIndex(headers: string[], candidates: string[]): number {
   return -1;
 }
 
-function parseRowsFromSheetRows(rows: unknown[][]): ImportedMmbRow[] {
-  if (rows.length === 0) return [];
+function parseRowsFromSheetRows(
+  rows: unknown[][],
+  sourceSheet?: string
+): { rows: ImportedMmbRow[]; issues: MmbImportIssue[] } {
+  if (rows.length === 0) return { rows: [], issues: [] };
   let headerRowIndex = -1;
   let headers: string[] = [];
 
@@ -144,7 +180,12 @@ function parseRowsFromSheetRows(rows: unknown[][]): ImportedMmbRow[] {
     }
   }
 
-  if (headerRowIndex < 0) return [];
+  if (headerRowIndex < 0) {
+    return {
+      rows: [],
+      issues: [{ code: "missing_required_columns" }],
+    };
+  }
 
   const nameIdx = findColumnIndex(headers, HEADER_KEYS.name);
   const firstNameIdx = findColumnIndex(headers, HEADER_KEYS.firstName);
@@ -154,16 +195,30 @@ function parseRowsFromSheetRows(rows: unknown[][]): ImportedMmbRow[] {
   const lpIdx = findColumnIndex(headers, HEADER_KEYS.lp);
 
   const parsed: ImportedMmbRow[] = [];
+  const issues: MmbImportIssue[] = [];
   for (let i = headerRowIndex + 1; i < rows.length; i += 1) {
     const row = rows[i] ?? [];
+    const rowNumber = i + 1;
     const firstNameRaw = firstNameIdx >= 0 ? normalizeWhitespace(String(row[firstNameIdx] ?? "")) : "";
     const lastNameRaw = lastNameIdx >= 0 ? normalizeWhitespace(String(row[lastNameIdx] ?? "")) : "";
     const flatNameRaw = nameIdx >= 0 ? normalizeWhitespace(String(row[nameIdx] ?? "")) : "";
     const nameRaw = flatNameRaw || normalizeWhitespace(`${firstNameRaw} ${lastNameRaw}`);
-    if (!nameRaw) continue;
+    if (!nameRaw) {
+      issues.push({ code: "row_missing_name", rowNumber });
+      continue;
+    }
 
-    const taNumber = taIdx >= 0 ? normalizeTa(String(row[taIdx] ?? "")) : undefined;
+    const taRaw = taIdx >= 0 ? normalizeWhitespace(String(row[taIdx] ?? "")) : "";
+    const taNumber = taIdx >= 0 ? normalizeTa(taRaw) : undefined;
+    if (taRaw && !taNumber) {
+      issues.push({ code: "row_invalid_ta", rowNumber });
+    }
+
+    const birthRaw = birthIdx >= 0 ? normalizeWhitespace(String(row[birthIdx] ?? "")) : "";
     const birthDate = birthIdx >= 0 ? parseBirthDate(row[birthIdx]) : undefined;
+    if (birthRaw && !birthDate) {
+      issues.push({ code: "row_invalid_birth_date", rowNumber });
+    }
     const lpStatus = lpIdx >= 0 ? normalizeLpStatus(row[lpIdx]) : undefined;
 
     parsed.push({
@@ -171,40 +226,75 @@ function parseRowsFromSheetRows(rows: unknown[][]): ImportedMmbRow[] {
       taNumber,
       birthDate: birthDate ?? deriveBirthDateFromTa(taNumber),
       lpStatus,
+      sourceSheet,
+      sourceRow: rowNumber,
     });
   }
 
-  return parsed;
+  return { rows: parsed, issues };
 }
 
-async function parseMmbExcel(file: File): Promise<ImportedMmbRow[]> {
-  const XLSX = await import("xlsx");
+async function parseMmbExcel(file: File): Promise<MmbImportResult> {
+  const ExcelJS = await import("exceljs");
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
   const collected: ImportedMmbRow[] = [];
+  const issues: MmbImportIssue[] = [];
+  let sheetsScanned = 0;
+  let sheetsParsed = 0;
 
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) continue;
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: "" }) as unknown[][];
-    collected.push(...parseRowsFromSheetRows(rows));
-  }
+  workbook.eachSheet((sheet) => {
+    sheetsScanned += 1;
+    const rows: unknown[][] = [];
+    sheet.eachRow({ includeEmpty: false }, (row) => {
+      const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+      rows.push(values as unknown[]);
+    });
+    const parsed = parseRowsFromSheetRows(rows, sheet.name);
+    if (parsed.rows.length > 0) {
+      sheetsParsed += 1;
+    }
+    for (const issue of parsed.issues) {
+      issues.push({
+        ...issue,
+        sheetName: sheet.name,
+      });
+    }
+    collected.push(...parsed.rows);
+  });
 
-  return dedupeRows(collected);
+  const deduped = dedupeRows(collected);
+  return {
+    rows: deduped.rows,
+    report: {
+      sourceType: "xlsx",
+      totalRowsBeforeDedupe: collected.length,
+      importedRows: deduped.rows.length,
+      duplicateRowsSkipped: deduped.duplicateRowsSkipped,
+      sheetsScanned,
+      sheetsParsed,
+      issues,
+    },
+  };
 }
 
-async function parseMmbPdf(file: File): Promise<ImportedMmbRow[]> {
+async function parseMmbPdf(file: File): Promise<MmbImportResult> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await pdfjsLib.getDocument({ data }).promise;
   const rows: ImportedMmbRow[] = [];
 
+  function hasText(item: unknown): item is { str?: unknown } {
+    return typeof item === "object" && item !== null && "str" in item;
+  }
+
   for (let pageNum = 1; pageNum <= doc.numPages; pageNum += 1) {
     const page = await doc.getPage(pageNum);
     const text = await page.getTextContent();
     const tokens = text.items
-      .map((item) => ("str" in item ? normalizeWhitespace(String(item.str ?? "")) : ""))
-      .filter(Boolean);
+      .map((item: unknown) => (hasText(item) ? normalizeWhitespace(String(item.str ?? "")) : ""))
+      .filter((token: string) => token.length > 0);
 
     for (let i = 0; i < tokens.length; i += 1) {
       const taNumber = normalizeTa(tokens[i]);
@@ -215,22 +305,36 @@ async function parseMmbPdf(file: File): Promise<ImportedMmbRow[]> {
       if (!firstName || !lastName) continue;
       if (firstName.length < 2 || lastName.length < 2) continue;
 
-      const lpStatus = tokens.slice(i + 1, i + 6).find((token) => /\(lp\)|\blp\b/i.test(token));
+      const lpStatus = tokens.slice(i + 1, i + 6).find((token: string) => /\(lp\)|\blp\b/i.test(token));
       const nearbyDate = tokens
         .slice(i + 1, i + 8)
-        .map((token) => parseBirthDate(token))
-        .find(Boolean);
+        .map((token: string) => parseBirthDate(token))
+        .find((value: string | undefined): value is string => Boolean(value));
 
       rows.push({
         name: normalizeWhitespace(`${firstName} ${lastName}`),
         taNumber,
         birthDate: nearbyDate ?? deriveBirthDateFromTa(taNumber),
         lpStatus: normalizeLpStatus(lpStatus),
+        sourceSheet: `PDF page ${pageNum}`,
+        sourceRow: i + 1,
       });
     }
   }
 
-  return dedupeRows(rows);
+  const deduped = dedupeRows(rows);
+  return {
+    rows: deduped.rows,
+    report: {
+      sourceType: "pdf",
+      totalRowsBeforeDedupe: rows.length,
+      importedRows: deduped.rows.length,
+      duplicateRowsSkipped: deduped.duplicateRowsSkipped,
+      sheetsScanned: 0,
+      sheetsParsed: 0,
+      issues: [],
+    },
+  };
 }
 
 export function splitImportedName(row: ImportedMmbRow): { firstName: string; lastName: string; fullName: string } {
@@ -260,9 +364,9 @@ export function birthYearFromIso(birthDate?: string): number | undefined {
   return Number.isFinite(year) ? year : undefined;
 }
 
-export async function parseMmbImportFile(file: File): Promise<ImportedMmbRow[]> {
+export async function parseMmbImportFile(file: File): Promise<MmbImportResult> {
   const lowerName = String(file.name ?? "").toLowerCase();
-  if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+  if (lowerName.endsWith(".xlsx")) {
     return parseMmbExcel(file);
   }
   if (lowerName.endsWith(".pdf")) {

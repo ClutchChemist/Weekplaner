@@ -30,7 +30,15 @@ export default defineConfig({
             return "vendor-image";
           }
 
-          return "vendor-misc";
+          if (id.includes("node_modules/pdfjs-dist")) {
+            return "vendor-pdf";
+          }
+
+          if (id.includes("node_modules/exceljs")) {
+            return "vendor-excel";
+          }
+
+          return undefined;
         },
       },
     },

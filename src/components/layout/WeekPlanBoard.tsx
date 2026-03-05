@@ -5,7 +5,7 @@ import type { CalendarEvent as Session, GroupId, Player } from "@/types";
 import { getPlayerGroup } from "@/state/playerGrouping";
 import { weekdayShortLocalized } from "@/utils/date";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
-import { Button } from "@/components/ui";
+import { Button, PlayerBadge } from "@/components/ui";
 
 function DroppableSessionShell({
   session,
@@ -28,22 +28,26 @@ function DroppableSessionShell({
   });
 
   const emphasize = isEditing || isSelected;
-  const baseBorder = emphasize ? "2px solid var(--ui-accent)" : (hasHistoryFlag ? "1px solid #ef4444" : `1px solid var(--ui-border)`);
-  const baseBg = emphasize ? "rgba(59,130,246,0.25)" : (hasHistoryFlag ? "rgba(239,68,68,0.08)" : "var(--ui-card)");
+  const baseBorder = emphasize
+    ? "2px solid var(--ui-accent)"
+    : (hasHistoryFlag ? "1px solid #ef4444" : "1px solid var(--ui-border)");
+  const baseBg = emphasize
+    ? "rgba(59,130,246,0.25)"
+    : (hasHistoryFlag ? "rgba(239,68,68,0.08)" : "var(--ui-card)");
 
   return (
     <div
       id={`session_card_${session.id}`}
       ref={setNodeRef}
       style={{
-        border: isOver ? `2px dashed var(--ui-soft)` : baseBorder,
+        border: isOver ? "2px dashed var(--ui-soft)" : baseBorder,
         borderRadius: 14,
         padding: 12,
         background: baseBg,
       }}
       onClick={(e) => {
         e.stopPropagation();
-        if (onSelect) onSelect(session);
+        onSelect?.(session);
       }}
     >
       {children}
@@ -57,6 +61,9 @@ function ParticipantCard({
   groupBg,
   groupText,
   isBirthday,
+  trainingCount,
+  activeDays,
+  weekDates,
   t,
 }: {
   player: Player;
@@ -64,6 +71,9 @@ function ParticipantCard({
   groupBg: Record<GroupId, string>;
   groupText?: Record<GroupId, string | undefined>;
   isBirthday: boolean;
+  trainingCount: number;
+  activeDays: Set<string>;
+  weekDates: string[];
   t: (k: string) => string;
 }) {
   const group = getPlayerGroup(player);
@@ -84,22 +94,33 @@ function ParticipantCard({
       }}
     >
       <div style={{ fontWeight: 900, color: text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {player.name}{isBirthday ? " 🎂" : ""}
+        {player.name}
+        {isBirthday ? " *" : ""}
       </div>
-      <button
-        onClick={onRemove}
-        style={{
-          border: "1px solid rgba(255,255,255,0.6)",
-          background: "rgba(255,255,255,0.25)",
-          color: text,
-          borderRadius: 10,
-          padding: "6px 10px",
-          cursor: "pointer",
-          fontWeight: 900,
-        }}
-      >
-        {t("remove")}
-      </button>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+        <PlayerBadge
+          player={player}
+          trainingCount={trainingCount}
+          activeDays={activeDays}
+          weekDates={weekDates}
+          textColor={text}
+          compact
+        />
+        <button
+          onClick={onRemove}
+          style={{
+            border: "1px solid rgba(255,255,255,0.6)",
+            background: "rgba(255,255,255,0.25)",
+            color: text,
+            borderRadius: 10,
+            padding: "6px 10px",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          {t("remove")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -123,6 +144,9 @@ type Props = {
   groupBg: Record<GroupId, string>;
   groupText?: Record<GroupId, string | undefined>;
   birthdayPlayerIds: Set<string>;
+  weekDates: string[];
+  trainingCounts: Map<string, number>;
+  activeDaysByPlayer: Map<string, Set<string>>;
 };
 
 export function WeekPlanBoard({
@@ -144,6 +168,9 @@ export function WeekPlanBoard({
   groupBg,
   groupText,
   birthdayPlayerIds,
+  weekDates,
+  trainingCounts,
+  activeDaysByPlayer,
 }: Props) {
   return (
     <div style={{ marginTop: 14 }}>
@@ -183,10 +210,10 @@ export function WeekPlanBoard({
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div>
                       <div style={{ fontWeight: 900, color: "var(--ui-text)" }}>
-                        {dayLabel} • {s.date}
+                        {dayLabel} / {s.date}
                       </div>
                       <div style={{ fontWeight: 800, color: "var(--ui-soft)" }}>
-                        {(s.teams ?? []).join(" / ")} — {s.time} — {s.location}
+                        {(s.teams ?? []).join(" / ")} - {s.time} - {s.location}
                       </div>
                       {s.info ? (
                         <div style={{ fontSize: 12, color: "var(--ui-muted)", marginTop: 4, fontWeight: 900 }}>
@@ -256,7 +283,9 @@ export function WeekPlanBoard({
 
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 12, color: "var(--ui-text)", fontWeight: 900 }}>
-                        {rosterHidden ? (t("excludeFromRoster") || "Aus Kaderübersicht verborgen") : `${(s.participants ?? []).length} ${t("players")}`}
+                        {rosterHidden
+                          ? (t("excludeFromRoster") || "Hidden from roster overview")
+                          : `${(s.participants ?? []).length} ${t("players")}`}
                       </div>
                       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8, flexWrap: "wrap" }}>
                         {!rosterHidden && (
@@ -274,7 +303,7 @@ export function WeekPlanBoard({
                           title={t("eventEdit")}
                           style={{ padding: "8px 10px" }}
                         >
-                          ⚙︎
+                          edit
                         </Button>
                         <Button
                           variant="outline"
@@ -289,7 +318,7 @@ export function WeekPlanBoard({
 
                   {!rosterHidden && !participantsCollapsed && (
                     <>
-                      <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
+                      <hr style={{ border: 0, borderTop: "1px solid var(--ui-border)", margin: "10px 0" }} />
 
                       <div style={{ display: "grid", gap: 6 }}>
                         {(s.participants ?? []).map((pid, idx) => {
@@ -303,6 +332,9 @@ export function WeekPlanBoard({
                               groupBg={groupBg}
                               groupText={groupText}
                               isBirthday={birthdayPlayerIds.has(pid)}
+                              trainingCount={trainingCounts.get(pid) ?? 0}
+                              activeDays={activeDaysByPlayer.get(pid) ?? new Set<string>()}
+                              weekDates={weekDates}
                               t={t}
                             />
                           );

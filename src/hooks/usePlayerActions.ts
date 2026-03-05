@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { Player, WeekPlan } from "@/types";
 import { enrichPlayersWithBirthFromDBBTA, upsertPlayerLicenseTna } from "@/state/playerMeta";
@@ -7,12 +8,41 @@ import { downloadJson } from "@/utils/json";
 import { randomId } from "@/utils/id";
 import {
   birthYearFromIso,
+  type ImportedMmbRow,
+  type MmbImportIssueCode,
+  type MmbImportIssue,
+  type MmbImportReport,
   lpStatusToFlags,
   parseMmbImportFile,
   splitImportedName,
 } from "@/utils/mmbImport";
 import { resolveEligibility } from "@/rules/eligibility";
 import { normalizeTeamCode } from "@/utils/team";
+
+export type MmbImportFeedback = {
+  kind: "success" | "error";
+  fileName: string;
+  createdCount: number;
+  updatedCount: number;
+  importedRows: number;
+  duplicateRowsSkipped: number;
+  missingColumnsSheets: string[];
+  issueDetails: Array<{
+    code: MmbImportIssueCode;
+    label: string;
+    sheetName?: string;
+    rowNumber?: number;
+  }>;
+  previewRows: Array<{
+    sheetName?: string;
+    rowNumber?: number;
+    name: string;
+    taNumber?: string;
+    birthDate?: string;
+  }>;
+  message?: string;
+  sourceType?: "xlsx" | "pdf";
+};
 
 export function usePlayerActions({
   players,
@@ -35,6 +65,50 @@ export function usePlayerActions({
   t: (k: string) => string;
   clubName: string;
 }) {
+  const [mmbImportFeedback, setMmbImportFeedback] = useState<MmbImportFeedback | null>(null);
+
+  function clearMmbImportFeedback() {
+    setMmbImportFeedback(null);
+  }
+
+  function missingColumnsSheetsFromReport(report: MmbImportReport): string[] {
+    return report.issues
+      .filter((issue) => issue.code === "missing_required_columns")
+      .map((issue) => issue.sheetName ?? "Unknown");
+  }
+
+  function issueToText(issue: MmbImportIssue): string {
+    const row = issue.rowNumber ? ` #${issue.rowNumber}` : "";
+    const sheet = issue.sheetName ? ` (${issue.sheetName})` : "";
+    if (issue.code === "missing_required_columns") return `${t("importMmbIssueMissingColumns")}${sheet}`;
+    if (issue.code === "row_missing_name") return `${t("importMmbIssueMissingName")}${row}${sheet}`;
+    if (issue.code === "row_invalid_ta") return `${t("importMmbIssueInvalidTa")}${row}${sheet}`;
+    if (issue.code === "row_invalid_birth_date") return `${t("importMmbIssueInvalidBirthDate")}${row}${sheet}`;
+    return `${issue.code}${row}${sheet}`;
+  }
+
+  function issueDetailsForFeedback(report: MmbImportReport): MmbImportFeedback["issueDetails"] {
+    return report.issues
+      .filter((issue) => issue.code !== "missing_required_columns")
+      .slice(0, 50)
+      .map((issue) => ({
+        code: issue.code,
+        label: issueToText(issue),
+        sheetName: issue.sheetName,
+        rowNumber: issue.rowNumber,
+      }));
+  }
+
+  function previewRowsForFeedback(rows: ImportedMmbRow[]): MmbImportFeedback["previewRows"] {
+    return rows.slice(0, 150).map((row) => ({
+      sheetName: row.sourceSheet,
+      rowNumber: row.sourceRow,
+      name: row.name,
+      taNumber: row.taNumber,
+      birthDate: row.birthDate,
+    }));
+  }
+
   function normalizeTeamCodes(input: string[]): string[] {
     return Array.from(
       new Set(
@@ -195,78 +269,133 @@ export function usePlayerActions({
 
   async function importMmbFile(file: File) {
     try {
-      const importedRows = await parseMmbImportFile(file);
+      clearMmbImportFeedback();
+      const parsed = await parseMmbImportFile(file);
+      const importedRows = parsed.rows;
+      const missingColumnsSheets = missingColumnsSheetsFromReport(parsed.report);
       if (!importedRows.length) {
+        setMmbImportFeedback({
+          kind: "error",
+          fileName: file.name,
+          createdCount: 0,
+          updatedCount: 0,
+          importedRows: 0,
+          duplicateRowsSkipped: parsed.report.duplicateRowsSkipped,
+          missingColumnsSheets,
+          issueDetails: issueDetailsForFeedback(parsed.report),
+          previewRows: [],
+          sourceType: parsed.report.sourceType,
+          message: t("importMmbNoRowsError"),
+        });
         setLastDropError(t("importMmbNoRowsError"));
         return;
       }
 
-      setPlayers((prev) => {
-        const next = [...prev];
+      const next = [...players];
+      let createdCount = 0;
+      let updatedCount = 0;
 
-        for (const row of importedRows) {
-          const split = splitImportedName(row);
-          const fullName = split.fullName || row.name.trim();
-          if (!fullName) continue;
+      for (const row of importedRows) {
+        const split = splitImportedName(row);
+        const fullName = split.fullName || row.name.trim();
+        if (!fullName) continue;
 
-          const idx = findExistingPlayerIndexForImport(next, {
-            taNumber: row.taNumber,
+        const idx = findExistingPlayerIndexForImport(next, {
+          taNumber: row.taNumber,
+          name: fullName,
+          birthDate: row.birthDate,
+        });
+
+        const lpFlags = lpStatusToFlags(row.lpStatus);
+        const birthYear = birthYearFromIso(row.birthDate);
+
+        if (idx >= 0) {
+          let candidate: Player = { ...next[idx] };
+          candidate = upsertDbbLicense(candidate, row.taNumber);
+          candidate = {
+            ...candidate,
             name: fullName,
-            birthDate: row.birthDate,
-          });
-
-          const lpFlags = lpStatusToFlags(row.lpStatus);
-          const birthYear = birthYearFromIso(row.birthDate);
-
-          if (idx >= 0) {
-            let candidate: Player = { ...next[idx] };
-            candidate = upsertDbbLicense(candidate, row.taNumber);
-            candidate = {
-              ...candidate,
-              name: fullName,
-              firstName: split.firstName || candidate.firstName,
-              lastName: split.lastName || candidate.lastName,
-              birthDate: row.birthDate ?? candidate.birthDate,
-              birthYear: birthYear ?? candidate.birthYear,
-              taNumber: row.taNumber ?? candidate.taNumber,
-              lpCategory: lpFlags.lpCategory ?? candidate.lpCategory,
-              isLocalPlayer:
-                lpFlags.isLocalPlayer !== undefined ? lpFlags.isLocalPlayer : candidate.isLocalPlayer,
-            };
-            next[idx] = candidate;
-            continue;
-          }
-
-          let created: Player = {
-            id: randomId("p_"),
-            name: fullName,
-            firstName: split.firstName,
-            lastName: split.lastName,
-            birthDate: row.birthDate,
-            birthYear,
-            lpCategory: lpFlags.lpCategory,
-            isLocalPlayer: lpFlags.isLocalPlayer,
-            taNumber: row.taNumber,
-            positions: [],
-            primaryYouthTeam: "",
-            primarySeniorTeam: "",
-            defaultTeams: [],
-            lizenzen: [],
-            group: "TBD",
+            firstName: split.firstName || candidate.firstName,
+            lastName: split.lastName || candidate.lastName,
+            birthDate: row.birthDate ?? candidate.birthDate,
+            birthYear: birthYear ?? candidate.birthYear,
+            taNumber: row.taNumber ?? candidate.taNumber,
+            lpCategory: lpFlags.lpCategory ?? candidate.lpCategory,
+            isLocalPlayer:
+              lpFlags.isLocalPlayer !== undefined ? lpFlags.isLocalPlayer : candidate.isLocalPlayer,
           };
-          created = upsertDbbLicense(created, row.taNumber);
-          next.push(created);
+          next[idx] = candidate;
+          updatedCount += 1;
+          continue;
         }
-        return next;
+
+        let created: Player = {
+          id: randomId("p_"),
+          name: fullName,
+          firstName: split.firstName,
+          lastName: split.lastName,
+          birthDate: row.birthDate,
+          birthYear,
+          lpCategory: lpFlags.lpCategory,
+          isLocalPlayer: lpFlags.isLocalPlayer,
+          taNumber: row.taNumber,
+          positions: [],
+          primaryYouthTeam: "",
+          primarySeniorTeam: "",
+          defaultTeams: [],
+          lizenzen: [],
+          group: "TBD",
+        };
+        created = upsertDbbLicense(created, row.taNumber);
+        next.push(created);
+        createdCount += 1;
+      }
+
+      setPlayers(next);
+      setMmbImportFeedback({
+        kind: "success",
+        fileName: file.name,
+        createdCount,
+        updatedCount,
+        importedRows: parsed.report.importedRows,
+        duplicateRowsSkipped: parsed.report.duplicateRowsSkipped,
+        missingColumnsSheets,
+        issueDetails: issueDetailsForFeedback(parsed.report),
+        previewRows: previewRowsForFeedback(importedRows),
+        sourceType: parsed.report.sourceType,
       });
       setLastDropError(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err ?? "");
       if (msg.includes("unsupported_file_type")) {
+        setMmbImportFeedback({
+          kind: "error",
+          fileName: file.name,
+          createdCount: 0,
+          updatedCount: 0,
+          importedRows: 0,
+          duplicateRowsSkipped: 0,
+          missingColumnsSheets: [],
+          issueDetails: [],
+          previewRows: [],
+          message: t("importMmbUnsupportedTypeError"),
+        });
         setLastDropError(t("importMmbUnsupportedTypeError"));
         return;
       }
       console.warn("MMB import failed", err);
+      setMmbImportFeedback({
+        kind: "error",
+        fileName: file.name,
+        createdCount: 0,
+        updatedCount: 0,
+        importedRows: 0,
+        duplicateRowsSkipped: 0,
+        missingColumnsSheets: [],
+        issueDetails: [],
+        previewRows: [],
+        message: `${t("importMmbFailedError")}: ${msg || "unknown error"}`,
+      });
       setLastDropError(`${t("importMmbFailedError")}: ${msg || "unknown error"}`);
     }
   }
@@ -311,6 +440,8 @@ export function usePlayerActions({
     deletePlayer,
     importRosterFile,
     importMmbFile,
+    mmbImportFeedback,
+    clearMmbImportFeedback,
     exportRoster,
   };
 }
