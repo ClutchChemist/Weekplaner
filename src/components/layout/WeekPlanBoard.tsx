@@ -3,7 +3,8 @@ import { useDroppable } from "@dnd-kit/core";
 import type { Lang } from "@/i18n/types";
 import type { CalendarEvent as Session, GroupId, Player } from "@/types";
 import { getPlayerGroup } from "@/state/playerGrouping";
-import { weekdayShortLocalized } from "@/utils/date";
+import { dbbDobMatchesBirthDate } from "@/state/playerMeta";
+import { minToHHMM, weekdayShortLocalized } from "@/utils/date";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
 import { Button, PlayerBadge } from "@/components/ui";
 
@@ -55,6 +56,18 @@ function DroppableSessionShell({
   );
 }
 
+function resolveTimeLabel(session: Session): string {
+  const startMin = Number(session.startMin);
+  const durationMin = Number(session.durationMin);
+  if (Number.isFinite(startMin) && Number.isFinite(durationMin)) {
+    const start = Math.max(0, Math.floor(startMin));
+    const duration = Math.max(0, Math.floor(durationMin));
+    const end = start + duration;
+    return `${minToHHMM(start)}-${minToHHMM(end)}`;
+  }
+  return String(session.time ?? "").trim();
+}
+
 function ParticipantCard({
   player,
   onRemove,
@@ -79,6 +92,8 @@ function ParticipantCard({
   const group = getPlayerGroup(player);
   const bg = normalizeYearColor(player.yearColor) ?? groupBg[group] ?? groupBg.TBD;
   const text = player.yearColor ? pickTextColor(bg) : (groupText?.[group] ?? pickTextColor(bg));
+  const isTbd = player.id === "TBD";
+  const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
 
   return (
     <div
@@ -93,9 +108,13 @@ function ParticipantCard({
         alignItems: "center",
       }}
     >
-      <div style={{ fontWeight: 900, color: text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div
+        style={{ fontWeight: 900, color: text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+        title={!taDobCheck.ok ? taDobCheck.reason : undefined}
+      >
         {player.name}
-        {isBirthday ? " *" : ""}
+        {isBirthday ? " 🎂" : ""}
+        {!taDobCheck.ok ? " ⚠️" : ""}
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
         <PlayerBadge
@@ -213,7 +232,7 @@ export function WeekPlanBoard({
                         {dayLabel} / {s.date}
                       </div>
                       <div style={{ fontWeight: 800, color: "var(--ui-soft)" }}>
-                        {(s.teams ?? []).join(" / ")} - {s.time} - {s.location}
+                        {(s.teams ?? []).join(" / ")} - {resolveTimeLabel(s)} - {s.location}
                       </div>
                       {s.info ? (
                         <div style={{ fontSize: 12, color: "var(--ui-muted)", marginTop: 4, fontWeight: 900 }}>

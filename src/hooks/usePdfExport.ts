@@ -4,14 +4,18 @@ export function usePdfExport({
   exportPages,
   clubName,
   weekId,
+  setUiError,
+  noPagesMessage,
 }: {
   exportPages: PrintPage[];
   clubName: string;
   weekId: string;
+  setUiError?: (message: string | null) => void;
+  noPagesMessage?: string;
 }) {
   async function createPlanPdf() {
     if (!exportPages || exportPages.length === 0) {
-      console.warn("No export pages available for PDF export.");
+      setUiError?.(noPagesMessage ?? "No pages available for export.");
       return;
     }
 
@@ -88,7 +92,10 @@ export function usePdfExport({
     document.body.appendChild(host);
     try {
       const pages = exportPages ?? [];
-      if (pages.length === 0) return;
+      if (pages.length === 0) {
+        setUiError?.(noPagesMessage ?? "No pages available for export.");
+        return;
+      }
       for (let i = 0; i < pages.length; i++) {
         const p = pages[i];
         const pageEl = document.createElement("div");

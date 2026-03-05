@@ -262,7 +262,6 @@ export function usePlayerActions({
       setSelectedPlayerId(cleaned[0]?.id ?? null);
       setLastDropError(null);
     } catch (err) {
-      console.warn("Roster import failed", err);
       setLastDropError(t("importJsonError"));
     }
   }
@@ -383,7 +382,6 @@ export function usePlayerActions({
         setLastDropError(t("importMmbUnsupportedTypeError"));
         return;
       }
-      console.warn("MMB import failed", err);
       setMmbImportFeedback({
         kind: "error",
         fileName: file.name,

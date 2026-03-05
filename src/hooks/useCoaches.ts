@@ -42,7 +42,6 @@ export function useCoaches(
         setLastDropError(t("importJsonError"));
       }
     } catch (err) {
-      console.warn("Staff import failed", err);
       setLastDropError(t("importJsonError"));
     }
   }

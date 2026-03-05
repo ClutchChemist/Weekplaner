@@ -658,7 +658,7 @@ export function EventPlannerModal({
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {p.name}
-                        {birthdayPlayerIds.has(p.id) ? " *" : ""}
+                        {birthdayPlayerIds.has(p.id) ? " 🎂" : ""}
                         {selectedCount > 1 ? ` (${selectedCount})` : ""}
                       </div>
                       <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>

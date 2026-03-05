@@ -36,11 +36,13 @@ type Props = {
   formWarmupMin: number;
   formTravelMin: number;
   autoTravelLoading: boolean;
+  autoTravelError?: string | null;
   setTheme: (theme: ThemeSettings) => void;
   setLeftTab: (tab: "players" | "coaches" | "locations") => void;
   setLeftEditMode: (enabled: boolean) => void;
   setOpenLocationName: (name: string | null) => void;
   setAutoTravelLoading: (loading: boolean) => void;
+  setAutoTravelError?: (message: string | null) => void;
   setFormDate: (value: string) => void;
   onToggleTeam: (team: string) => void;
   setLocationMode: (value: string) => void;
@@ -78,11 +80,13 @@ export function EventPlannerForm({
   formWarmupMin,
   formTravelMin,
   autoTravelLoading,
+  autoTravelError,
   setTheme,
   setLeftTab,
   setLeftEditMode,
   setOpenLocationName,
   setAutoTravelLoading,
+  setAutoTravelError,
   setFormDate,
   onToggleTeam,
   setLocationMode,
@@ -407,6 +411,7 @@ export function EventPlannerForm({
                           if (!canAutoTravel || autoTravelLoading) return;
 
                           setAutoTravelLoading(true);
+                          setAutoTravelError?.(null);
                           try {
                             if (homePid && destPid) {
                               const cached = getCachedTravelMinutes(homePid, destPid, theme);
@@ -423,9 +428,17 @@ export function EventPlannerForm({
                               if (homePid && destPid) {
                                 setCachedTravelMinutes(homePid, destPid, minutes, theme, setTheme);
                               }
+                            } else {
+                              setAutoTravelError?.(lang === "de" ? "Keine Route gefunden." : "No route found.");
                             }
                           } catch (err) {
-                            console.error("Auto-Reisezeit error:", err);
+                            const msg = err instanceof Error ? err.message : String(err);
+                            const isNetwork = msg.includes("fetch") || msg.includes("Failed") || msg.includes("NetworkError");
+                            setAutoTravelError?.(
+                              isNetwork
+                                ? (lang === "de" ? "Maps-Proxy nicht erreichbar (Port 5055). Proxy starten?" : "Maps proxy not reachable (port 5055). Start proxy?")
+                                : (lang === "de" ? `Fehler: ${msg}` : `Error: ${msg}`)
+                            );
                           } finally {
                             setAutoTravelLoading(false);
                           }
@@ -453,6 +466,11 @@ export function EventPlannerForm({
                           </button>
                         );
                       })()}
+                      {autoTravelError && (
+                        <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 800, marginTop: 4 }}>
+                          {autoTravelError}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

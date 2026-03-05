@@ -83,8 +83,8 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
             title={!taDobCheck.ok ? taDobCheck.reason : undefined}
           >
             {player.name}
-            {isBirthday ? " *" : ""}
-            {!taDobCheck.ok ? " !" : ""}
+            {isBirthday ? " 🎂" : ""}
+            {!taDobCheck.ok ? " ⚠️" : ""}
           </div>
           <div style={{ fontSize: 12, color: subText, fontWeight: 800 }}>
             {isTbd

@@ -444,6 +444,8 @@ export default function App() {
     exportPages,
     clubName: theme.clubName,
     weekId: plan.weekId,
+    setUiError: setLastDropError,
+    noPagesMessage: t("previewNoPages"),
   });
 
   /* ----------------------
@@ -467,35 +469,6 @@ export default function App() {
 
   const sortParticipants = useMemo(() => makeParticipantSorter(playerById), [playerById]);
   const trainingCounts = useMemo(() => computeTrainingCounts(plan), [plan]);
-  const plannedDaysByPlayer = useMemo(() => {
-    const result = new Map<string, string[]>();
-    const seenByPlayer = new Map<string, Set<string>>();
-
-    const sessions = [...scheduleSessions].sort((a, b) => {
-      const dateCompare = a.date.localeCompare(b.date);
-      if (dateCompare !== 0) return dateCompare;
-      return (a.time ?? "").localeCompare(b.time ?? "");
-    });
-
-    for (const session of sessions) {
-      const dayLabel = `${weekdayShortLocalized(session.date, lang)} ${session.date.slice(8, 10)}.${session.date.slice(5, 7)}`;
-      for (const playerId of session.participants ?? []) {
-        if (!playerId || playerId === "TBD") continue;
-
-        const seen = seenByPlayer.get(playerId) ?? new Set<string>();
-        if (seen.has(dayLabel)) continue;
-
-        seen.add(dayLabel);
-        seenByPlayer.set(playerId, seen);
-
-        const list = result.get(playerId) ?? [];
-        list.push(dayLabel);
-        result.set(playerId, list);
-      }
-    }
-
-    return result;
-  }, [scheduleSessions, lang]);
   const locationUsageMap = useLocationUsageMap(scheduleSessions);
 
   // Plan date set & birthdays for players present in the plan
@@ -1000,7 +973,6 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err);
       const full = `${t("cloudProfileDeleteError")}: ${msg}`;
       setCloudProfileStatusMsg(full);
-      console.error(full);
     });
   }, [activeProfileId, activeProfileSync.mode, cloudUserEmail, deleteActiveProfile, t]);
 
@@ -1047,6 +1019,24 @@ export default function App() {
     resetForm,
   });
   const activeDaysByPlayer = useMemo(() => computePlayerActiveDays(plan, weekDates), [plan, weekDates]);
+  const plannedDaysByPlayer = useMemo(() => {
+    const weekDateOrder = new Map<string, number>();
+    weekDates.forEach((date, index) => weekDateOrder.set(date, index));
+
+    const result = new Map<string, string[]>();
+    for (const [playerId, activeDays] of activeDaysByPlayer.entries()) {
+      const labels = Array.from(activeDays)
+        .sort((a, b) => {
+          const ai = weekDateOrder.get(a);
+          const bi = weekDateOrder.get(b);
+          if (ai != null || bi != null) return (ai ?? Number.MAX_SAFE_INTEGER) - (bi ?? Number.MAX_SAFE_INTEGER);
+          return a.localeCompare(b);
+        })
+        .map((date) => `${weekdayShortLocalized(date, lang)} ${date.slice(8, 10)}.${date.slice(5, 7)}`);
+      result.set(playerId, labels);
+    }
+    return result;
+  }, [activeDaysByPlayer, weekDates, lang]);
 
   const closeNewWeek = useCallback(() => setNewWeekOpen(false), [setNewWeekOpen]);
 
