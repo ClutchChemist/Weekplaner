@@ -76,6 +76,7 @@ import {
   isU18Only,
   makeParticipantSorter,
 } from "./state/playerGrouping";
+import { YEAR_GROUPS } from "./config";
 import { dbbDobMatchesBirthDate, primaryTna } from "./state/playerMeta";
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
 import {
@@ -701,9 +702,7 @@ export default function App() {
   const [quickRosterOpen, setQuickRosterOpen] = useState(false);
   const [quickRosterSearch, setQuickRosterSearch] = useState("");
   const [formParticipants, setFormParticipants] = useState<string[]>([]);
-  const [quickRosterTab, setQuickRosterTab] = useState<
-    "2007" | "2008" | "2009" | "HOL" | "U18" | "RLH" | "NBBL" | "TBD"
-  >("2007");
+  const [quickRosterTab, setQuickRosterTab] = useState<string>(YEAR_GROUPS[0]);
 
   function handleRecallLocationEdit() {
     const current = currentLocationValue().trim();
@@ -864,6 +863,57 @@ export default function App() {
     return { ...player, lizenzen: list };
   }
 
+  const quickRosterTabs = useMemo(() => {
+    const yearTabs = YEAR_GROUPS.map((year) => ({
+      id: year,
+      label: t(`rosterQuickPickerTabYear${year}`),
+    }));
+
+    const dynamicTeamCodes = Array.from(
+      new Set(
+        players
+          .flatMap((p) => p.defaultTeams ?? [])
+          .map((code) => String(code ?? "").trim().toUpperCase())
+          .filter(Boolean)
+          .map((code) => (code === "RLH" ? "1RLH" : code))
+      )
+    );
+
+    const teamCodes = Array.from(
+      new Set(
+        [...TEAM_OPTIONS, ...dynamicTeamCodes].map((code) =>
+          String(code ?? "")
+            .trim()
+            .toUpperCase()
+        )
+      )
+    );
+
+    const teamLabelByCode: Record<string, string> = {
+      HOL: t("rosterQuickPickerTabHol"),
+      U18: t("rosterQuickPickerTabU18"),
+      NBBL: t("rosterQuickPickerTabNbbl"),
+      "1RLH": t("rosterQuickPickerTabRlh"),
+    };
+
+    const teamTabs = teamCodes.map((code) => ({
+      id: code,
+      label: teamLabelByCode[code] ?? code,
+    }));
+
+    return [
+      ...yearTabs,
+      ...teamTabs,
+      { id: "TBD", label: t("rosterQuickPickerTabTbd") },
+    ];
+  }, [players, t]);
+
+  useEffect(() => {
+    const tabExists = quickRosterTabs.some((tab) => tab.id === quickRosterTab);
+    if (tabExists) return;
+    setQuickRosterTab(quickRosterTabs[0]?.id ?? YEAR_GROUPS[0]);
+  }, [quickRosterTab, quickRosterTabs]);
+
   const quickRosterPlayers = useMemo(() => {
     const q = quickRosterSearch.trim().toLowerCase();
     const inSearch = (p: Player) => {
@@ -883,20 +933,15 @@ export default function App() {
     };
 
     const inTab = (p: Player) => {
-      const g = getPlayerGroup(p);
-      const defaults = p.defaultTeams ?? [];
-      const youth = (p.primaryYouthTeam ?? "").toUpperCase();
-      const senior = (p.primarySeniorTeam ?? "").toUpperCase();
-
-      if (quickRosterTab === "2007" || quickRosterTab === "2008" || quickRosterTab === "2009") {
+      if (YEAR_GROUPS.includes(quickRosterTab as (typeof YEAR_GROUPS)[number])) {
+        const g = getPlayerGroup(p);
         return g === quickRosterTab;
       }
-      if (quickRosterTab === "HOL") return senior === "HOL" || defaults.includes("HOL");
-      if (quickRosterTab === "U18") return youth === "U18" || defaults.includes("U18");
-      if (quickRosterTab === "RLH") return senior === "1RLH" || defaults.includes("1RLH");
-      if (quickRosterTab === "NBBL") return youth === "NBBL" || defaults.includes("NBBL");
       if (quickRosterTab === "TBD") return p.id === "TBD";
-      return false;
+      const defaults = (p.defaultTeams ?? [])
+        .map((code) => String(code ?? "").trim().toUpperCase())
+        .map((code) => (code === "RLH" ? "1RLH" : code));
+      return defaults.includes(String(quickRosterTab ?? "").toUpperCase());
     };
 
     return players
@@ -1203,7 +1248,7 @@ export default function App() {
     return playerById.get(selectedPlayerId) ?? null;
   }, [selectedPlayerId, playerById]);
 
-  const { updatePlayer, addNewPlayer, deletePlayer, importRosterFile, exportRoster } = usePlayerActions({
+  const { updatePlayer, addNewPlayer, deletePlayer, importRosterFile, importMmbFile, exportRoster } = usePlayerActions({
     players,
     setPlayers,
     rosterMeta,
@@ -1212,9 +1257,11 @@ export default function App() {
     setSelectedPlayerId,
     setLastDropError,
     t,
+    clubName: theme.clubName,
   });
 
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
+  const mmbFileRef = useRef<HTMLInputElement | null>(null);
 
   /* ============================================================
      New Week
@@ -2028,22 +2075,13 @@ export default function App() {
                 >
                   <div style={{ display: "grid", gap: 10 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {[
-                        { id: "2007", label: t("rosterQuickPickerTabYear2007") },
-                        { id: "2008", label: t("rosterQuickPickerTabYear2008") },
-                        { id: "2009", label: t("rosterQuickPickerTabYear2009") },
-                        { id: "HOL", label: t("rosterQuickPickerTabHol") },
-                        { id: "U18", label: t("rosterQuickPickerTabU18") },
-                        { id: "RLH", label: t("rosterQuickPickerTabRlh") },
-                        { id: "NBBL", label: t("rosterQuickPickerTabNbbl") },
-                        { id: "TBD", label: t("rosterQuickPickerTabTbd") },
-                      ].map((tab) => {
+                      {quickRosterTabs.map((tab) => {
                         const active = quickRosterTab === tab.id;
                         return (
                           <button
                             key={tab.id}
                             type="button"
-                            onClick={() => setQuickRosterTab(tab.id as typeof quickRosterTab)}
+                            onClick={() => setQuickRosterTab(tab.id)}
                             style={{
                               padding: "8px 10px",
                               borderRadius: 999,
@@ -2081,13 +2119,14 @@ export default function App() {
                         const selectedCount = countInFormParticipants(p.id);
                         const isSelected = selectedCount > 0;
                         const group = getPlayerGroup(p);
-                        const teamsLabel = [
-                          p.primaryYouthTeam,
-                          p.primarySeniorTeam,
-                          ...(p.defaultTeams ?? []),
-                        ]
-                          .filter(Boolean)
-                          .join(" · ");
+                        const teamsLabel = Array.from(
+                          new Set(
+                            (p.defaultTeams ?? [])
+                              .map((code) => String(code ?? "").trim().toUpperCase())
+                              .filter(Boolean)
+                              .map((code) => (code === "1RLH" ? "RLH" : code))
+                          )
+                        ).join(" · ");
 
                         return (
                           <div
@@ -2384,6 +2423,13 @@ export default function App() {
                   >
                     {t("import")} roster.json
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => mmbFileRef.current?.click()}
+                    style={{ padding: "8px 10px" }}
+                  >
+                    {t("import")} MMB (Excel/PDF)
+                  </Button>
                   <input
                     ref={rosterFileRef}
                     type="file"
@@ -2395,10 +2441,24 @@ export default function App() {
                       e.currentTarget.value = "";
                     }}
                   />
+                  <input
+                    ref={mmbFileRef}
+                    type="file"
+                    accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void importMmbFile(f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
                 </div>
 
                 <div style={{ marginTop: 10, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
                   {t("rosterHintTbd")}
+                </div>
+                <div style={{ marginTop: 6, color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                  {t("importMmbHint")}
                 </div>
               </div>
 
