@@ -4,6 +4,7 @@ import { addMinutesToHHMM, splitTimeRange, weekdayShortDE } from "../utils/date"
 import { isGameInfo } from "../utils/session";
 import type { CalendarEvent as Session, Player, WeekPlan } from "../state/types";
 import { getLicenseTnaByType, getRequiredTaTypeForTeams } from "@/utils/team";
+import { upsertPlayerLicenseTna } from "../state/playerMeta";
 
 export type DndPlanHandlers = {
 	onDragStart: (event: DragStartEvent) => void;
@@ -41,24 +42,6 @@ export function useDndPlan(params: {
 		confirm,
 		prompt,
 	} = params;
-
-	function requiresTaForTeams(teams: string[]): boolean {
-		return getRequiredTaTypeForTeams(teams) !== null;
-	}
-
-	function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {
-		const wanted = String(typ ?? "").trim().toUpperCase();
-		const nextTna = String(tna ?? "").trim();
-		const list = [...(player.lizenzen ?? [])];
-		const idx = list.findIndex((x) => String(x.typ ?? "").trim().toUpperCase() === wanted);
-		const entry = { typ: wanted, tna: nextTna, verein: list[idx]?.verein ?? "" };
-		if (idx >= 0) {
-			list[idx] = { ...list[idx], ...entry };
-		} else {
-			list.push(entry);
-		}
-		return { ...player, lizenzen: list };
-	}
 
 	function addPlayerToSession(sessionId: string, playerId: string) {
 		setWeekPlan((prev) => ({
@@ -115,7 +98,7 @@ export function useDndPlan(params: {
 			}
 
 			const targetIsGame = isGameSession(target);
-			if (playerId !== "TBD" && targetIsGame && requiresTaForTeams(target.teams)) {
+			if (playerId !== "TBD" && targetIsGame && getRequiredTaTypeForTeams(target.teams) !== null) {
 				const player = players.find((p) => p.id === playerId);
 				const requiredTaType = getRequiredTaTypeForTeams(target.teams);
 				if (player && requiredTaType && !getLicenseTnaByType(player, requiredTaType)) {

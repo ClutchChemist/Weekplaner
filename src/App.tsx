@@ -23,7 +23,7 @@ import type {
   WeekPlan,
 } from "@/types";
 import { makeT, makeTF } from "./i18n/translate";
-import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
+import { Button, Input, MinutePicker, Modal, segBtn, Select } from "@/components/ui";
 import {
   AppTopBar,
   CalendarPane,
@@ -80,6 +80,7 @@ import {
   isHolOnly,
   isU18Only,
   makeParticipantSorter,
+  fallbackYearGroupsByFormula,
 } from "./state/playerGrouping";
 import { YEAR_GROUPS } from "./config";
 import { dbbDobMatchesBirthDate, primaryTna, upsertPlayerLicenseTna } from "./state/playerMeta";
@@ -127,110 +128,17 @@ import weekMasterRaw from "./data/weekplan_master.json";
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
 
-function fallbackYearGroupsByFormula(referenceDate: Date = new Date()): string[] {
-  const year = referenceDate.getFullYear();
-  const month = referenceDate.getMonth() + 1;
-  const day = referenceDate.getDate();
-  const seasonStartYear = month > 8 || (month === 8 && day >= 1) ? year : year - 1;
-  return [seasonStartYear - 18, seasonStartYear - 17, seasonStartYear - 16].map(String);
+/** Strips auto-appended meeting-time suffix from opponent info strings */
+const AUTO_MEETING_SUFFIX_RE = /\s*\|\s*(Treffpunkt|Meeting point):\s*\d{2}:\d{2}\s*$/i;
+function stripAutoMeetingSuffix(info: string): string {
+  return String(info ?? "").replace(AUTO_MEETING_SUFFIX_RE, "").trim();
 }
-
-function MinutePicker({
-  value,
-  onChange,
-  presets,
-  allowZero = true,
-  placeholder = "Minuten",
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  presets: number[];
-  allowZero?: boolean;
-  placeholder?: string;
-}) {
-  const items = allowZero ? [0, ...presets] : presets;
-
-  return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      {items.map((m) => {
-        const active = value === m;
-        return (
-          <button
-            key={m}
-            type="button"
-            onClick={() => onChange(m)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 999,
-              border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
-              background: active ? "rgba(59,130,246,.18)" : "transparent",
-              color: "var(--ui-text)",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            {m}
-          </button>
-        );
-      })}
-
-      <Input
-        type="number"
-        value={String(value)}
-        onChange={(v) => onChange(Math.max(allowZero ? 0 : 1, Math.floor(Number(v || "0"))))}
-        placeholder={placeholder}
-        style={{ maxWidth: 80 }}
-      />
-    </div>
-  );
-}
-
-
-/* ============================================================
-   LOCATIONS PANEL
-   ============================================================ */
-
-/* Locations UI moved to src/components/locations/LeftLocationsView.tsx */
-
-
-/* ============================================================
-   SETTINGS MODAL (Theme)
-   ============================================================ */
-
-/* ============================================================
-   DND COMPONENTS
-   ============================================================ */
-
-/* ============================================================
-   Optional right pane: Calendar week view (DnD)
-   ============================================================ */
-
-/* ============================================================
-   PRINT VIEW → src/components/layout/PrintView.tsx
-   ============================================================ */
-
-/* ============================================================
-   COACHES: persistence + defaults
-   ============================================================ */
-
-/* ============================================================
-   NEW WEEK MODAL
-   ============================================================ */
-
-/* ============================================================
-   GOOGLE MAPS HELPERS
-   ============================================================ */
 
 /* ============================================================
    APP
    ============================================================ */
 
 export default function App() {
-  const AUTO_MEETING_SUFFIX_RE = /\s*\|\s*(Treffpunkt|Meeting point):\s*\d{2}:\d{2}\s*$/i;
-
-  function stripAutoMeetingSuffix(info: string): string {
-    return String(info ?? "").replace(AUTO_MEETING_SUFFIX_RE, "").trim();
-  }
 
   /* ============================================================
     STATE (useState...)
@@ -1764,7 +1672,7 @@ export default function App() {
                       <span style={{ fontSize: 13, fontWeight: 900 }}>{t("excludeFromRoster") || "Aus Kaderübersicht verbergen"}</span>
                     </label>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 13, fontWeight: 900 }}>Zeilenfarbe im Zeitplan:</span>
+                      <span style={{ fontSize: 13, fontWeight: 900 }}>{t("rowColorLabel")}:</span>
                       <input
                         type="color"
                         value={formRowColor || "#ffffff"}
@@ -1778,7 +1686,7 @@ export default function App() {
                           onClick={() => setFormRowColor("")}
                           style={{ fontSize: 11, color: "var(--ui-muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
                         >
-                          Farbe entfernen ✕
+                          {t("rowColorRemove")}
                         </button>
                       ) : null}
                     </div>

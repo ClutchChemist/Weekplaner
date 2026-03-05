@@ -6,10 +6,10 @@ export const GROUPS: Array<{
   label: string;
   order: number;
 }> = [
-  ...YEAR_GROUPS.map((year, idx) => ({ id: year, label: year, order: idx })),
-  { id: "Herren", label: "Herren", order: YEAR_GROUPS.length },
-  { id: "TBD", label: "TBD", order: YEAR_GROUPS.length + 1 },
-];
+    ...YEAR_GROUPS.map((year, idx) => ({ id: year, label: year, order: idx })),
+    { id: "Herren", label: "Herren", order: YEAR_GROUPS.length },
+    { id: "TBD", label: "TBD", order: YEAR_GROUPS.length + 1 },
+  ];
 
 const GROUP_ORDER = new Map<GroupId, number>(GROUPS.map((g) => [g.id, g.order]));
 
@@ -83,3 +83,14 @@ export function makeParticipantSorter(playerById: Map<string, Player>) {
   };
 }
 
+/**
+ * Computes the three active youth year groups based on the current season.
+ * Season starts on August 1st. Falls back to dynamic calculation when YEAR_GROUPS is empty.
+ */
+export function fallbackYearGroupsByFormula(referenceDate: Date = new Date()): string[] {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth() + 1;
+  const day = referenceDate.getDate();
+  const seasonStartYear = month > 8 || (month === 8 && day >= 1) ? year : year - 1;
+  return [seasonStartYear - 18, seasonStartYear - 17, seasonStartYear - 16].map(String);
+}
