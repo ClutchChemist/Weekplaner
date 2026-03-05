@@ -198,9 +198,10 @@ function renderKaderColumnLayoutHtml(opts: {
   sessions: Session[];
   players: Player[];
   groupColors: Record<string, string>;
+  groupTextColors?: Record<string, string>;
   compactLevel?: 0 | 1 | 2;
 }): string {
-  const { sessions, players, groupColors, compactLevel = 0 } = opts;
+  const { sessions, players, groupColors, groupTextColors = {}, compactLevel = 0 } = opts;
 
   if (sessions.length === 0) return "";
   const headerFont = compactLevel >= 2 ? 9 : compactLevel === 1 ? 10 : 11;
@@ -244,7 +245,7 @@ function renderKaderColumnLayoutHtml(opts: {
         if (!p) return `<td style="border:1px solid #ddd; padding:${padY}px ${padX}px; height:${rowGap}px;"></td>`;
         const group = getPlayerGroup(p);
         const bg = normalizeYearColor(p.yearColor) ?? groupColors[group] ?? "#eee";
-        const fg = pickTextColor(bg);
+        const fg = p.yearColor ? pickTextColor(bg) : (groupTextColors[group] || pickTextColor(bg));
         const name = formatPlayerShortName(p);
         const nrColor = fg === "#fff" ? "rgba(255,255,255,0.82)" : "rgba(0,0,0,0.62)";
         return `<td style="border:1px solid #ddd; padding:${padY}px ${padX}px; background:${escapeHtml(bg)}; color:${escapeHtml(fg)}; font-size:${cellFont}px; white-space:nowrap; line-height:1.1; height:${rowGap}px; -webkit-print-color-adjust:exact; print-color-adjust:exact; forced-color-adjust:none;"><span style="display:inline-block; min-width:${idxMinWidth}px; margin-right:${idxMargin}px; font-size:${idxFont}px; font-weight:800; color:${nrColor}; text-align:right;">${i + 1}</span>${escapeHtml(name)}</td>`;
@@ -477,7 +478,10 @@ export function renderRostersOnlyHtml(opts: {
   const blocks = sessions
     .map((s) => {
       const label = `${s.day} · ${s.date} · ${s.time} · ${s.location} · ${s.teams.join(", ")} ${s.info ? `· ${s.info}` : ""}`;
-      const assigned = players.filter((p) => s.participants?.includes(p.id));
+      const playerById = new Map(players.map((p) => [p.id, p] as const));
+      const assigned = (s.participants ?? [])
+        .map((pid) => playerById.get(pid))
+        .filter((p): p is Player => Boolean(p));
       if (assigned.length === 0) return `<div style="color:#999; font-size:12px;">${t.none}</div>`;
 
       const sorted = assigned
@@ -532,9 +536,10 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   groupColors?: Record<string, string>;
+  groupTextColors?: Record<string, string>;
   kwText?: string;
 }): string {
-  const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {}, kwText } = opts;
+  const { sessions, players, clubName, locale, locations, logoUrl, groupColors = {}, groupTextColors = {}, kwText } = opts;
   const scheduleSessions = sessions;
 
   const rosterSessions = scheduleSessions.filter((s) => !s.excludeFromRoster);
@@ -566,8 +571,8 @@ function renderWeekSummaryAndRostersFirstPageHtml(opts: {
     ? { rosterTitle: "Kader-Listen", trainingMoFr: "Training (Mo-Fr)", gamesWeekends: "Spiele / Weekend" }
     : { rosterTitle: "Roster lists", trainingMoFr: "Practice (Mon-Fri)", gamesWeekends: "Games / Weekend" };
 
-  const kaderColumnsTraining = renderKaderColumnLayoutHtml({ sessions: trainingRoster, players, groupColors, compactLevel });
-  const kaderColumnsGames = renderKaderColumnLayoutHtml({ sessions: gameRoster, players, groupColors, compactLevel });
+  const kaderColumnsTraining = renderKaderColumnLayoutHtml({ sessions: trainingRoster, players, groupColors, groupTextColors, compactLevel });
+  const kaderColumnsGames = renderKaderColumnLayoutHtml({ sessions: gameRoster, players, groupColors, groupTextColors, compactLevel });
   const titleSize = compactLevel >= 2 ? 11 : compactLevel === 1 ? 12 : 13;
   const blockGap = compactLevel >= 2 ? 8 : 14;
   const splitGap = compactLevel >= 2 ? 8 : 14;
@@ -606,7 +611,10 @@ function renderGameSheetHtml(opts: {
   const teamStr = game.teams.join(" · ");
   const opponent = (game.info || "").replace("vs", "vs.").replace("@", "@");
 
-  const assignedPlayers = players.filter((p) => game.participants?.includes(p.id));
+  const playerById = new Map(players.map((p) => [p.id, p] as const));
+  const assignedPlayers = (game.participants ?? [])
+    .map((pid) => playerById.get(pid))
+    .filter((p): p is Player => Boolean(p));
 
   const firstTeam = game.teams[0] || "";
   const sorted = assignedPlayers
@@ -718,9 +726,10 @@ export function buildPrintPages(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   groupColors?: Record<string, string>;
+  groupTextColors?: Record<string, string>;
   kwText?: string;
 }): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors, kwText } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors, groupTextColors, kwText } = opts;
   const pages: PrintPage[] = [];
 
   const firstPageHtml = renderWeekSummaryAndRostersFirstPageHtml({
@@ -731,6 +740,7 @@ export function buildPrintPages(opts: {
     locations,
     logoUrl,
     groupColors,
+    groupTextColors,
     kwText,
   });
   pages.push({
@@ -758,15 +768,16 @@ export function buildPreviewPages(opts: {
   locations: ThemeLocations;
   logoUrl?: string;
   groupColors?: Record<string, string>;
+  groupTextColors?: Record<string, string>;
   kwText?: string;
 }): PrintPage[] {
-  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors, kwText } = opts;
+  const { sessions, players, coaches, clubName, locale, locations, logoUrl, groupColors, groupTextColors, kwText } = opts;
 
   const pages: PrintPage[] = [];
 
   pages.push({
     type: "overview",
-    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl, groupColors, kwText }),
+    html: renderWeekSummaryAndRostersFirstPageHtml({ sessions, players, clubName, locale, locations, logoUrl, groupColors, groupTextColors, kwText }),
     title: locale === "de" ? "Trainingswoche + Kaderlisten" : "Training week + roster lists",
   });
 

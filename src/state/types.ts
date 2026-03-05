@@ -124,7 +124,7 @@ export type ThemeLocations = {
 
 export type ThemeSettings = {
   ui: UiTheme;
-  groups: Record<GroupId, { bg: string }>;
+  groups: Record<GroupId, { bg: string; fg?: string }>;
   locations?: ThemeLocations;
   clubName: string;
   locale: Lang;

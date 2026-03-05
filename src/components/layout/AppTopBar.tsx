@@ -16,6 +16,8 @@ type Props = {
   onOpenProfiles: () => void;
   onToggleProfileMenu: () => void;
   onSelectProfileFromMenu: (id: string) => void;
+  activeProfileSelected: boolean;
+  onOpenWeekArchive: () => void;
   eventEditorOpen: boolean;
   onToggleEventEditor: () => void;
   onOpenNewWeek: () => void;
@@ -37,6 +39,8 @@ export function AppTopBar({
   onOpenProfiles,
   onToggleProfileMenu,
   onSelectProfileFromMenu,
+  activeProfileSelected,
+  onOpenWeekArchive,
   eventEditorOpen,
   onToggleEventEditor,
   onOpenNewWeek,
@@ -145,6 +149,23 @@ export function AppTopBar({
             </div>
           )}
         </div>
+
+        <Button
+          className="touchBtn"
+          variant="outline"
+          onClick={onOpenWeekArchive}
+          disabled={!activeProfileSelected}
+          title={!activeProfileSelected ? t("cloudProfilePickFirst") : t("weekArchiveButton")}
+          style={{
+            padding: "8px 10px",
+            maxWidth: 200,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {t("weekArchiveButton")}
+        </Button>
       </div>
 
       <div className="topBarRight">

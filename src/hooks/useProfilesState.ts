@@ -23,6 +23,7 @@ type Args = {
   locations: NonNullable<ThemeSettings["locations"]>;
   clubLogoStorageKey: string;
   clubLogoMaxBytes: number;
+  buildNewProfilePayload: () => ProfilePayload;
   onApplyProfileData: (payload: ProfilePayload) => void;
 };
 
@@ -37,6 +38,7 @@ export function useProfilesState({
   locations,
   clubLogoStorageKey,
   clubLogoMaxBytes,
+  buildNewProfilePayload,
   onApplyProfileData,
 }: Args) {
   const [profiles, setProfiles] = useState<SavedProfile[]>(() =>
@@ -133,14 +135,14 @@ export function useProfilesState({
     const entry: SavedProfile = {
       id,
       name,
-      payload: currentProfilePayload,
+      payload: buildNewProfilePayload(),
       sync: { ...DEFAULT_PROFILE_SYNC },
     };
     setProfiles((prev) => [...prev, entry]);
     setProfileHydratedId(id);
     setActiveProfileId(id);
     setProfileNameInput("");
-  }, [profileNameInput, currentProfilePayload]);
+  }, [profileNameInput, buildNewProfilePayload]);
 
   const updateActiveProfile = useCallback(() => {
     if (!activeProfileId) return;

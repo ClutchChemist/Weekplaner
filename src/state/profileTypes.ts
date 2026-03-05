@@ -43,7 +43,6 @@ export type CloudSnapshotV1 = {
 
 export const PROFILES_STORAGE_KEY = "ubc_planner_profiles_v1";
 export const ACTIVE_PROFILE_STORAGE_KEY = "ubc_planner_active_profile_v1";
-export const CLOUD_AUTO_SYNC_KEY = "ubc_cloud_auto_sync_v1";
 
 export const DEFAULT_PROFILE_SYNC: ProfileSyncSettings = {
   mode: "local",

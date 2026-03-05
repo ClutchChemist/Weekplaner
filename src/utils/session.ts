@@ -11,6 +11,11 @@ export function normalizeOpponentInfo(raw: string) {
   const s = (raw ?? "").trim();
   if (!s) return "";
   const lower = s.toLowerCase();
+  if (lower === "at") return "@";
+  if (lower.startsWith("at ")) {
+    const rest = s.slice(2).trim();
+    return rest ? `@ ${rest}` : "@";
+  }
   if (lower.startsWith("@")) {
     const rest = s.slice(1).trim();
     return rest ? `@ ${rest}` : "@";
@@ -24,7 +29,7 @@ export function normalizeOpponentInfo(raw: string) {
 
 export function isGameInfo(info: string | null | undefined): boolean {
   const t = String(info ?? "").trim().toLowerCase();
-  return t.startsWith("vs") || t.startsWith("@") || t.includes(" vs ") || t.includes(" @ ");
+  return t.startsWith("vs") || t.startsWith("@") || t.startsWith("at ") || t.includes(" vs ") || t.includes(" @ ") || t.includes(" at ");
 }
 
 export function isGameSession(s: Session): boolean {

@@ -9,6 +9,7 @@ type Props = {
   player: Player;
   trainingCount: number;
   groupBg: Record<GroupId, string>;
+  groupText?: Record<GroupId, string | undefined>;
   isBirthday: boolean;
   t: (k: string) => string;
 };
@@ -17,6 +18,7 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
   player,
   trainingCount,
   groupBg,
+  groupText,
   isBirthday,
   t,
 }: Props) {
@@ -37,7 +39,7 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
 
   const group = getPlayerGroup(player);
   const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
-  const text = pickTextColor(bg);
+  const text = player.yearColor ? pickTextColor(bg) : (groupText?.[group] ?? pickTextColor(bg));
   const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
 
   const pos = (player.positions ?? []).join("/") || "—";

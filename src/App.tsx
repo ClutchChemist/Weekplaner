@@ -25,6 +25,7 @@ import type {
 import { makeT, makeTF } from "./i18n/translate";
 import { Button, Input, Modal, segBtn, Select } from "@/components/ui";
 import {
+  AppTopBar,
   CalendarPane,
   LeftSidebar,
   PrintView,
@@ -88,6 +89,7 @@ import { DEFAULT_THEME } from "./state/themeDefaults";
 import { applyThemeToCssVars } from "./themes/cssVars";
 import {
   addMinutesToHHMM,
+  isoWeekMonday,
   kwLabelFromPlan,
   splitTimeRange,
   weekdayShortLocalized,
@@ -300,6 +302,16 @@ export default function App() {
     } as Record<GroupId, string>;
   }, [theme]);
 
+  const groupText = useMemo(() => {
+    return {
+      "2007": theme.groups["2007"].fg,
+      "2008": theme.groups["2008"].fg,
+      "2009": theme.groups["2009"].fg,
+      Herren: theme.groups["Herren"].fg,
+      TBD: theme.groups["TBD"].fg,
+    } as Record<GroupId, string | undefined>;
+  }, [theme]);
+
   // Initialize i18n early so it's available for all functions
   const lang: Lang = (theme.locale ?? "de") as Lang;
   const t = useMemo(() => makeT(lang), [lang]);
@@ -417,6 +429,33 @@ export default function App() {
     }
   }, [setCoaches, setPlan, setTheme]);
 
+  const buildNewProfilePayload = useCallback<() => ProfilePayload>(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const emptyTheme: ThemeSettings = {
+      ...DEFAULT_THEME,
+      ui: { ...theme.ui },
+      locale: theme.locale,
+      clubName: theme.clubName,
+      locations: {},
+    };
+
+    return {
+      rosterMeta: {
+        season: normalizedRoster.season,
+        ageGroups: normalizedRoster.ageGroups,
+      },
+      players: [],
+      coaches: [],
+      locations: {},
+      clubLogoDataUrl: null,
+      theme: emptyTheme,
+      plan: {
+        weekId: `WEEK_${isoWeekMonday(todayIso)}`,
+        sessions: [],
+      },
+    };
+  }, [normalizedRoster.ageGroups, normalizedRoster.season, theme.clubName, theme.locale, theme.ui]);
+
   const {
     profiles,
     setProfiles,
@@ -452,6 +491,7 @@ export default function App() {
     locations: (theme.locations ?? DEFAULT_THEME.locations!) as NonNullable<ThemeSettings["locations"]>,
     clubLogoStorageKey: CLUB_LOGO_STORAGE_KEY,
     clubLogoMaxBytes: CLUB_LOGO_MAX_BYTES,
+    buildNewProfilePayload,
     onApplyProfileData: applyProfileData,
   });
 
@@ -496,6 +536,7 @@ export default function App() {
       locations: theme.locations ?? DEFAULT_THEME.locations!,
       logoUrl: clubLogoDataUrl ?? undefined,
       groupColors: theme.groups ? Object.fromEntries(Object.entries(theme.groups).map(([k, v]) => [k, v.bg])) : undefined,
+      groupTextColors: theme.groups ? Object.fromEntries(Object.entries(theme.groups).map(([k, v]) => [k, v.fg ?? ""])) : undefined,
       kwText: kwLabelFromPlan(plan),
     });
   }, [scheduleSessions, plan, players, coaches, theme, clubLogoDataUrl]);
@@ -503,6 +544,9 @@ export default function App() {
   const previewPages = useMemo(() => {
     const groupColors = Object.fromEntries(
       Object.entries(theme.groups).map(([k, v]) => [k, v.bg])
+    );
+    const groupTextColors = Object.fromEntries(
+      Object.entries(theme.groups).map(([k, v]) => [k, v.fg ?? ""])
     );
     return buildPreviewPages({
       sessions: scheduleSessions,
@@ -513,6 +557,7 @@ export default function App() {
       locations: theme.locations ?? DEFAULT_THEME.locations!,
       logoUrl: clubLogoDataUrl ?? undefined,
       groupColors,
+      groupTextColors,
       kwText: kwLabelFromPlan(plan),
     });
   }, [scheduleSessions, plan, players, coaches, theme, clubLogoDataUrl]);
@@ -594,12 +639,17 @@ export default function App() {
   /* ============================================================
      DnD: add/remove participants
      ============================================================ */
-  function removePlayerFromSession(sessionId: string, playerId: string) {
+  function removePlayerFromSession(sessionId: string, playerId: string, occurrenceIndex?: number) {
     setPlan((prev) => ({
       ...prev,
       sessions: prev.sessions.map((s) => {
         if (s.id !== sessionId) return s;
-        const next = (s.participants ?? []).filter((id) => id !== playerId).sort(sortParticipants);
+        const base = [...(s.participants ?? [])];
+        const next =
+          typeof occurrenceIndex === "number"
+            ? base.filter((id, idx) => !(id === playerId && idx === occurrenceIndex))
+            : base.filter((id) => id !== playerId);
+        next.sort(sortParticipants);
         return { ...s, participants: next };
       }),
     }));
@@ -648,6 +698,12 @@ export default function App() {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const opponentInputRef = useRef<HTMLInputElement | null>(null);
   const editorTopRef = useRef<HTMLDivElement | null>(null);
+  const [quickRosterOpen, setQuickRosterOpen] = useState(false);
+  const [quickRosterSearch, setQuickRosterSearch] = useState("");
+  const [formParticipants, setFormParticipants] = useState<string[]>([]);
+  const [quickRosterTab, setQuickRosterTab] = useState<
+    "2007" | "2008" | "2009" | "HOL" | "U18" | "RLH" | "NBBL" | "TBD"
+  >("2007");
 
   function handleRecallLocationEdit() {
     const current = currentLocationValue().trim();
@@ -668,16 +724,21 @@ export default function App() {
 
     if (editingSessionId) {
       const old = plan.sessions.find((s) => s.id === editingSessionId);
-      if (old) upsertSessionInPlan(buildSessionFromForm(old.id, old.participants ?? []));
+      if (old) upsertSessionInPlan(buildSessionFromForm(old.id, formParticipants));
     } else {
-      upsertSessionInPlan(buildSessionFromForm());
+      upsertSessionInPlan(buildSessionFromForm(undefined, formParticipants));
     }
 
     resetForm();
+    setFormParticipants([]);
+    setQuickRosterOpen(false);
+    setQuickRosterSearch("");
   }
 
   function onEditSession(s: Session) {
     setEventEditorOpen(true);
+    setQuickRosterOpen(false);
+    setQuickRosterSearch("");
     setEditingSessionId(s.id);
     setFormDate(s.date);
     setFormTeams(Array.isArray(s.teams) ? s.teams : []);
@@ -713,6 +774,7 @@ export default function App() {
     }
 
     setFormOpponent(stripAutoMeetingSuffix(s.info ?? ""));
+    setFormParticipants([...(s.participants ?? [])]);
 
     const game = isGameInfo(s.info ?? "");
     setFormWarmupMin(game ? Number(s.warmupMin ?? 30) : 30);
@@ -727,7 +789,12 @@ export default function App() {
     if (!(await askConfirm(t("delete"), tf("confirmDeleteEvent", { label })))) return;
 
     removeSessionFromPlan(sessionId);
-    if (editingSessionId === sessionId) resetForm();
+    if (editingSessionId === sessionId) {
+      resetForm();
+      setFormParticipants([]);
+      setQuickRosterOpen(false);
+      setQuickRosterSearch("");
+    }
   }
 
   function toggleSessionTravel(sessionId: string) {
@@ -765,6 +832,138 @@ export default function App() {
         if (dateEl) dateEl.focus();
       }, 500);
     });
+  }
+
+  function getRequiredTaTypeForTeams(teams: string[]): string | null {
+    const normalized = teams.map((team) => String(team ?? "").trim().toUpperCase());
+    if (normalized.includes("NBBL")) return "NBBL";
+    if (normalized.includes("JBBL")) return "JBBL";
+    if (normalized.some((team) => team === "U18" || team === "HOL" || team === "1RLH")) return "DBB";
+    return null;
+  }
+
+  function getLicenseTnaByType(player: Player, typ: string): string {
+    const wanted = String(typ ?? "").trim().toUpperCase();
+    if (!wanted) return "";
+    return (
+      (player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
+    ).trim();
+  }
+
+  function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {
+    const wanted = String(typ ?? "").trim().toUpperCase();
+    const nextTna = String(tna ?? "").trim();
+    const list = [...(player.lizenzen ?? [])];
+    const idx = list.findIndex((x) => String(x.typ ?? "").trim().toUpperCase() === wanted);
+    const entry = { typ: wanted, tna: nextTna, verein: list[idx]?.verein ?? "" };
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...entry };
+    } else {
+      list.push(entry);
+    }
+    return { ...player, lizenzen: list };
+  }
+
+  const quickRosterPlayers = useMemo(() => {
+    const q = quickRosterSearch.trim().toLowerCase();
+    const inSearch = (p: Player) => {
+      if (!q) return true;
+      const text = [
+        p.name,
+        p.firstName,
+        p.lastName,
+        p.primaryYouthTeam,
+        p.primarySeniorTeam,
+        ...(p.defaultTeams ?? []),
+        primaryTna(p),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return text.includes(q);
+    };
+
+    const inTab = (p: Player) => {
+      const g = getPlayerGroup(p);
+      const defaults = p.defaultTeams ?? [];
+      const youth = (p.primaryYouthTeam ?? "").toUpperCase();
+      const senior = (p.primarySeniorTeam ?? "").toUpperCase();
+
+      if (quickRosterTab === "2007" || quickRosterTab === "2008" || quickRosterTab === "2009") {
+        return g === quickRosterTab;
+      }
+      if (quickRosterTab === "HOL") return senior === "HOL" || defaults.includes("HOL");
+      if (quickRosterTab === "U18") return youth === "U18" || defaults.includes("U18");
+      if (quickRosterTab === "RLH") return senior === "1RLH" || defaults.includes("1RLH");
+      if (quickRosterTab === "NBBL") return youth === "NBBL" || defaults.includes("NBBL");
+      if (quickRosterTab === "TBD") return p.id === "TBD";
+      return false;
+    };
+
+    return players
+      .filter(inTab)
+      .filter(inSearch)
+      .sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }, [players, quickRosterSearch, quickRosterTab]);
+
+  function countInFormParticipants(playerId: string): number {
+    return formParticipants.reduce((acc, id) => acc + (id === playerId ? 1 : 0), 0);
+  }
+
+  function removeFromFormParticipants(playerId: string) {
+    setFormParticipants((prev) => {
+      const idx = prev.findIndex((id) => id === playerId);
+      if (idx < 0) return prev;
+      return prev.filter((_, i) => i !== idx);
+    });
+  }
+
+  async function addToFormParticipants(playerId: string) {
+    if (!playerId) return;
+
+    if (playerId !== "TBD" && formParticipants.includes(playerId)) return;
+
+    const draft = buildSessionFromForm(editingSessionId ?? "__draft__", formParticipants);
+    const overlaps = playerId === "TBD"
+      ? []
+      : plan.sessions.filter((session) => {
+        if (session.id === draft.id) return false;
+        if (!(session.participants ?? []).includes(playerId)) return false;
+        return sessionsOverlap(session, draft);
+      });
+
+    if (overlaps.length) {
+      const labelA = `${draft.day} ${draft.date} ${draft.time}`;
+      const labelB = overlaps.map((x) => `${x.day} ${x.date} ${x.time}`).join(" | ");
+      setLastDropError(`Konflikt: Spieler ist bereits in überschneidenden Events (${labelB}). Ziel: ${labelA}`);
+      return;
+    }
+
+    const targetIsGame = isGameSession(draft);
+    const requiredTaType = getRequiredTaTypeForTeams(draft.teams);
+    if (playerId !== "TBD" && targetIsGame && requiredTaType) {
+      const player = players.find((p) => p.id === playerId);
+      if (player && !getLicenseTnaByType(player, requiredTaType)) {
+        const input = await askPrompt(
+          t("confirm"),
+          tf("promptTaNumber", {
+            playerName: player.name,
+            teams: draft.teams.join("·"),
+            type: requiredTaType,
+          }),
+          "",
+          t("taNumber")
+        );
+
+        if (input === null || input.trim() === "") return;
+
+        setPlayers((prev) =>
+          prev.map((p) => (p.id === playerId ? upsertPlayerLicenseTna(p, requiredTaType, input.trim()) : p))
+        );
+      }
+    }
+
+    setLastDropError(null);
+    setFormParticipants((prev) => [...prev, playerId].sort(sortParticipants));
   }
 
   const dnd = useDndPlan({
@@ -838,9 +1037,13 @@ export default function App() {
   });
   const cloudFirstSetupDoneForEmailRef = useRef<string | null>(null);
   const [cloudBootstrapPendingProfileId, setCloudBootstrapPendingProfileId] = useState<string | null>(null);
+  const [cloudProfileStatusMsg, setCloudProfileStatusMsg] = useState("");
 
   useEffect(() => {
-    if (!cloudConfigured || !cloudUserEmail) return;
+    if (!cloudConfigured || !cloudUserEmail) {
+      setCloudProfileStatusMsg("");
+      return;
+    }
     if (cloudFirstSetupDoneForEmailRef.current === cloudUserEmail) return;
     let cancelled = false;
 
@@ -896,7 +1099,7 @@ export default function App() {
             const starter: SavedProfile = {
               id: bootstrapProfileId,
               name: t("profileDefaultName"),
-              payload: currentProfilePayload,
+              payload: buildNewProfilePayload(),
               sync: { mode: "cloud", provider: "supabase", autoSync: true },
             };
             setProfiles([starter]);
@@ -930,8 +1133,13 @@ export default function App() {
 
         setActiveProfileId((prev) => prev || cloudProfiles[0].id);
         cloudFirstSetupDoneForEmailRef.current = cloudUserEmail;
-      } catch {
+        setCloudProfileStatusMsg("");
+      } catch (err) {
         // keep local profiles if cloud listing fails
+        const msg = err instanceof Error ? err.message : String(err ?? "");
+        const full = `${t("cloudProfileSyncError")}: ${msg || "unknown error"}`;
+        setCloudProfileStatusMsg(full);
+        console.error(full);
       }
     })();
 
@@ -943,6 +1151,7 @@ export default function App() {
     cloudConfigured,
     cloudUserEmail,
     currentProfilePayload,
+    buildNewProfilePayload,
     isCloudSnapshotV1,
     profiles,
     setActiveProfileId,
@@ -975,10 +1184,14 @@ export default function App() {
     deleteActiveProfile();
 
     if (!deleteCloudCopy || !profileIdToDelete) return;
-    void deleteCloudSnapshot(profileIdToDelete).catch(() => {
+    void deleteCloudSnapshot(profileIdToDelete).catch((err) => {
       // local deletion should still succeed even if cloud delete fails
+      const msg = err instanceof Error ? err.message : String(err);
+      const full = `${t("cloudProfileDeleteError")}: ${msg}`;
+      setCloudProfileStatusMsg(full);
+      console.error(full);
     });
-  }, [activeProfileId, activeProfileSync.mode, cloudUserEmail, deleteActiveProfile]);
+  }, [activeProfileId, activeProfileSync.mode, cloudUserEmail, deleteActiveProfile, t]);
 
   /* ============================================================
      Roster editor: import/export roster.json
@@ -1314,6 +1527,7 @@ export default function App() {
         plan={plan}
         playerById={playerById}
         groupBg={groupBg}
+        groupText={groupText}
         coaches={coaches}
         birthdayPlayerIds={birthdayPlayerIds}
         clubName={theme.clubName}
@@ -1355,6 +1569,7 @@ export default function App() {
                   player={p}
                   trainingCount={trainingCounts.get(p.id) ?? 0}
                   groupBg={groupBg}
+                  groupText={groupText}
                   isBirthday={birthdayPlayerIds.has(p.id)}
                   t={t}
                 />
@@ -1373,163 +1588,33 @@ export default function App() {
             />
             {/* RIGHT */}
             <div className="rightPane" style={{ padding: 16, overflow: "auto", background: "var(--ui-bg)" }}>
-              {/* Top bar */}
-              <div className="topBar">
-                {/* Left: Flag Button */}
-                <div className="topBarLeft">
-                  <Button
-                    className="touchBtn"
-                    variant="outline"
-                    onClick={() => setTheme((p) => ({ ...p, locale: (p.locale === "de" ? "en" : "de") as Lang }))}
-                    title={t("language")}
-                    style={{
-                      width: 38,
-                      height: 34,
-                      padding: 0,
-                      display: "grid",
-                      placeItems: "center",
-                      borderRadius: 10,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <img
-                      src={`${import.meta.env.BASE_URL}flags/${theme.locale === "de" ? "de" : "gb"}.svg`}
-                      alt={theme.locale === "de" ? "Deutsch" : "English"}
-                      style={{ width: 24, height: 16, borderRadius: 2, display: "block" }}
-                    />
-                  </Button>
-
-                  <div ref={profileMenuRef} style={{ position: "relative", display: "flex", alignItems: "center", gap: 6 }}>
-                    <Button
-                      className="touchBtn"
-                      variant="outline"
-                      onClick={() => setProfilesOpen(true)}
-                      title={activeProfileName ?? t("profileNone")}
-                      style={{
-                        padding: "8px 10px",
-                        maxWidth: 230,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                        {clubLogoDataUrl ? (
-                          <img
-                            src={clubLogoDataUrl}
-                            alt="Logo"
-                            style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 4 }}
-                          />
-                        ) : (
-                          <span>👤</span>
-                        )}
-                        <span>{activeProfileName ?? t("profiles")}</span>
-                      </span>
-                    </Button>
-
-                    <Button
-                      className="touchBtn"
-                      variant="outline"
-                      onClick={() => setProfileMenuOpen((v) => !v)}
-                      title={t("profiles")}
-                      style={{ width: 32, height: 34, padding: 0, display: "grid", placeItems: "center" }}
-                    >
-                      ▾
-                    </Button>
-
-                    {profileMenuOpen && (
-                      <div className="profileQuickMenu">
-                        {profiles.length === 0 && (
-                          <div style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12, padding: "6px 8px" }}>
-                            {t("profileNone")}
-                          </div>
-                        )}
-
-                        {profiles.map((p) => {
-                          const active = p.id === activeProfileId;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => {
-                                selectProfile(p.id);
-                                setProfileMenuOpen(false);
-                              }}
-                              style={{
-                                width: "100%",
-                                textAlign: "left",
-                                padding: "8px 10px",
-                                borderRadius: 10,
-                                border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
-                                background: active ? "rgba(59,130,246,.18)" : "transparent",
-                                color: "var(--ui-text)",
-                                fontWeight: 900,
-                                cursor: "pointer",
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                              title={p.name}
-                            >
-                              {p.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <Button
-                    className="touchBtn"
-                    variant="outline"
-                    onClick={() => setWeekArchiveOpen(true)}
-                    disabled={!activeProfileId}
-                    title={!activeProfileId ? t("cloudProfilePickFirst") : t("weekArchiveButton")}
-                    style={{
-                      padding: "8px 10px",
-                      maxWidth: 200,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    🗃️ {t("weekArchiveButton")}
-                  </Button>
-                </div>
-
-                {/* Right: Other Buttons */}
-                <div className="topBarRight">
-                  <Button
-                    className="touchBtn"
-                    variant={eventEditorOpen ? "solid" : "outline"}
-                    onClick={() => setEventEditorOpen((v) => !v)}
-                    style={{ padding: "8px 10px" }}
-                  >
-                    📝 {t("event")}
-                  </Button>
-                  <Button className="touchBtn" variant="outline" onClick={() => setNewWeekOpen(true)} style={{ padding: "8px 10px" }}>
-                    {t("newWeek")}
-                  </Button>
-                  <Button
-                    className="touchBtn"
-                    variant={rightOpen ? "solid" : "outline"}
-                    onClick={() => setRightOpen((v) => !v)}
-                    title={t("toggleRightSidebar")}
-                    style={{ padding: "8px 10px" }}
-                  >
-                    🗓 {t("right")}
-                  </Button>
-                  <Button
-                    className="touchBtn"
-                    variant="outline"
-                    onClick={() => setSettingsOpen(true)}
-                    title={t("settings")}
-                    style={{ padding: "8px 10px", borderRadius: 12 }}
-                  >
-                    ⚙︎
-                  </Button>
-                </div>
-              </div>
+              <AppTopBar
+                locale={lang}
+                t={t}
+                clubLogoDataUrl={clubLogoDataUrl}
+                activeProfileName={activeProfileName}
+                profiles={profiles}
+                activeProfileId={activeProfileId}
+                profileMenuOpen={profileMenuOpen}
+                profileMenuRef={profileMenuRef}
+                onToggleLang={() =>
+                  setTheme((p) => ({ ...p, locale: (p.locale === "de" ? "en" : "de") as Lang }))
+                }
+                onOpenProfiles={() => setProfilesOpen(true)}
+                onToggleProfileMenu={() => setProfileMenuOpen((v) => !v)}
+                onSelectProfileFromMenu={(id) => {
+                  selectProfile(id);
+                  setProfileMenuOpen(false);
+                }}
+                activeProfileSelected={Boolean(activeProfileId)}
+                onOpenWeekArchive={() => setWeekArchiveOpen(true)}
+                eventEditorOpen={eventEditorOpen}
+                onToggleEventEditor={() => setEventEditorOpen((v) => !v)}
+                onOpenNewWeek={() => setNewWeekOpen(true)}
+                rightOpen={rightOpen}
+                onToggleRightSidebar={() => setRightOpen((v) => !v)}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
 
               {/* Editor Top Anchor */}
               <div ref={editorTopRef} id="event-editor-top" />
@@ -1750,8 +1835,8 @@ export default function App() {
 
                               <Input
                                 ref={opponentInputRef}
-                                value={opponentName}
-                                onChange={(v) => setFormOpponent(composeOpponentInfo(opponentMode, v))}
+                                value={formOpponent}
+                                onChange={setFormOpponent}
                                 placeholder={t("eventOpponentExample")}
                               />
                             </>
@@ -1903,10 +1988,23 @@ export default function App() {
                   </div>
 
                   <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>
-                    <Button onClick={upsertSession}>
-                      {editingSessionId ? t("saveChanges") : t("addEvent")}
-                    </Button>
-                    <Button variant="outline" onClick={resetForm}>{t("reset")}</Button>
+                      <Button onClick={upsertSession}>
+                        {editingSessionId ? t("saveChanges") : t("addEvent")}
+                      </Button>
+                      <Button variant="outline" onClick={() => setQuickRosterOpen(true)}>
+                        {t("rosterQuickPickerOpen")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          resetForm();
+                          setFormParticipants([]);
+                          setQuickRosterOpen(false);
+                          setQuickRosterSearch("");
+                        }}
+                      >
+                        {t("reset")}
+                      </Button>
 
                     <div style={{ marginLeft: "auto", color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
                       {(() => {
@@ -1921,6 +2019,127 @@ export default function App() {
                   </div>
                 </div>
               </EventEditorModal>
+
+              {quickRosterOpen && (
+                <Modal
+                  title={t("rosterQuickPickerTitle")}
+                  onClose={() => setQuickRosterOpen(false)}
+                  closeLabel={t("close")}
+                >
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {[
+                        { id: "2007", label: t("rosterQuickPickerTabYear2007") },
+                        { id: "2008", label: t("rosterQuickPickerTabYear2008") },
+                        { id: "2009", label: t("rosterQuickPickerTabYear2009") },
+                        { id: "HOL", label: t("rosterQuickPickerTabHol") },
+                        { id: "U18", label: t("rosterQuickPickerTabU18") },
+                        { id: "RLH", label: t("rosterQuickPickerTabRlh") },
+                        { id: "NBBL", label: t("rosterQuickPickerTabNbbl") },
+                        { id: "TBD", label: t("rosterQuickPickerTabTbd") },
+                      ].map((tab) => {
+                        const active = quickRosterTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setQuickRosterTab(tab.id as typeof quickRosterTab)}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 999,
+                              border: `1px solid ${active ? "var(--ui-accent)" : "var(--ui-border)"}`,
+                              background: active ? "rgba(59,130,246,.18)" : "transparent",
+                              color: "var(--ui-text)",
+                              fontWeight: 900,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <Input
+                      value={quickRosterSearch}
+                      onChange={setQuickRosterSearch}
+                      placeholder={t("rosterQuickPickerSearchPlaceholder")}
+                    />
+
+                    <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
+                      {t("rosterQuickPickerSelectedCount")}: {formParticipants.length}
+                    </div>
+
+                    <div style={{ maxHeight: "50vh", overflow: "auto", display: "grid", gap: 8 }}>
+                      {quickRosterPlayers.length === 0 && (
+                        <div style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12 }}>
+                          {t("rosterQuickPickerEmpty")}
+                        </div>
+                      )}
+
+                      {quickRosterPlayers.map((p) => {
+                        const selectedCount = countInFormParticipants(p.id);
+                        const isSelected = selectedCount > 0;
+                        const group = getPlayerGroup(p);
+                        const teamsLabel = [
+                          p.primaryYouthTeam,
+                          p.primarySeniorTeam,
+                          ...(p.defaultTeams ?? []),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+
+                        return (
+                          <div
+                            key={p.id}
+                            style={{
+                              border: "1px solid var(--ui-border)",
+                              borderRadius: 12,
+                              background: "var(--ui-card)",
+                              padding: 10,
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: 10,
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {p.name}
+                                {birthdayPlayerIds.has(p.id) ? " 🎂" : ""}
+                                {selectedCount > 1 ? ` (${selectedCount})` : ""}
+                              </div>
+                              <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 800 }}>
+                                {group} {teamsLabel ? `| ${teamsLabel}` : ""}
+                              </div>
+                            </div>
+
+                            {isSelected ? (
+                              <Button
+                                variant="outline"
+                                onClick={() => removeFromFormParticipants(p.id)}
+                                style={{ whiteSpace: "nowrap" }}
+                              >
+                                {t("remove")}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  void addToFormParticipants(p.id);
+                                }}
+                                style={{ whiteSpace: "nowrap" }}
+                              >
+                                {t("add")}
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </Modal>
+              )}
 
               {/* Week plan board */}
               <WeekPlanBoard
@@ -1940,6 +2159,7 @@ export default function App() {
                 playerById={playerById}
                 removePlayerFromSession={removePlayerFromSession}
                 groupBg={groupBg}
+                groupText={groupText}
                 birthdayPlayerIds={birthdayPlayerIds}
               />
 
@@ -2064,7 +2284,7 @@ export default function App() {
         cloudConfigured={cloudConfigured}
         cloudUserEmail={cloudUserEmail}
         cloudEmailInput={cloudEmailInput}
-        cloudStatusMsg={cloudStatusMsg}
+        cloudStatusMsg={[cloudStatusMsg, cloudProfileStatusMsg].filter(Boolean).join(" | ")}
         cloudLastSyncAt={cloudLastSyncAt}
         cloudBusy={cloudBusy}
         cloudAutoSync={cloudAutoSync}
@@ -2221,7 +2441,7 @@ export default function App() {
                       const active = p.id === selectedPlayerId;
                       const gid = getPlayerGroup(p);
                       const bg = normalizeYearColor(p.yearColor) ?? groupBg[gid] ?? groupBg.TBD;
-                      const text = pickTextColor(bg);
+                      const text = p.yearColor ? pickTextColor(bg) : (groupText[gid] ?? pickTextColor(bg));
                       const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.72)";
                       const tna = primaryTna(p);
                       return (

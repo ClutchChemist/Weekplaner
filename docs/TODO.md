@@ -75,6 +75,53 @@ Diese Liste sammelt bewusst geparkte Refactor-/Qualitätsaufgaben, die wir in kl
 - [x] Styling-Strategie evaluieren (CSS Modules/Tailwind)
   - nur wenn aktueller Ansatz bei Wartung/Skalierung bremst
 
+## Neue Feature-TODOs (2026-03-05)
+
+- [x] Kader-Schnellauswahl im Event-Editor erweitern
+  - Add/Delete von Spielern direkt im Event-Editor ermöglichen (ohne Umweg über andere Panels)
+
+- [x] Sonderfall `TBD` im Event-Kader anpassen
+  - `TBD` benötigt keine TA-Nummer
+  - `TBD` darf mehrfach pro Event im Kader hinzugefügt werden
+
+- [x] Info-Spalte im Event-Editor als robusten Freitext prüfen
+  - Bearbeitung mit Leerzeichen und normalem Freitext sicherstellen
+  - Regressionscheck: bestehende Edit- und Save-Flows dürfen nicht blockieren
+
+- [x] Treffpunkt-Uhrzeit bei Spiel-Info automatisch anhängen
+  - Bei `vs`/`at` den berechneten Treffpunkt am Ende von `info` ergänzen
+  - Format: `<freitext> | Treffpunkt: HH:MM`
+  - Berechnung: `Eventstart - Warmup - (bei Auswärtsspiel zusätzlich Fahrzeit)`
+
+- [ ] Kaderliste-Import aus MMB-Liste ergänzen
+  - Importpfad/Dateiformat definieren und robustes Mapping auf bestehende Spielerfelder implementieren
+  - Fehlerfälle (fehlende Spalten, ungültige Werte, Duplikate) mit UI-Feedback behandeln
+
+- [x] Kontrast bei Jahrgangsfarben in der Kaderübersicht absichern
+  - Lesbarkeit bei hellen Hintergründen sicherstellen (automatische Textfarb-Anpassung)
+  - Alternative/Erweiterung prüfen: pro Jahrgang zusätzlich eine explizite Textfarbe konfigurierbar machen
+
+- [x] Neues Profil immer leer initialisieren
+  - Beim Erstellen eines neuen Profils mit leerem Zustand starten (`Kader`, `Coaches`, `Orte`, etc.)
+  - Keine automatische Übernahme von Daten aus dem aktuell aktiven oder anderen Profilen
+
+## Code-Review Follow-ups (2026-03-05)
+
+- [x] Profil-Erstellung und Cloud-First-Setup auf leeren Startzustand umbauen
+  - `createProfile` darf nicht `currentProfilePayload` übernehmen
+  - Cloud-Bootstrap ohne bestehende Cloud-Profile muss ebenfalls leer initialisieren
+
+- [x] Cloud-Fehlerpfade sichtbar machen (statt still zu schlucken)
+  - Fehler beim Laden/Löschen von Cloud-Profilen in Status-UI oder Log sichtbar machen
+  - Ziel: keine stillen Inkonsistenzen zwischen lokalem Zustand und Supabase
+
+- [x] TopBar-Refactor abschließen (Doppelimplementierung entfernen)
+  - Entweder `AppTopBar` vollständig nutzen oder Inline-TopBar konsolidieren
+  - Ziel: eine einzige Quelle für TopBar-Logik und Profile-Quickmenu
+
+- [x] Unbenutzte Alt-Konstanten aufräumen
+  - `CLOUD_AUTO_SYNC_KEY` prüfen und entfernen oder korrekt integrieren
+
 ## Notizen
 
 - Strict Mode ist bereits aktiv (`tsconfig.app.json`).

@@ -22,7 +22,20 @@ export type DomainSession = {
 };
 
 export function dedupeParticipants(ids: string[]): string[] {
-  return Array.from(new Set((ids ?? []).map((x) => String(x))));
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of ids ?? []) {
+    const id = String(raw);
+    // Keep TBD multiplicity as placeholder slots.
+    if (id === "TBD") {
+      result.push(id);
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return result;
 }
 
 function normalizeDurationMin(value: number | undefined): number {

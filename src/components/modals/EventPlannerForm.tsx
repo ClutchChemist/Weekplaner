@@ -406,8 +406,8 @@ export function EventPlannerForm({
 
                   <Input
                     ref={opponentInputRef}
-                    value={opponentName}
-                    onChange={(v) => setFormOpponent(composeOpponentInfo(opponentMode, v))}
+                    value={formOpponent}
+                    onChange={setFormOpponent}
                     placeholder={t("eventOpponentExample")}
                   />
                 </>

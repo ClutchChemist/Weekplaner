@@ -7,6 +7,7 @@ type Props = {
   plan: WeekPlan;
   playerById: Map<string, Player>;
   groupBg: Record<GroupId, string>;
+  groupText?: Record<GroupId, string | undefined>;
   coaches: Coach[];
   birthdayPlayerIds: Set<string>;
   clubName: string;
@@ -39,6 +40,7 @@ export function PrintView({
   plan,
   playerById,
   groupBg,
+  groupText,
   coaches,
   birthdayPlayerIds,
   clubName,
@@ -257,7 +259,7 @@ export function PrintView({
 
                   const gid = getPlayerGroup(p);
                   const bg = normalizeYearColor(p.yearColor) ?? groupBg[gid];
-                  const text = pickTextColor(bg);
+                  const text = p.yearColor ? pickTextColor(bg) : (groupText?.[gid] ?? pickTextColor(bg));
 
                   return (
                     <td key={c.id} style={{ background: bg, color: text, fontWeight: 900 }}>
@@ -349,7 +351,7 @@ export function PrintView({
                         </thead>
                         <tbody>
                           {players.map((p, idx) => (
-                            <tr key={p.id}>
+                            <tr key={`${p.id}:${idx}`}>
                               <td style={{ fontWeight: 900 }}>{idx + 1}</td>
                               <td>{jerseyForTeam(p, team)}</td>
                               <td style={{ textAlign: "left" }}>{(p.lastName ?? "").trim()}</td>

@@ -55,18 +55,20 @@ function ParticipantCard({
   player,
   onRemove,
   groupBg,
+  groupText,
   isBirthday,
   t,
 }: {
   player: Player;
   onRemove: () => void;
   groupBg: Record<GroupId, string>;
+  groupText?: Record<GroupId, string | undefined>;
   isBirthday: boolean;
   t: (k: string) => string;
 }) {
   const group = getPlayerGroup(player);
   const bg = normalizeYearColor(player.yearColor) ?? groupBg[group] ?? groupBg.TBD;
-  const text = pickTextColor(bg);
+  const text = player.yearColor ? pickTextColor(bg) : (groupText?.[group] ?? pickTextColor(bg));
 
   return (
     <div
@@ -117,8 +119,9 @@ type Props = {
   onEditSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   playerById: Map<string, Player>;
-  removePlayerFromSession: (sessionId: string, playerId: string) => void;
+  removePlayerFromSession: (sessionId: string, playerId: string, occurrenceIndex?: number) => void;
   groupBg: Record<GroupId, string>;
+  groupText?: Record<GroupId, string | undefined>;
   birthdayPlayerIds: Set<string>;
 };
 
@@ -139,6 +142,7 @@ export function WeekPlanBoard({
   playerById,
   removePlayerFromSession,
   groupBg,
+  groupText,
   birthdayPlayerIds,
 }: Props) {
   return (
@@ -288,15 +292,16 @@ export function WeekPlanBoard({
                       <hr style={{ border: 0, borderTop: `1px solid var(--ui-border)`, margin: "10px 0" }} />
 
                       <div style={{ display: "grid", gap: 6 }}>
-                        {(s.participants ?? []).map((pid) => {
+                        {(s.participants ?? []).map((pid, idx) => {
                           const p = playerById.get(pid);
                           if (!p) return null;
                           return (
                             <ParticipantCard
-                              key={pid}
+                              key={`${pid}:${idx}`}
                               player={p}
-                              onRemove={() => removePlayerFromSession(s.id, pid)}
+                              onRemove={() => removePlayerFromSession(s.id, pid, idx)}
                               groupBg={groupBg}
+                              groupText={groupText}
                               isBirthday={birthdayPlayerIds.has(pid)}
                               t={t}
                             />

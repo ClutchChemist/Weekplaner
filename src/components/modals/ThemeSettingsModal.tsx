@@ -3,6 +3,7 @@ import { THEME_PRESETS } from "@/themes/presets";
 import { useThemePresets } from "@/hooks";
 import type { GroupId, ThemeSettings } from "@/types";
 import { randomId } from "@/utils/id";
+import { pickTextColor } from "@/utils/color";
 import { Button, Input, Modal } from "@/components/ui";
 
 type Props = {
@@ -215,12 +216,30 @@ export function ThemeSettingsModal({
           <div style={{ fontWeight: 900, marginBottom: 10 }}>{t("themeGroupsTitle")}</div>
           <div style={{ display: "grid", gap: 10 }}>
             {GROUP_IDS.map((gid) => (
-              <div key={gid} style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 8, alignItems: "center" }}>
+              <div key={gid} style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px 70px", gap: 8, alignItems: "center" }}>
                 <div style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12 }}>{gid}</div>
                 <ColorButton
                   value={theme.groups[gid].bg}
-                  onChange={(v) => onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { bg: v } } })}
+                  onChange={(v) =>
+                    onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { ...theme.groups[gid], bg: v } } })
+                  }
                 />
+                <ColorButton
+                  value={theme.groups[gid].fg ?? pickTextColor(theme.groups[gid].bg)}
+                  onChange={(v) =>
+                    onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { ...theme.groups[gid], fg: v } } })
+                  }
+                  title="Text color"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { ...theme.groups[gid], fg: undefined } } })
+                  }
+                  style={{ padding: "6px 8px", fontSize: 12 }}
+                >
+                  {t("auto")}
+                </Button>
               </div>
             ))}
           </div>

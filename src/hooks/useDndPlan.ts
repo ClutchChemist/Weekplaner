@@ -81,7 +81,8 @@ export function useDndPlan(params: {
 			sessions: prev.sessions.map((session) => {
 				if (session.id !== sessionId) return session;
 				const current = session.participants ?? [];
-				if (current.includes(playerId)) return session;
+				// Allow TBD multiple times as a flexible placeholder.
+				if (playerId !== "TBD" && current.includes(playerId)) return session;
 				const next = [...current, playerId].sort(sortParticipants);
 				return { ...session, participants: next };
 			}),
@@ -113,11 +114,13 @@ export function useDndPlan(params: {
 			const target = weekPlan.sessions.find((session) => session.id === sessionId);
 			if (!target) return;
 
-			const overlaps = weekPlan.sessions.filter((session) => {
-				if (session.id === target.id) return false;
-				if (!(session.participants ?? []).includes(playerId)) return false;
-				return sessionsOverlap(session, target);
-			});
+			const overlaps = playerId === "TBD"
+				? []
+				: weekPlan.sessions.filter((session) => {
+					if (session.id === target.id) return false;
+					if (!(session.participants ?? []).includes(playerId)) return false;
+					return sessionsOverlap(session, target);
+				});
 
 			if (overlaps.length) {
 				const labelA = `${target.day} ${target.date} ${target.time}`;
@@ -127,7 +130,7 @@ export function useDndPlan(params: {
 			}
 
 			const targetIsGame = isGameSession(target);
-			if (targetIsGame && requiresTaForTeams(target.teams)) {
+			if (playerId !== "TBD" && targetIsGame && requiresTaForTeams(target.teams)) {
 				const player = players.find((p) => p.id === playerId);
 				const requiredTaType = getRequiredTaTypeForTeams(target.teams);
 				if (player && requiredTaType && !getLicenseTnaByType(player, requiredTaType)) {
