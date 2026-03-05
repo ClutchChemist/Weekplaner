@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { Player, WeekPlan } from "@/types";
-import { enrichPlayersWithBirthFromDBBTA } from "@/state/playerMeta";
+import { enrichPlayersWithBirthFromDBBTA, upsertPlayerLicenseTna } from "@/state/playerMeta";
 import { normalizeRoster } from "@/state/normalizers";
-import { birthYearOf } from "@/state/playerGrouping";
+import { birthYearOf, fallbackYearGroupsByFormula } from "@/state/playerGrouping";
 import { downloadJson } from "@/utils/json";
 import { randomId } from "@/utils/id";
 import {
@@ -69,14 +69,7 @@ export function usePlayerActions({
   function upsertDbbLicense(player: Player, taNumber?: string): Player {
     const tna = String(taNumber ?? "").trim();
     if (!tna) return player;
-    const list = [...(player.lizenzen ?? [])];
-    const idx = list.findIndex((x) => String(x.typ ?? "").toUpperCase() === "DBB");
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], tna };
-    } else {
-      list.push({ typ: "DBB", tna, verein: clubName || undefined });
-    }
-    return { ...player, lizenzen: list };
+    return upsertPlayerLicenseTna(player, "DBB", tna);
   }
 
   function findExistingPlayerIndexForImport(
@@ -133,12 +126,16 @@ export function usePlayerActions({
 
   function addNewPlayer() {
     const id = randomId("p_");
+    // Dynamically compute current-season youth birth year
+    const yearGroups = fallbackYearGroupsByFormula();
+    const defaultBirthYear = parseInt(yearGroups[0] ?? "2009", 10);
+    const defaultGroup = yearGroups[0] ?? "2009";
     const p: Player = {
       id,
       firstName: t("firstName"),
       lastName: t("name"),
       name: `${t("firstName")} ${t("name")}`,
-      birthYear: 2009,
+      birthYear: defaultBirthYear,
       birthDate: "",
       positions: [],
       primaryYouthTeam: "",
@@ -146,7 +143,7 @@ export function usePlayerActions({
       defaultTeams: [],
       lizenzen: [],
       isLocalPlayer: false,
-      group: "2009",
+      group: defaultGroup,
     };
     setPlayers((prev) => [...prev, p]);
     setSelectedPlayerId(id);
@@ -287,7 +284,7 @@ export function usePlayerActions({
           lizenzen: (p.lizenzen ?? []).map((l) => ({
             typ: l.typ,
             tna: l.tna,
-            verein: l.verein ?? "UBC MÃ¼nster",
+            verein: l.verein ?? clubName,
           })),
           defaultTeams: p.defaultTeams ?? [],
           firstName: p.firstName ?? "",

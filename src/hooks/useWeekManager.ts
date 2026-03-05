@@ -3,13 +3,11 @@ import type { Dispatch, SetStateAction } from "react";
 import type { CalendarEvent as Session, WeekPlan } from "@/types";
 import type { NewWeekMode } from "@/components/modals/NewWeekModal";
 import {
-  addDaysISO,
   isoWeekMonday,
   kwLabelFromPlan,
-  normalizeDash,
-  weekdayOffsetFromDEShort,
-  weekdayShortDE,
+  addDaysISO,
 } from "@/utils/date";
+import { applyWeekDatesToSessions } from "@/utils/session";
 import { randomId } from "@/utils/id";
 
 export function useWeekManager({
@@ -29,64 +27,21 @@ export function useWeekManager({
 }) {
   const weekLabel = useMemo(() => {
     const base = kwLabelFromPlan(plan);
-    try {
-      return birthdayPlayerIds.size > 0 ? `${base} 🎂` : base;
-    } catch {
-      return base;
-    }
+    return birthdayPlayerIds.size > 0 ? `${base} 🎂` : base;
   }, [plan, birthdayPlayerIds]);
 
+  /** All 7 dates of the current plan's week (Mon–Sun). */
   const weekDates = useMemo(() => {
-    let base: string;
-    if (plan.weekId?.startsWith("WEEK_")) {
-      const m = plan.weekId.match(/WEEK_(\d{4}-\d{2}-\d{2})/);
-      base = m?.[1] ?? (() => {
-        const dates = plan.sessions
-          .map((s) => s.date)
-          .filter((d) => d?.length === 10)
-          .sort();
-        return dates.length
-          ? isoWeekMonday(dates[0])
-          : isoWeekMonday(new Date().toISOString().slice(0, 10));
-      })();
-    } else {
+    const m = plan.weekId?.match(/WEEK_(\d{4}-\d{2}-\d{2})/);
+    const base = m?.[1] ?? (() => {
       const dates = plan.sessions
         .map((s) => s.date)
-        .filter((d) => d?.length === 10)
+        .filter((d): d is string => (d?.length ?? 0) === 10)
         .sort();
-      base = dates.length
-        ? isoWeekMonday(dates[0])
-        : isoWeekMonday(new Date().toISOString().slice(0, 10));
-    }
+      return isoWeekMonday(dates[0] ?? new Date().toISOString().slice(0, 10));
+    })();
     return Array.from({ length: 7 }, (_, i) => addDaysISO(base, i));
   }, [plan]);
-
-  function applyWeekDatesToSessions(
-    sessions: Session[],
-    weekStartMondayISO: string
-  ): Session[] {
-    return sessions
-      .map((s) => {
-        const off = weekdayOffsetFromDEShort(s.day);
-        const effectiveOffset =
-          off !== null
-            ? off
-            : s.date
-            ? (new Date(s.date + "T00:00:00").getDay() + 6) % 7
-            : 0;
-        const nextDate = addDaysISO(weekStartMondayISO, effectiveOffset);
-        return {
-          ...s,
-          date: nextDate,
-          day: weekdayShortDE(nextDate),
-          time: normalizeDash(String(s.time ?? "")),
-        };
-      })
-      .sort((a, b) => {
-        const d = a.date.localeCompare(b.date);
-        return d !== 0 ? d : a.time.localeCompare(b.time);
-      });
-  }
 
   const createNewWeek = useCallback(
     (
@@ -100,7 +55,7 @@ export function useWeekManager({
           sessions: applyWeekDatesToSessions(
             masterPlan.sessions,
             weekStartMondayISO
-          ).map((s) => ({ ...s, participants: [] })),
+          ).map((s: Session) => ({ ...s, participants: [] })),
         }));
       } else if (mode === "EMPTY") {
         setPlan({ weekId: `WEEK_${weekStartMondayISO}`, sessions: [] });

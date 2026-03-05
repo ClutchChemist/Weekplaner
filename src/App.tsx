@@ -107,7 +107,9 @@ import {
   isGameSession,
   normalizeOpponentInfo,
   sessionsOverlap,
-} from "./utils/session";
+  stripAutoMeetingSuffix,
+}
+  from "./utils/session";
 import {
   getCachedTravelMinutes,
   getLocationOptions,
@@ -127,12 +129,6 @@ import weekMasterRaw from "./data/weekplan_master.json";
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
-
-/** Strips auto-appended meeting-time suffix from opponent info strings */
-const AUTO_MEETING_SUFFIX_RE = /\s*\|\s*(Treffpunkt|Meeting point):\s*\d{2}:\d{2}\s*$/i;
-function stripAutoMeetingSuffix(info: string): string {
-  return String(info ?? "").replace(AUTO_MEETING_SUFFIX_RE, "").trim();
-}
 
 /* ============================================================
    APP

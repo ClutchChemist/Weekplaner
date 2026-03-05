@@ -1,15 +1,12 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import type { CalendarEvent as Session, WeekPlan } from "@/types";
+import type { WeekPlan } from "@/types";
 import type { NewWeekMode } from "@/components/modals/NewWeekModal";
 import {
-  addDaysISO,
   dateToShortDE,
   isoWeekMonday,
   kwLabelFromPlan,
-  normalizeDash,
-  weekdayOffsetFromDEShort,
-  weekdayShortDE,
 } from "@/utils/date";
+import { applyWeekDatesToSessions } from "@/utils/session";
 import { randomId } from "@/utils/id";
 import {
   safeParseWeekArchive,
@@ -32,37 +29,9 @@ type Args = {
 };
 
 function cloneWeekPlan(src: WeekPlan): WeekPlan {
-  return JSON.parse(JSON.stringify(src)) as WeekPlan;
+  return structuredClone(src);
 }
 
-function applyWeekDatesToSessions(
-  sessions: Session[],
-  weekStartMondayISO: string
-): Session[] {
-  return sessions
-    .map((s) => {
-      const off = weekdayOffsetFromDEShort(s.day);
-      const effectiveOffset =
-        off !== null
-          ? off
-          : s.date
-            ? (new Date(`${s.date}T00:00:00`).getDay() + 6) % 7
-            : 0;
-
-      const nextDate = addDaysISO(weekStartMondayISO, effectiveOffset);
-
-      return {
-        ...s,
-        date: nextDate,
-        day: weekdayShortDE(nextDate),
-        time: normalizeDash(String(s.time ?? "")),
-      };
-    })
-    .sort((a, b) => {
-      const ad = a.date.localeCompare(b.date);
-      return ad !== 0 ? ad : a.time.localeCompare(b.time);
-    });
-}
 
 export function useWeekArchiveManager({
   plan,
@@ -82,9 +51,7 @@ export function useWeekArchiveManager({
 
   const activeArchiveEntries = useMemo(() => {
     if (!activeProfileId) return [] as WeekArchiveEntry[];
-    return (weekArchiveByProfile[activeProfileId] ?? []).filter(
-      (entry) => entry.profileId === activeProfileId
-    );
+    return weekArchiveByProfile[activeProfileId] ?? [];
   }, [activeProfileId, weekArchiveByProfile]);
 
   function savePlanToArchive(

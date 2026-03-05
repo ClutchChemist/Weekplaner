@@ -1,11 +1,33 @@
 import type { CalendarEvent as Session, WeekPlan } from "@/types";
-import { splitTimeRange, parseHHMM } from "./date";
+import {
+  splitTimeRange,
+  parseHHMM,
+  addDaysISO,
+  normalizeDash,
+  weekdayOffsetFromDEShort,
+  weekdayShortDE,
+} from "./date";
 
 export type SessionConflict = {
   sessionId: string;
   playerId: string;
   otherSessionId: string;
 };
+
+// ---------------------------------------------------------------------------
+// Meeting suffix helpers (shared – avoids copies in App.tsx & useEventPlannerState)
+// ---------------------------------------------------------------------------
+
+const AUTO_MEETING_SUFFIX_RE = /\s*\|\s*(Treffpunkt|Meeting point):\s*\d{2}:\d{2}\s*$/i;
+
+/** Strips auto-appended meeting-time suffix from opponent info strings. */
+export function stripAutoMeetingSuffix(info: string): string {
+  return String(info ?? "").replace(AUTO_MEETING_SUFFIX_RE, "").trim();
+}
+
+// ---------------------------------------------------------------------------
+// Opponent info normalisation
+// ---------------------------------------------------------------------------
 
 export function normalizeOpponentInfo(raw: string) {
   const s = (raw ?? "").trim();
@@ -29,13 +51,24 @@ export function normalizeOpponentInfo(raw: string) {
 
 export function isGameInfo(info: string | null | undefined): boolean {
   const t = String(info ?? "").trim().toLowerCase();
-  return t.startsWith("vs") || t.startsWith("@") || t.startsWith("at ") || t.includes(" vs ") || t.includes(" @ ") || t.includes(" at ");
+  return (
+    t.startsWith("vs") ||
+    t.startsWith("@") ||
+    t.startsWith("at ") ||
+    t.includes(" vs ") ||
+    t.includes(" @ ") ||
+    t.includes(" at ")
+  );
 }
 
 export function isGameSession(s: Session): boolean {
   const info = s.info || "";
   return info.includes("vs") || info.includes("@");
 }
+
+// ---------------------------------------------------------------------------
+// Overlap / conflict detection
+// ---------------------------------------------------------------------------
 
 export function sessionsOverlap(a: Session, b: Session): boolean {
   if (!a.date || !b.date) return false;
@@ -81,4 +114,39 @@ export function computeConflictsBySession(plan: WeekPlan): Map<string, SessionCo
   }
 
   return res;
+}
+
+// ---------------------------------------------------------------------------
+// Week-date application (shared – avoids copies in useWeekManager & useWeekArchiveManager)
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-dates a list of sessions to a new week (given as Monday ISO date),
+ * preserving each session's weekday. Normalises time dashes and sorts.
+ */
+export function applyWeekDatesToSessions(
+  sessions: Session[],
+  weekStartMondayISO: string
+): Session[] {
+  return sessions
+    .map((s) => {
+      const off = weekdayOffsetFromDEShort(s.day);
+      const effectiveOffset =
+        off !== null
+          ? off
+          : s.date
+            ? (new Date(`${s.date}T00:00:00`).getDay() + 6) % 7
+            : 0;
+      const nextDate = addDaysISO(weekStartMondayISO, effectiveOffset);
+      return {
+        ...s,
+        date: nextDate,
+        day: weekdayShortDE(nextDate),
+        time: normalizeDash(String(s.time ?? "")),
+      };
+    })
+    .sort((a, b) => {
+      const ad = a.date.localeCompare(b.date);
+      return ad !== 0 ? ad : a.time.localeCompare(b.time);
+    });
 }
