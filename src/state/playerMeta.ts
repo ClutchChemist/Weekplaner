@@ -85,8 +85,22 @@ export function dbbDobMatchesBirthDate(p: Player): { ok: boolean; reason?: strin
 
   return {
     ok: false,
-    reason: `Mismatch: TA startet ${String(taDob.dd).padStart(2,"0")}.${String(taDob.mm).padStart(2,"0")}.${String(taDob.yy).padStart(2,"0")} vs birthDate ${String(bd.dd).padStart(2,"0")}.${String(bd.mm).padStart(2,"0")}.${String(bd.yy).padStart(2,"0")}`,
+    reason: `Mismatch: TA startet ${String(taDob.dd).padStart(2, "0")}.${String(taDob.mm).padStart(2, "0")}.${String(taDob.yy).padStart(2, "0")} vs birthDate ${String(bd.dd).padStart(2, "0")}.${String(bd.mm).padStart(2, "0")}.${String(bd.yy).padStart(2, "0")}`,
   };
+}
+
+export function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {
+  const wanted = String(typ ?? "").trim().toUpperCase();
+  const nextTna = String(tna ?? "").trim();
+  const list = [...(player.lizenzen ?? [])];
+  const idx = list.findIndex((x) => String(x.typ ?? "").trim().toUpperCase() === wanted);
+  const entry = { typ: wanted, tna: nextTna, verein: list[idx]?.verein ?? "" };
+  if (idx >= 0) {
+    list[idx] = { ...list[idx], ...entry };
+  } else {
+    list.push(entry);
+  }
+  return { ...player, lizenzen: list };
 }
 
 export function enrichPlayersWithBirthFromDBBTA(

@@ -304,6 +304,10 @@ export const I18N: Record<Lang, Record<string, string>> = {
     entry: "Eintrag",
     opponentExample: "z.B. \"vs Vechta\" / \"@ Paderborn\"",
     historyLast6Hint: "Optional – dient als „letzte 6“ Referenz im Kader-Editor (später auch als Tooltip/Export erweiterbar).",
+    rowColorLabel: "Zeilenfarbe im Zeitplan",
+    rowColorRemove: "Farbe entfernen ✕",
+    locationHint: "Ort zuerst links unter Orte anlegen, dann hier auswählen.",
+    addTeam: "+ Team",
 
     calendarShowTravel: "Anreise einblenden",
     calendarHideTravel: "Anreise ausblenden",
@@ -637,6 +641,10 @@ export const I18N: Record<Lang, Record<string, string>> = {
     entry: "Entry",
     opponentExample: "e.g. \"vs Vechta\" / \"@ Paderborn\"",
     historyLast6Hint: "Optional – serves as a “last 6” reference in the roster editor (later extensible as tooltip/export).",
+    rowColorLabel: "Row color in schedule",
+    rowColorRemove: "Remove color ✕",
+    locationHint: "Create a location in the left Locations panel first, then select it here.",
+    addTeam: "+ Team",
 
     calendarShowTravel: "Show travel",
     calendarHideTravel: "Hide travel",

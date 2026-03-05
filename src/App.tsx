@@ -33,8 +33,14 @@ import {
   WeekPlanBoard,
 } from "@/components/layout";
 import { DraggablePlayerRow } from "@/components/roster";
-
-import { ConfirmModal, EventEditorModal, NewWeekModal, ProfilesModal, PromptModal, ThemeSettingsModal } from "@/components/modals";
+import {
+  ConfirmModal,
+  EventEditorModal,
+  NewWeekModal,
+  ProfilesModal,
+  PromptModal,
+  ThemeSettingsModal,
+} from "@/components/modals";
 import {
   composeOpponentInfo,
   getOpponentMode,
@@ -76,7 +82,7 @@ import {
   makeParticipantSorter,
 } from "./state/playerGrouping";
 import { YEAR_GROUPS } from "./config";
-import { dbbDobMatchesBirthDate, primaryTna } from "./state/playerMeta";
+import { dbbDobMatchesBirthDate, primaryTna, upsertPlayerLicenseTna } from "./state/playerMeta";
 import { LAST_PLAN_STORAGE_KEY, STAFF_STORAGE_KEY, THEME_STORAGE_KEY } from "./state/storageKeys";
 import {
   type ProfileSyncMode,
@@ -117,42 +123,6 @@ import { BASE_TEAM_OPTIONS, getLicenseTnaByType, getRequiredTaTypeForTeams, norm
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import rosterRaw from "./data/roster.json";
 import weekMasterRaw from "./data/weekplan_master.json";
-
-/* ============================================================
-   TYPES
-   ============================================================ */
-
-/* ============================================================
-   CONSTANTS / PRESETS
-   ============================================================ */
-
-/* ============================================================
-  UTILS (date/color/json/...)
-  ============================================================ */
-
-/* ============================================================
-   HELPERS (colors / contrast)
-   ============================================================ */
-
-/* ============================================================
-   ISO WEEK
-   ============================================================ */
-
-/* ============================================================
-  DOWNLOAD JSON
-  ============================================================ */
-
-/* ============================================================
-   ROSTER helpers (TA badge + grouping)
-   ============================================================ */
-
-/* ============================================================
-  COMPONENTS (Modal..., Button..., Row..., Pane...)
-  ============================================================ */
-
-/* ============================================================
-   UI PRIMITIVES (CSS vars)
-   ============================================================ */
 
 const CLUB_LOGO_STORAGE_KEY = "ubc_club_logo_v1";
 const CLUB_LOGO_MAX_BYTES = 600 * 1024;
@@ -848,19 +818,7 @@ export default function App() {
     });
   }
 
-  function upsertPlayerLicenseTna(player: Player, typ: string, tna: string): Player {
-    const wanted = String(typ ?? "").trim().toUpperCase();
-    const nextTna = String(tna ?? "").trim();
-    const list = [...(player.lizenzen ?? [])];
-    const idx = list.findIndex((x) => String(x.typ ?? "").trim().toUpperCase() === wanted);
-    const entry = { typ: wanted, tna: nextTna, verein: list[idx]?.verein ?? "" };
-    if (idx >= 0) {
-      list[idx] = { ...list[idx], ...entry };
-    } else {
-      list.push(entry);
-    }
-    return { ...player, lizenzen: list };
-  }
+
 
   const allTeamOptions = useMemo(() => {
     const fromPlayers = players.flatMap((p) => p.defaultTeams ?? []);
@@ -1321,255 +1279,11 @@ export default function App() {
     createWeekFromMode,
   });
 
-  /* ============================================================
-     Responsive CSS
-     ============================================================ */
-
-  const responsiveCss = `
-    /* --- Robust defaults --- */
-    * { box-sizing: border-box; }
-
-    input, select, button, textarea {
-      font: inherit;
-    }
-
-    input, select, textarea {
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-    }
-
-    .shrink0 { min-width: 0; }
-
-    /* Grid helpers */
-    .grid2 {
-      display: grid;
-      grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
-      gap: 10px;
-    }
-
-    .grid2equal {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .rosterGrid {
-      display: grid;
-      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
-      gap: 12px;
-    }
-
-    .flexRow {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .flexRow > * { min-width: 0; }
-
-    .touchBtn {
-      min-height: 42px;
-    }
-
-    .leftTabsRow {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .leftTabsGroup {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      min-width: 0;
-      flex: 1 1 260px;
-    }
-
-    .leftTabsEdit {
-      margin-left: auto;
-      display: flex;
-      justify-content: flex-end;
-      min-width: 0;
-      flex: 0 0 auto;
-    }
-
-    .leftSectionHeader {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 10px;
-      flex-wrap: wrap;
-      min-width: 0;
-    }
-
-    .groupHeaderBtn {
-      width: 100%;
-      text-align: left;
-      border: 1px solid var(--ui-border);
-      background: var(--ui-card);
-      color: var(--ui-text);
-      border-radius: 14px;
-      padding: 12px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      font-weight: 900;
-    }
-
-    .groupHeaderLeft {
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-
-    .groupHeaderRight {
-      min-width: 0;
-      color: var(--ui-muted);
-      font-size: 13px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 100%;
-    }
-
-    .topBar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-
-    .topBarLeft,
-    .topBarRight {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      min-width: 0;
-    }
-
-    .topBarRight {
-      margin-left: auto;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-    }
-
-    .profileQuickMenu {
-      position: absolute;
-      top: calc(100% + 6px);
-      right: 0;
-      min-width: 240px;
-      max-width: min(320px, 92vw);
-      border: 1px solid var(--ui-border);
-      border-radius: 12px;
-      background: var(--ui-card);
-      box-shadow: 0 8px 24px rgba(0,0,0,.25);
-      padding: 8px;
-      z-index: 200;
-      display: grid;
-      gap: 6px;
-    }
-
-    .modalBody { container-type: inline-size; }
-
-    /* Layout */
-    .appGrid {
-      display: grid;
-      grid-template-columns: minmax(280px, 380px) 1fr;
-      height: 100vh;
-    }
-
-    .appGrid3 {
-      grid-template-columns: minmax(280px, 380px) 1fr minmax(360px, 520px);
-    }
-
-    @media (max-width: 980px) {
-      .appGrid {
-        grid-template-columns: 1fr;
-        height: auto;
-        min-height: 100vh;
-      }
-      .leftPane {
-        border-right: none !important;
-        border-bottom: 1px solid var(--ui-border);
-        max-height: none !important;
-      }
-
-      .leftTabsEdit {
-        margin-left: 0;
-        width: 100%;
-        justify-content: flex-start;
-      }
-
-      .groupHeaderRight {
-        white-space: normal;
-      }
-
-      .rightPane {
-        height: auto !important;
-      }
-      .optionalPane {
-        border-left: none !important;
-        border-top: 1px solid var(--ui-border);
-      }
-      .grid2, .grid2equal, .rosterGrid {
-        grid-template-columns: 1fr;
-      }
-
-      .topBar {
-        align-items: stretch;
-      }
-
-      .topBarLeft,
-      .topBarRight {
-        width: 100%;
-      }
-
-      .topBarRight {
-        margin-left: 0;
-        justify-content: flex-start;
-      }
-
-      .profileQuickMenu {
-        position: fixed;
-        left: 12px;
-        right: 12px;
-        top: auto;
-        bottom: 12px;
-        max-width: none;
-        min-width: 0;
-        max-height: 55vh;
-        overflow: auto;
-        z-index: 1000;
-      }
-    }
-
-    .weekGrid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(320px, 1fr));
-      gap: 12px;
-    }
-    @media (max-width: 1100px) {
-      .weekGrid {
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      }
-    }
-
-    @container (max-width: 860px) {
-      .rosterGrid, .grid2, .grid2equal {
-        grid-template-columns: 1fr;
-      }
-    }
-  `;
 
   /* ============================================================
      Render
      ============================================================ */
+
 
   // DnD Sensors: separate mouse/touch improve Android drag reliability.
   const sensors = useSensors(
@@ -1587,7 +1301,6 @@ export default function App() {
 
   return (
     <>
-      <style>{responsiveCss}</style>
 
       <PrintView
         plan={plan}
@@ -1765,19 +1478,19 @@ export default function App() {
                       <div style={{ fontWeight: 900 }}>{t("teams")}</div>
                       <div style={{ display: "grid", gap: 8 }}>
                         <div className="flexRow">
-                        {allTeamOptions.map((teamOption) => {
-                          const active = formTeams.includes(teamOption);
-                          return (
-                            <Button
-                              key={teamOption}
-                              variant={active ? "solid" : "outline"}
-                              onClick={() => onToggleTeam(teamOption)}
-                              style={{ padding: "8px 10px" }}
-                            >
-                              {teamOption}
-                            </Button>
-                          );
-                        })}
+                          {allTeamOptions.map((teamOption) => {
+                            const active = formTeams.includes(teamOption);
+                            return (
+                              <Button
+                                key={teamOption}
+                                variant={active ? "solid" : "outline"}
+                                onClick={() => onToggleTeam(teamOption)}
+                                style={{ padding: "8px 10px" }}
+                              >
+                                {teamOption}
+                              </Button>
+                            );
+                          })}
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                           <Input
@@ -2072,23 +1785,23 @@ export default function App() {
                   </div>
 
                   <div style={{ display: "flex", gap: 10, padding: 12, paddingTop: 0, alignItems: "center", flexWrap: "wrap" }}>
-                      <Button onClick={upsertSession}>
-                        {editingSessionId ? t("saveChanges") : t("addEvent")}
-                      </Button>
-                      <Button variant="outline" onClick={() => setQuickRosterOpen(true)}>
-                        {t("rosterQuickPickerOpen")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          resetForm();
-                          setFormParticipants([]);
-                          setQuickRosterOpen(false);
-                          setQuickRosterSearch("");
-                        }}
-                      >
-                        {t("reset")}
-                      </Button>
+                    <Button onClick={upsertSession}>
+                      {editingSessionId ? t("saveChanges") : t("addEvent")}
+                    </Button>
+                    <Button variant="outline" onClick={() => setQuickRosterOpen(true)}>
+                      {t("rosterQuickPickerOpen")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        resetForm();
+                        setFormParticipants([]);
+                        setQuickRosterOpen(false);
+                        setQuickRosterSearch("");
+                      }}
+                    >
+                      {t("reset")}
+                    </Button>
 
                     <div style={{ marginLeft: "auto", color: "var(--ui-muted)", fontSize: 12, fontWeight: 900 }}>
                       {(() => {

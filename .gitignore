@@ -27,6 +27,9 @@ dist-ssr
 BackUp/
 *.zip
 src/export-test/*.png
+app_diff.txt
+git_diff.txt
+errors.txt
 
 # Local environment secrets
 .env
