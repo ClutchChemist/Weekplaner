@@ -125,6 +125,7 @@ const DEFAULT_SESSION_DURATION_MIN = 90;
 const DEFAULT_WARMUP_MIN = 30;
 /** Delay before focusing a form element after scroll (ms) */
 const FOCUS_SCROLL_DELAY_MS = 500;
+const BUILD_VERSION_LABEL = `v${__APP_VERSION__} (${__GIT_COMMIT__})`;
 
 /* ============================================================
    APP
@@ -1335,6 +1336,22 @@ export default function App() {
             />
           </div>
         </DndContext>
+      </div>
+      <div
+        style={{
+          position: "fixed",
+          left: 8,
+          bottom: 6,
+          zIndex: 60,
+          color: "var(--ui-muted)",
+          fontSize: 10,
+          fontWeight: 700,
+          opacity: 0.75,
+          pointerEvents: "none",
+          userSelect: "none",
+        }}
+      >
+        {BUILD_VERSION_LABEL}
       </div>
 
       {/* Settings Modal */}

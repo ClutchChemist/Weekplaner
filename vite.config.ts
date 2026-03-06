@@ -1,10 +1,33 @@
 import { fileURLToPath, URL } from "node:url";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
+function resolveGitSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "nogit";
+  }
+}
+
+const packageJsonPath = fileURLToPath(new URL("./package.json", import.meta.url));
+const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version?: string };
+const appVersion = String(packageJson.version ?? "0.0.0");
+const gitSha = resolveGitSha();
+const buildVersion = `v${appVersion}+${gitSha}`;
 
 // https://vite.dev/config/
 export default defineConfig({
   base: process.env.GITHUB_PAGES ? "/Weekplaner/" : "/",
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __GIT_COMMIT__: JSON.stringify(gitSha),
+    __BUILD_VERSION__: JSON.stringify(buildVersion),
+  },
   plugins: [react()],
   build: {
     rollupOptions: {
