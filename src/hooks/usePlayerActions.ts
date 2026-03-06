@@ -140,36 +140,42 @@ export function usePlayerActions({
     return teams;
   }
 
-  function upsertDbbLicense(player: Player, taNumber?: string): Player {
+  function upsertLicense(player: Player, lizenzTyp: string, taNumber?: string): Player {
     const tna = String(taNumber ?? "").trim();
     if (!tna) return player;
-    return upsertPlayerLicenseTna(player, "DBB", tna);
+    return upsertPlayerLicenseTna(player, lizenzTyp, tna);
   }
 
   function findExistingPlayerIndexForImport(
     prev: Player[],
-    params: { taNumber?: string; name: string; birthDate?: string }
+    params: { taNumber?: string; lizenzTyp?: string; name: string; birthDate?: string }
   ): number {
+    const nameKey = String(params.name ?? "").trim().toLowerCase();
+    const birthDate = String(params.birthDate ?? "").trim();
+    if (nameKey && birthDate) {
+      const byNameAndBirth = prev.findIndex((p) => {
+        if (p.id === "TBD") return false;
+        const pName = String(p.name ?? "").trim().toLowerCase();
+        return pName === nameKey && String(p.birthDate ?? "").trim() === birthDate;
+      });
+      if (byNameAndBirth >= 0) return byNameAndBirth;
+    }
+
     const ta = String(params.taNumber ?? "").trim();
+    const typ = String(params.lizenzTyp ?? "DBB").trim().toUpperCase();
     if (ta) {
       const byTa = prev.findIndex((p) =>
         (p.lizenzen ?? []).some(
-          (l) => String(l.typ ?? "").toUpperCase() === "DBB" && String(l.tna ?? "").trim() === ta
+          (l) => String(l.typ ?? "").toUpperCase() === typ && String(l.tna ?? "").trim() === ta
         )
       );
       if (byTa >= 0) return byTa;
     }
 
-    const nameKey = String(params.name ?? "").trim().toLowerCase();
-    const birthDate = String(params.birthDate ?? "").trim();
     if (!nameKey) return -1;
-
     return prev.findIndex((p) => {
       if (p.id === "TBD") return false;
-      const pName = String(p.name ?? "").trim().toLowerCase();
-      if (pName !== nameKey) return false;
-      if (!birthDate) return true;
-      return String(p.birthDate ?? "").trim() === birthDate;
+      return String(p.name ?? "").trim().toLowerCase() === nameKey;
     });
   }
 
@@ -266,7 +272,7 @@ export function usePlayerActions({
     }
   }
 
-  async function importMmbFile(file: File) {
+  async function importMmbFile(file: File, lizenzTyp: string = "DBB") {
     try {
       clearMmbImportFeedback();
       const parsed = await parseMmbImportFile(file);
@@ -301,6 +307,7 @@ export function usePlayerActions({
 
         const idx = findExistingPlayerIndexForImport(next, {
           taNumber: row.taNumber,
+          lizenzTyp,
           name: fullName,
           birthDate: row.birthDate,
         });
@@ -310,7 +317,7 @@ export function usePlayerActions({
 
         if (idx >= 0) {
           let candidate: Player = { ...next[idx] };
-          candidate = upsertDbbLicense(candidate, row.taNumber);
+          candidate = upsertLicense(candidate, lizenzTyp, row.taNumber);
           candidate = {
             ...candidate,
             name: fullName,
@@ -345,7 +352,7 @@ export function usePlayerActions({
           lizenzen: [],
           group: "TBD",
         };
-        created = upsertDbbLicense(created, row.taNumber);
+        created = upsertLicense(created, lizenzTyp, row.taNumber);
         next.push(created);
         createdCount += 1;
       }

@@ -20,7 +20,7 @@ type Props = {
   addNewPlayer: () => void;
   exportRoster: () => void;
   importRosterFile: (file: File) => void | Promise<void>;
-  importMmbFile: (file: File) => void | Promise<void>;
+  importMmbFile: (file: File, lizenzTyp: string) => void | Promise<void>;
   mmbImportFeedback: MmbImportFeedback | null;
   clearMmbImportFeedback: () => void;
   deletePlayer: (id: string) => void;
@@ -64,6 +64,7 @@ export function RosterEditorModal({
 }: Props) {
   const rosterFileRef = useRef<HTMLInputElement | null>(null);
   const mmbFileRef = useRef<HTMLInputElement | null>(null);
+  const [mmbLizenzTyp, setMmbLizenzTyp] = useState<string>("DBB");
   const [selectedIssueIdx, setSelectedIssueIdx] = useState<number | null>(null);
 
   const filteredPreviewRows = useMemo(() => {
@@ -170,6 +171,26 @@ export function RosterEditorModal({
               >
                 {t("import")} roster.json
               </Button>
+              <select
+                value={mmbLizenzTyp}
+                onChange={(e) => setMmbLizenzTyp(e.target.value)}
+                title={t("importMmbLizenzTypLabel")}
+                style={{
+                  fontSize: 12,
+                  padding: "6px 8px",
+                  borderRadius: 8,
+                  border: "1px solid var(--ui-border)",
+                  background: "var(--ui-card)",
+                  color: "var(--ui-text)",
+                  fontWeight: 800,
+                }}
+              >
+                <option value="DBB">DBB</option>
+                <option value="NBBL">NBBL</option>
+                <option value="JBBL">JBBL</option>
+                <option value="ProA">ProA</option>
+                <option value="ProB">ProB</option>
+              </select>
               <Button
                 variant="outline"
                 onClick={() => mmbFileRef.current?.click()}
@@ -195,7 +216,7 @@ export function RosterEditorModal({
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) void importMmbFile(f);
+                  if (f) void importMmbFile(f, mmbLizenzTyp);
                   e.currentTarget.value = "";
                 }}
               />
