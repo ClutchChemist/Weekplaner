@@ -41,7 +41,7 @@ export type MmbImportFeedback = {
     birthDate?: string;
   }>;
   message?: string;
-  sourceType?: "xlsx" | "pdf";
+  sourceType?: "xlsx" | "xls" | "pdf";
 };
 
 export function usePlayerActions({
@@ -84,6 +84,7 @@ export function usePlayerActions({
     if (issue.code === "row_missing_name") return `${t("importMmbIssueMissingName")}${row}${sheet}`;
     if (issue.code === "row_invalid_ta") return `${t("importMmbIssueInvalidTa")}${row}${sheet}`;
     if (issue.code === "row_invalid_birth_date") return `${t("importMmbIssueInvalidBirthDate")}${row}${sheet}`;
+    if (issue.code === "pdf_no_text_layer") return `${t("importMmbIssuePdfNoText")}${sheet}`;
     return `${issue.code}${row}${sheet}`;
   }
 

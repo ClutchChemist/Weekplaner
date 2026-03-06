@@ -11,7 +11,8 @@ export type MmbImportIssueCode =
   | "missing_required_columns"
   | "row_missing_name"
   | "row_invalid_ta"
-  | "row_invalid_birth_date";
+  | "row_invalid_birth_date"
+  | "pdf_no_text_layer";
 
 export type MmbImportIssue = {
   code: MmbImportIssueCode;
@@ -20,7 +21,7 @@ export type MmbImportIssue = {
 };
 
 export type MmbImportReport = {
-  sourceType: "xlsx" | "pdf";
+  sourceType: "xlsx" | "xls" | "pdf";
   totalRowsBeforeDedupe: number;
   importedRows: number;
   duplicateRowsSkipped: number;
@@ -280,6 +281,52 @@ async function parseMmbExcel(file: File): Promise<MmbImportResult> {
   };
 }
 
+async function parseMmbXls(file: File): Promise<MmbImportResult> {
+  const XLSX = await import("xlsx");
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const collected: ImportedMmbRow[] = [];
+  const issues: MmbImportIssue[] = [];
+  let sheetsScanned = 0;
+  let sheetsParsed = 0;
+
+  for (const sheetName of workbook.SheetNames) {
+    sheetsScanned += 1;
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+    }) as unknown[][];
+    const parsed = parseRowsFromSheetRows(rows, sheetName);
+    if (parsed.rows.length > 0) {
+      sheetsParsed += 1;
+    }
+    for (const issue of parsed.issues) {
+      issues.push({
+        ...issue,
+        sheetName,
+      });
+    }
+    collected.push(...parsed.rows);
+  }
+
+  const deduped = dedupeRows(collected);
+  return {
+    rows: deduped.rows,
+    report: {
+      sourceType: "xls",
+      totalRowsBeforeDedupe: collected.length,
+      importedRows: deduped.rows.length,
+      duplicateRowsSkipped: deduped.duplicateRowsSkipped,
+      sheetsScanned,
+      sheetsParsed,
+      issues,
+    },
+  };
+}
+
 async function parseMmbPdf(file: File): Promise<MmbImportResult> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
@@ -293,6 +340,8 @@ async function parseMmbPdf(file: File): Promise<MmbImportResult> {
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await pdfjsLib.getDocument({ data }).promise;
   const rows: ImportedMmbRow[] = [];
+  const issues: MmbImportIssue[] = [];
+  let totalTextTokens = 0;
 
   function hasText(item: unknown): item is { str?: unknown } {
     return typeof item === "object" && item !== null && "str" in item;
@@ -304,6 +353,15 @@ async function parseMmbPdf(file: File): Promise<MmbImportResult> {
     const tokens = text.items
       .map((item: unknown) => (hasText(item) ? normalizeWhitespace(String(item.str ?? "")) : ""))
       .filter((token: string) => token.length > 0);
+    totalTextTokens += tokens.length;
+
+    if (tokens.length === 0) {
+      issues.push({
+        code: "pdf_no_text_layer",
+        sheetName: `PDF page ${pageNum}`,
+      });
+      continue;
+    }
 
     for (let i = 0; i < tokens.length; i += 1) {
       const taNumber = normalizeTa(tokens[i]);
@@ -363,7 +421,7 @@ async function parseMmbPdf(file: File): Promise<MmbImportResult> {
       duplicateRowsSkipped: deduped.duplicateRowsSkipped,
       sheetsScanned: 0,
       sheetsParsed: 0,
-      issues: [],
+      issues: totalTextTokens === 0 ? [{ code: "pdf_no_text_layer" }] : issues,
     },
   };
 }
@@ -399,6 +457,9 @@ export async function parseMmbImportFile(file: File): Promise<MmbImportResult> {
   const lowerName = String(file.name ?? "").toLowerCase();
   if (lowerName.endsWith(".xlsx")) {
     return parseMmbExcel(file);
+  }
+  if (lowerName.endsWith(".xls")) {
+    return parseMmbXls(file);
   }
   if (lowerName.endsWith(".pdf")) {
     return parseMmbPdf(file);

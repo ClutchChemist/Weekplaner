@@ -212,7 +212,7 @@ export function RosterEditorModal({
               <input
                 ref={mmbFileRef}
                 type="file"
-                accept=".xlsx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
