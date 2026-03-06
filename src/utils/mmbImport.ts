@@ -317,9 +317,14 @@ async function parseMmbPdf(file: File): Promise<MmbImportResult> {
         const tok = normalizeWhitespace(tokens[back] ?? "");
         if (!tok || NOISE.test(tok)) continue;
         if (normalizeTa(tok)) break; // previous player's TNA
-        if (/^\d{1,2}[.:]\d{2}[.:]\d{2,4}$/.test(tok)) break; // date-like token
+        if (/^\d{1,2}[.:]\d{2}([.:]\d{2,4})?$/.test(tok)) break; // date/time token
         if (/^[A-Z]$/.test(tok)) break; // one-letter columns (e.g. Nat.)
-        if (/^(nachname|vorname|tna|stamm|aushilfen|nat\.|gemeldet|spielerliste|quelle|seite)$/i.test(tok)) break;
+        if (
+          /^(nachname|vorname|tna|stamm|aushilfen|nat\.|gemeldet|spielerliste|quelle|seite|gesperrt|bearb\.|bearb\.\/anzeigen|anzeigen|aktiv|bis|ligen|online|benutzername|version|www|nur|login|logout|support|zur[uü]ck|drucken)$/i.test(
+            tok
+          )
+        )
+          break;
         nameTokens.unshift(tok);
       }
 
