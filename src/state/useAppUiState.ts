@@ -17,6 +17,7 @@ const initialAppUiState: AppState = {
   leftEditMode: false,
   openLocationName: null,
   rosterOpen: false,
+  resetDataOpen: false,
   autoTravelLoading: false,
   confirmDialog: { open: false, title: "Bestätigung", message: "" },
   rosterSearch: "",
@@ -81,6 +82,12 @@ export function useAppUiState() {
   const setRosterOpen = (value: SetStateAction<boolean>) => {
     dispatchUi({ type: "SET_ROSTER_OPEN", value: resolveStateAction(value, appUiState.rosterOpen) });
   };
+  const setResetDataOpen = (value: SetStateAction<boolean>) => {
+    dispatchUi({
+      type: "SET_RESET_DATA_OPEN",
+      value: resolveStateAction(value, appUiState.resetDataOpen),
+    });
+  };
   const setAutoTravelLoading = (value: SetStateAction<boolean>) => {
     dispatchUi({
       type: "SET_AUTO_TRAVEL_LOADING",
@@ -119,6 +126,7 @@ export function useAppUiState() {
     setLeftEditMode,
     setOpenLocationName,
     setRosterOpen,
+    setResetDataOpen,
     setAutoTravelLoading,
     setConfirmDialog,
     setRosterSearch,

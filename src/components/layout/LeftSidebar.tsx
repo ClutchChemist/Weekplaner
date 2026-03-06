@@ -15,6 +15,7 @@ type Props = {
   onToggleEditMode: () => void;
 
   onOpenRoster: () => void;
+  onOpenResetData: () => void;
   openExtra: ExtraGroup;
   onToggleU18Only: () => void;
   onToggleHolOnly: () => void;
@@ -47,6 +48,7 @@ export function LeftSidebar({
   onSelectTab,
   onToggleEditMode,
   onOpenRoster,
+  onOpenResetData,
   openExtra,
   onToggleU18Only,
   onToggleHolOnly,
@@ -128,9 +130,19 @@ export function LeftSidebar({
         <>
           <div className="leftSectionHeader">
             <div style={{ fontSize: 18, fontWeight: 900 }}>{t("roster")}</div>
-            <Button variant="outline" onClick={onOpenRoster} style={{ padding: "8px 10px" }}>
-              {leftEditMode ? t("rosterEdit") : t("rosterShow")}
-            </Button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <Button variant="outline" onClick={onOpenRoster} style={{ padding: "8px 10px" }}>
+                {leftEditMode ? t("rosterEdit") : t("rosterShow")}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={onOpenResetData}
+                style={{ padding: "8px 10px" }}
+                title={t("resetDataTitle")}
+              >
+                ⚠
+              </Button>
+            </div>
           </div>
 
           <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 13, fontWeight: 700 }}>

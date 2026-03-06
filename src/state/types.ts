@@ -154,6 +154,7 @@ export type AppState = {
   leftEditMode: boolean;
   openLocationName: string | null;
   rosterOpen: boolean;
+  resetDataOpen: boolean;
   autoTravelLoading: boolean;
   confirmDialog: ConfirmDialogState;
   rosterSearch: string;

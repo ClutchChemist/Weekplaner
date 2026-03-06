@@ -39,6 +39,8 @@ import {
   PromptModal,
   ThemeSettingsModal,
   WeekArchiveModal,
+  ResetDataModal,
+  type ResetCategory,
 } from "@/components/modals";
 import {
   useConfirmDialog,
@@ -90,6 +92,7 @@ import {
 } from "./state/profileTypes";
 import { migrateLegacyBlueTheme, safeParseTheme } from "./state/themePersistence";
 import { DEFAULT_THEME } from "./state/themeDefaults";
+import { DEFAULT_STAFF } from "./state/staffPersistence";
 import { applyThemeToCssVars } from "./themes/cssVars";
 import {
   isoWeekMonday,
@@ -208,6 +211,7 @@ export default function App() {
     setLeftEditMode,
     setOpenLocationName,
     setRosterOpen,
+    setResetDataOpen,
     setAutoTravelLoading,
     setConfirmDialog,
     setRosterSearch,
@@ -229,6 +233,7 @@ export default function App() {
     leftEditMode,
     openLocationName,
     rosterOpen,
+    resetDataOpen,
     autoTravelLoading,
     confirmDialog,
     rosterSearch,
@@ -288,6 +293,25 @@ export default function App() {
     masterPlan,
     reviveWeekPlan
   );
+
+  function handleResetData(categories: ResetCategory[]) {
+    if (categories.includes("players")) {
+      setPlayers((prev) => {
+        const tbd = prev.find((player) => player.id === "TBD");
+        return tbd ? [tbd] : [];
+      });
+      setSelectedPlayerId(null);
+    }
+    if (categories.includes("coaches")) {
+      setCoaches(DEFAULT_STAFF);
+    }
+    if (categories.includes("locations")) {
+      setTheme((prev) => ({ ...prev, locations: DEFAULT_THEME.locations }));
+    }
+    if (categories.includes("plan")) {
+      setPlan((prev) => ({ ...prev, sessions: [] }));
+    }
+  }
 
   const applyProfileData = useCallback((payload: ProfilePayload) => {
     setRosterMeta(payload.rosterMeta);
@@ -1115,6 +1139,7 @@ export default function App() {
               onSelectTab={(tab) => { setLeftTab(tab); setLeftEditMode(false); }}
               onToggleEditMode={() => setLeftEditMode((v) => !v)}
               onOpenRoster={() => { setRosterSearch(""); setRosterOpen(true); }}
+              onOpenResetData={() => setResetDataOpen(true)}
               openExtra={openExtra}
               onToggleU18Only={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
               onToggleHolOnly={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
@@ -1414,6 +1439,13 @@ export default function App() {
         onLoadArchiveEntry={handleLoadArchiveEntry}
         onUseArchiveAsTemplate={handleUseArchiveAsTemplate}
         onDeleteArchiveEntry={handleDeleteArchiveEntry}
+      />
+
+      <ResetDataModal
+        open={resetDataOpen}
+        onClose={() => setResetDataOpen(false)}
+        onReset={handleResetData}
+        t={t}
       />
 
       <RosterEditorModal

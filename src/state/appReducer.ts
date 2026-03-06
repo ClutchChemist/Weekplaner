@@ -16,6 +16,7 @@ export type Action =
   | { type: "SET_LEFT_EDIT_MODE"; value: boolean }
   | { type: "SET_OPEN_LOCATION_NAME"; value: string | null }
   | { type: "SET_ROSTER_OPEN"; value: boolean }
+  | { type: "SET_RESET_DATA_OPEN"; value: boolean }
   | { type: "SET_AUTO_TRAVEL_LOADING"; value: boolean }
   | { type: "SET_CONFIRM_DIALOG"; value: AppState["confirmDialog"] }
   | { type: "SET_ROSTER_SEARCH"; value: string }
@@ -53,6 +54,8 @@ export function appReducer(state: AppState, action: Action): AppState {
       return { ...state, openLocationName: action.value };
     case "SET_ROSTER_OPEN":
       return { ...state, rosterOpen: action.value };
+    case "SET_RESET_DATA_OPEN":
+      return { ...state, resetDataOpen: action.value };
     case "SET_AUTO_TRAVEL_LOADING":
       return { ...state, autoTravelLoading: action.value };
     case "SET_CONFIRM_DIALOG":
@@ -79,6 +82,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         leftEditMode: false,
         openLocationName: null,
         rosterOpen: false,
+        resetDataOpen: false,
         autoTravelLoading: false,
         confirmDialog: { open: false, title: "Bestätigung", message: "" },
         rosterSearch: "",

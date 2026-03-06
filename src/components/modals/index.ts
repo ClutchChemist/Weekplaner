@@ -9,4 +9,6 @@ export { ProfileCloudSyncPanel } from "./ProfileCloudSyncPanel";
 export { RosterEditorModal } from "./RosterEditorModal";
 export { ProfilesModal } from "./ProfilesModal";
 export { WeekArchiveModal } from "./WeekArchiveModal";
+export { ResetDataModal } from "./ResetDataModal";
+export type { ResetCategory } from "./ResetDataModal";
 
