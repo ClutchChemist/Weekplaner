@@ -15,4 +15,8 @@ declare module "pdfjs-dist/legacy/build/pdf.mjs" {
   export function getDocument(source: { data: Uint8Array }): {
     promise: Promise<PdfDocumentProxy>;
   };
+
+  export const GlobalWorkerOptions: {
+    workerSrc: string;
+  };
 }

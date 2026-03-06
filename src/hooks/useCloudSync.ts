@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCurrentCloudUser,
+  getAllowedEmailDomain,
+  isEmailDomainAllowed,
   isCloudSyncConfigured,
   loadCloudSnapshot,
   onCloudAuthStateChange,
@@ -158,6 +160,11 @@ export function useCloudSync<TSnapshot>({
       setCloudStatusMsg(t("cloudEnterEmail"));
       return;
     }
+    if (!isEmailDomainAllowed(email)) {
+      const domain = getAllowedEmailDomain();
+      setCloudStatusMsg(t("cloudEmailDomainNotAllowed").replace("{domain}", domain ?? ""));
+      return;
+    }
 
     setCloudBusy(true);
     try {
@@ -165,7 +172,13 @@ export function useCloudSync<TSnapshot>({
       setCloudStatusMsg(t("cloudMagicLinkSent"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setCloudStatusMsg(`${t("cloudMagicLinkError")}: ${msg}`);
+      // Surface domain errors more clearly even if they arrive from the util layer
+      if (msg.startsWith("email_domain_not_allowed:")) {
+        const domain = msg.split(":")[1] ?? "";
+        setCloudStatusMsg(t("cloudEmailDomainNotAllowed").replace("{domain}", domain));
+      } else {
+        setCloudStatusMsg(`${t("cloudMagicLinkError")}: ${msg}`);
+      }
     } finally {
       setCloudBusy(false);
     }

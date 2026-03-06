@@ -64,7 +64,8 @@ function normalizeWhitespace(input: string): string {
 
 function normalizeTa(input: string): string | undefined {
   const digits = String(input ?? "").replace(/[^\d]/g, "");
-  return digits.length >= 6 ? digits : undefined;
+  // DBB TNA numbers are exactly 9 digits (DDMMYYNNN).
+  return digits.length === 9 ? digits : undefined;
 }
 
 function deriveBirthDateFromTa(ta?: string): string | undefined {
@@ -281,6 +282,14 @@ async function parseMmbExcel(file: File): Promise<MmbImportResult> {
 
 async function parseMmbPdf(file: File): Promise<MmbImportResult> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+  // pdfjs-dist v5 requires workerSrc to be set before getDocument.
+  // Resolve worker URL via Vite asset handling so it stays version-safe.
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    const workerUrl = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  }
+
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await pdfjsLib.getDocument({ data }).promise;
   const rows: ImportedMmbRow[] = [];
@@ -300,19 +309,36 @@ async function parseMmbPdf(file: File): Promise<MmbImportResult> {
       const taNumber = normalizeTa(tokens[i]);
       if (!taNumber) continue;
 
-      const firstName = normalizeWhitespace(tokens[i - 1] ?? "");
-      const lastName = normalizeWhitespace(tokens[i - 2] ?? "");
-      if (!firstName || !lastName) continue;
-      if (firstName.length < 2 || lastName.length < 2) continue;
+      // Scan backwards from the TA token and collect name tokens while skipping
+      // common noise tokens that appear between name and TNA in PDF exports.
+      const NOISE = /^(✓|\(lp\)|✓\s*\(lp\)|lp|\d+\s*von\s*\d+|unbegrenzt)$/i;
+      const nameTokens: string[] = [];
+      for (let back = i - 1; back >= 0 && nameTokens.length < 4; back -= 1) {
+        const tok = normalizeWhitespace(tokens[back] ?? "");
+        if (!tok || NOISE.test(tok)) continue;
+        if (normalizeTa(tok)) break; // previous player's TNA
+        if (/^\d{1,2}[.:]\d{2}[.:]\d{2,4}$/.test(tok)) break; // date-like token
+        if (/^[A-Z]$/.test(tok)) break; // one-letter columns (e.g. Nat.)
+        if (/^(nachname|vorname|tna|stamm|aushilfen|nat\.|gemeldet|spielerliste|quelle|seite)$/i.test(tok)) break;
+        nameTokens.unshift(tok);
+      }
 
-      const lpStatus = tokens.slice(i + 1, i + 6).find((token: string) => /\(lp\)|\blp\b/i.test(token));
+      if (nameTokens.length < 2) continue;
+      if (nameTokens.some((t) => t.length < 2)) continue;
+
+      // DBB PDFs are printed as "LastName FirstName".
+      const firstName = nameTokens[nameTokens.length - 1];
+      const lastName = nameTokens.slice(0, nameTokens.length - 1).join(" ");
+      const fullName = normalizeWhitespace(`${firstName} ${lastName}`);
+
+      const lpStatus = tokens.slice(i + 1, i + 8).find((token: string) => /\(lp\)|\blp\b/i.test(token));
       const nearbyDate = tokens
-        .slice(i + 1, i + 8)
+        .slice(i + 1, i + 10)
         .map((token: string) => parseBirthDate(token))
         .find((value: string | undefined): value is string => Boolean(value));
 
       rows.push({
-        name: normalizeWhitespace(`${firstName} ${lastName}`),
+        name: fullName,
         taNumber,
         birthDate: nearbyDate ?? deriveBirthDateFromTa(taNumber),
         lpStatus: normalizeLpStatus(lpStatus),

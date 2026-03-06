@@ -31,6 +31,27 @@ function getCloudAuthRedirectUrl(): string {
   return url.toString();
 }
 
+/**
+ * Returns the required email domain if configured via VITE_ALLOWED_EMAIL_DOMAIN.
+ * Example value: "ubc.ms"
+ * If not set, no domain restriction is applied.
+ */
+export function getAllowedEmailDomain(): string | null {
+  const raw = String(import.meta.env.VITE_ALLOWED_EMAIL_DOMAIN ?? "").trim().toLowerCase();
+  return raw || null;
+}
+
+/**
+ * Returns true if the email matches the allowed domain (if configured).
+ * Always returns true when no domain restriction is set.
+ */
+export function isEmailDomainAllowed(email: string): boolean {
+  const domain = getAllowedEmailDomain();
+  if (!domain) return true;
+  const normalized = email.trim().toLowerCase();
+  return normalized.endsWith(`@${domain}`);
+}
+
 export function isCloudSyncConfigured(): boolean {
   return Boolean(getSupabaseUrl() && getSupabaseAnonKey());
 }
@@ -68,6 +89,10 @@ export async function sendCloudMagicLink(email: string): Promise<void> {
 
   const target = email.trim();
   if (!target) throw new Error("Missing email address.");
+  if (!isEmailDomainAllowed(target)) {
+    const domain = getAllowedEmailDomain();
+    throw new Error(`email_domain_not_allowed:${domain}`);
+  }
 
   const redirectTo = getCloudAuthRedirectUrl();
   try {
