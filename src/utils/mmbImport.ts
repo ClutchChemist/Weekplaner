@@ -309,31 +309,31 @@ async function parseMmbPdf(file: File): Promise<MmbImportResult> {
       const taNumber = normalizeTa(tokens[i]);
       if (!taNumber) continue;
 
-      // Scan backwards from the TA token and collect name tokens while skipping
-      // common noise tokens that appear between name and TNA in PDF exports.
+      // Scan backwards from TA and collect only tokens that look like person names.
+      // pdf.js may emit columns out of row order, so date/time from "aktiv bis"
+      // can appear before the next surname.
       const NOISE = /^(✓|\(lp\)|✓\s*\(lp\)|lp|\d+\s*von\s*\d+|unbegrenzt)$/i;
+      const HEADER_STOP =
+        /^(nachname|vorname|tna|stamm|spieler|m(?:o|ö)gliche|aushilfen|nat\.|gemeldet|spielerliste|quelle|seite|gesperrt|bearb\.|bearb\.\/anzeigen|anzeigen|aktiv|bis|ligen|online|benutzername|version|www|nur|login|logout|support|zur(?:u|ü)ck|drucken|hauptsponsor|ausr(?:u|ü)ster|home|spielbetrieb|kontakte|hallen|verwaltung|schiedsrichter|zugangsdaten|f(?:u|ü)r|mannschaft|treffer|insgesamt)$/i;
+
       const nameTokens: string[] = [];
-      for (let back = i - 1; back >= 0 && nameTokens.length < 4; back -= 1) {
+      for (let back = i - 1; back >= 0 && nameTokens.length < 5; back -= 1) {
         const tok = normalizeWhitespace(tokens[back] ?? "");
-        if (!tok || NOISE.test(tok)) continue;
+        if (!tok) continue;
+        if (NOISE.test(tok)) continue;
         if (normalizeTa(tok)) break; // previous player's TNA
-        if (/^\d{1,2}[.:]\d{2}([.:]\d{2,4})?$/.test(tok)) break; // date/time token
-        if (/^[A-Z]$/.test(tok)) break; // one-letter columns (e.g. Nat.)
-        if (
-          /^(nachname|vorname|tna|stamm|aushilfen|nat\.|gemeldet|spielerliste|quelle|seite|gesperrt|bearb\.|bearb\.\/anzeigen|anzeigen|aktiv|bis|ligen|online|benutzername|version|www|nur|login|logout|support|zur[uü]ck|drucken)$/i.test(
-            tok
-          )
-        )
-          break;
+        if (/\d/.test(tok)) break; // date/time/number token
+        if (tok.length < 2) break; // one-char column token
+        if (/[./\\:;,()[\]{}@#$%^&*+=<>?!]/.test(tok)) break; // non-name punctuation
+        if (HEADER_STOP.test(tok)) break;
         nameTokens.unshift(tok);
       }
 
       if (nameTokens.length < 2) continue;
-      if (nameTokens.some((t) => t.length < 2)) continue;
 
-      // DBB PDFs are printed as "LastName FirstName".
-      const firstName = nameTokens[nameTokens.length - 1];
-      const lastName = nameTokens.slice(0, nameTokens.length - 1).join(" ");
+      // DBB print order is "LastName FirstName...".
+      const lastName = nameTokens[0];
+      const firstName = nameTokens.slice(1).join(" ");
       const fullName = normalizeWhitespace(`${firstName} ${lastName}`);
 
       const lpStatus = tokens.slice(i + 1, i + 8).find((token: string) => /\(lp\)|\blp\b/i.test(token));
@@ -405,3 +405,4 @@ export async function parseMmbImportFile(file: File): Promise<MmbImportResult> {
   }
   throw new Error("unsupported_file_type");
 }
+
