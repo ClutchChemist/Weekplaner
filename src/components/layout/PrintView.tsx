@@ -298,6 +298,7 @@ export function PrintView({
         }
 
         function taForPlayer(p: Player): string {
+          if (p.id === "TBD" || String(p.name ?? "").trim().toUpperCase() === "TBD") return "";
           const list = p.lizenzen ?? [];
           const dbb = list.find((x) => String(x.typ).toUpperCase() === "DBB")?.tna;
           const nbbl = list.find((x) => String(x.typ).toUpperCase() === "NBBL")?.tna;
@@ -343,6 +344,7 @@ export function PrintView({
                             <th>{t("lastName")}</th>
                             <th>{t("firstName")}</th>
                             <th style={{ width: 120 }}>TA</th>
+                            <th style={{ width: 44 }}>LP</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -353,6 +355,7 @@ export function PrintView({
                               <td style={{ textAlign: "left" }}>{(p.lastName ?? "").trim()}</td>
                               <td style={{ textAlign: "left" }}>{(p.firstName ?? "").trim()}</td>
                               <td>{taForPlayer(p)}</td>
+                              <td>{p.id === "TBD" ? "" : (p.isLocalPlayer ? "LP" : "-")}</td>
                             </tr>
                           ))}
                         </tbody>

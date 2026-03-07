@@ -295,11 +295,27 @@ export default function App() {
     reviveWeekPlan
   );
 
+  const makeTbdPlaceholder = useCallback((source?: Player): Player => ({
+    ...(source ?? {}),
+    id: "TBD",
+    name: "TBD",
+    firstName: "TBD",
+    lastName: "",
+    group: "TBD",
+    positions: source?.positions ?? [],
+    primaryYouthTeam: "",
+    primarySeniorTeam: "",
+    defaultTeams: [],
+    lizenzen: [],
+    isLocalPlayer: false,
+    taNumber: undefined,
+  }), []);
+
   function handleResetData(categories: ResetCategory[]) {
     if (categories.includes("players")) {
       setPlayers((prev) => {
         const tbd = prev.find((player) => player.id === "TBD");
-        return tbd ? [tbd] : [];
+        return [makeTbdPlaceholder(tbd)];
       });
       setSelectedPlayerId(null);
     }
@@ -316,7 +332,11 @@ export default function App() {
 
   const applyProfileData = useCallback((payload: ProfilePayload) => {
     setRosterMeta(payload.rosterMeta);
-    setPlayers(payload.players);
+    setPlayers((prev) => {
+      const tbd = payload.players.find((player) => player.id === "TBD") ?? prev.find((player) => player.id === "TBD");
+      const withoutTbd = payload.players.filter((player) => player.id !== "TBD");
+      return [...withoutTbd, makeTbdPlaceholder(tbd)];
+    });
     setCoaches(payload.coaches);
     if (payload.theme) {
       setTheme(payload.theme);
@@ -329,7 +349,7 @@ export default function App() {
     if (payload.plan) {
       setPlan(payload.plan);
     }
-  }, [setCoaches, setPlan, setTheme]);
+  }, [setCoaches, setPlan, setTheme, makeTbdPlaceholder]);
 
   const buildNewProfilePayload = useCallback<() => ProfilePayload>(() => {
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -403,23 +423,11 @@ export default function App() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlayers((prev) => {
-      if (prev.some((p) => p.id === "TBD")) return prev;
-      const tbd: Player = {
-        id: "TBD",
-        name: "TBD",
-        firstName: "TBD",
-        lastName: "",
-        group: "TBD",
-        positions: [],
-        primaryYouthTeam: "",
-        primarySeniorTeam: "",
-        defaultTeams: [],
-        lizenzen: [],
-        isLocalPlayer: false,
-      };
-      return [...prev, tbd];
+      const tbd = prev.find((p) => p.id === "TBD");
+      const withoutTbd = prev.filter((p) => p.id !== "TBD");
+      return [...withoutTbd, makeTbdPlaceholder(tbd)];
     });
-  }, []);
+  }, [makeTbdPlaceholder]);
 
   /* ----------------------
      Plan: use last plan if exists, else master

@@ -18,10 +18,10 @@ export function getRequiredTaTypeForTeams(teams: string[]): "NBBL" | "JBBL" | "D
 }
 
 export function getLicenseTnaByType(player: Player, typ: string): string {
+  if (player.id === "TBD" || String(player.name ?? "").trim().toUpperCase() === "TBD") return "";
   const wanted = String(typ ?? "").trim().toUpperCase();
   if (!wanted) return "";
   return (
     (player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
   ).trim();
 }
-

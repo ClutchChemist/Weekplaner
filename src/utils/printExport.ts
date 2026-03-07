@@ -40,6 +40,7 @@ function isGameSession(s: Session): boolean {
 }
 
 function tnaByType(player: Player, typ: string): string {
+  if (player.id === "TBD" || String(player.name ?? "").trim().toUpperCase() === "TBD") return "";
   const wanted = String(typ ?? "").trim().toUpperCase();
   return (
     (player.lizenzen ?? []).find((x) => String(x.typ ?? "").trim().toUpperCase() === wanted)?.tna ?? ""
@@ -632,6 +633,7 @@ function renderGameSheetHtml(opts: {
 
       const requiredTa = getRequiredTaTypeForTeams(game.teams ?? []);
       const ta = p ? (requiredTa ? tnaByType(p, requiredTa) : (tnaByType(p, "DBB") || tnaByType(p, "NBBL") || tnaByType(p, "JBBL"))) : "";
+      const lp = p ? (p.id === "TBD" ? "" : (p.isLocalPlayer ? "LP" : "-")) : "";
       const jerseyVal = p?.jerseyByTeam?.[firstTeam] ?? "";
 
       return `
@@ -641,6 +643,7 @@ function renderGameSheetHtml(opts: {
           <td style="${tdCss()}">${escapeHtml(nachname)}</td>
           <td style="${tdCss()}">${escapeHtml(vorname)}</td>
           <td style="${tdCss()} width:120px;">${escapeHtml(ta)}</td>
+          <td style="${tdCss()} text-align:center; width:42px;">${escapeHtml(lp)}</td>
           <td style="${tdCss()} text-align:center; width:54px;"></td>
           <td style="${tdCss()} width:170px;"></td>
         </tr>`;
@@ -679,6 +682,7 @@ function renderGameSheetHtml(opts: {
             <th style="${thCss()}">Nachname</th>
             <th style="${thCss()}">Vorname</th>
             <th style="${thCss()} width:120px;">TA-Nr.</th>
+            <th style="${thCss()} width:42px; text-align:center;">LP</th>
             <th style="${thCss()} width:54px; text-align:center;">Aktiv</th>
             <th style="${thCss()} width:170px;">Notizen</th>
           </tr>
