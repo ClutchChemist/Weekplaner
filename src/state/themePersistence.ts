@@ -31,18 +31,26 @@ export function safeParseTheme(raw: string | null, fallbackTheme: ThemeSettings)
       if (typeof ui[k] !== "string" || !ui[k]) return null;
     }
 
-    const gids = activeGroupIds();
     if (!groups || typeof groups !== "object") return null;
-    for (const gid of gids) {
-      if (!groups[gid] || typeof groups[gid].bg !== "string" || !groups[gid].bg) return null;
-    }
 
     const parsedGroups: ThemeSettings["groups"] = {};
-    for (const gid of gids) {
+    for (const [gid, rawGroup] of Object.entries(groups as Record<string, unknown>)) {
+      const groupObj = rawGroup as { bg?: unknown; fg?: unknown };
+      if (!groupObj || typeof groupObj.bg !== "string" || !groupObj.bg) continue;
       parsedGroups[gid] = {
-        bg: groups[gid].bg,
-        fg: typeof groups[gid].fg === "string" ? groups[gid].fg : undefined,
+        bg: groupObj.bg,
+        fg: typeof groupObj.fg === "string" ? groupObj.fg : undefined,
       };
+    }
+
+    for (const gid of activeGroupIds()) {
+      if (!parsedGroups[gid]) {
+        const fallbackGroup = fallbackTheme.groups[gid];
+        parsedGroups[gid] = {
+          bg: fallbackGroup?.bg ?? "#6b7280",
+          fg: fallbackGroup?.fg,
+        };
+      }
     }
 
     return {
@@ -110,7 +118,9 @@ export function migrateLegacyBlueTheme(theme: ThemeSettings, fallbackTheme: Them
     return { ...theme, ui: migratedUi };
   }
 
-  const gids = activeGroupIds();
+  const gids = Array.from(
+    new Set([...activeGroupIds(), ...Object.keys(theme.groups ?? {})])
+  );
   const migratedGroups: ThemeSettings["groups"] = {};
   for (const gid of gids) {
     const current = theme.groups[gid] ?? fallbackTheme.groups[gid];
@@ -127,4 +137,3 @@ export function migrateLegacyBlueTheme(theme: ThemeSettings, fallbackTheme: Them
     locale: theme.locale ?? fallbackTheme.locale,
   };
 }
-

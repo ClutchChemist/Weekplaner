@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react";
 import { THEME_PRESETS } from "@/themes/presets";
 import { useThemePresets } from "@/hooks";
-import type { GroupId, ThemeSettings } from "@/types";
+import type { ThemeSettings } from "@/types";
 import { randomId } from "@/utils/id";
-import { pickTextColor } from "@/utils/color";
 import { Button, Input, Modal } from "@/components/ui";
-import { YEAR_GROUPS } from "@/config";
 
 type Props = {
   open: boolean;
@@ -17,8 +15,6 @@ type Props = {
   t: (key: string) => string;
   onConfirmOverwrite?: (title: string, message: string) => Promise<boolean>;
 };
-
-const GROUP_IDS: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
 
 const ColorButton = ({ value, onChange, title }: { value: string; onChange: (hex: string) => void; title?: string }) => {
   return (
@@ -210,42 +206,6 @@ export function ThemeSettingsModal({
                 <ColorButton value={theme.ui[key]} onChange={(v) => onChangeTheme({ ...theme, ui: { ...theme.ui, [key]: v } })} />
               </div>
             ))}
-          </div>
-        </div>
-
-        <div style={{ border: `1px solid var(--ui-border)`, borderRadius: 14, background: "var(--ui-card)", padding: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>{t("themeGroupsTitle")}</div>
-          <div style={{ display: "grid", gap: 10 }}>
-            {GROUP_IDS.map((gid) => {
-              const currentGroup = theme.groups[gid] ?? defaultTheme.groups[gid] ?? { bg: "#6b7280", fg: undefined };
-              return (
-                <div key={gid} style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px 70px", gap: 8, alignItems: "center" }}>
-                  <div style={{ color: "var(--ui-muted)", fontWeight: 800, fontSize: 12 }}>{gid}</div>
-                  <ColorButton
-                    value={currentGroup.bg}
-                    onChange={(v) =>
-                      onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { ...currentGroup, bg: v } } })
-                    }
-                  />
-                  <ColorButton
-                    value={currentGroup.fg ?? pickTextColor(currentGroup.bg)}
-                    onChange={(v) =>
-                      onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { ...currentGroup, fg: v } } })
-                    }
-                    title="Text color"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      onChangeTheme({ ...theme, groups: { ...theme.groups, [gid]: { ...currentGroup, fg: undefined } } })
-                    }
-                    style={{ padding: "6px 8px", fontSize: 12 }}
-                  >
-                    {t("auto")}
-                  </Button>
-                </div>
-              );
-            })}
           </div>
         </div>
 

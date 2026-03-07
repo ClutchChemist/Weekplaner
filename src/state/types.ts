@@ -136,7 +136,7 @@ export type ThemeState = ThemeSettings;
 
 export type RightModule = "calendar" | "preview" | "maps" | "none";
 export type RightLayout = "single" | "split";
-export type LeftTab = "players" | "coaches" | "locations";
+export type LeftTab = "players" | "coaches" | "locations" | "groups";
 export type ExtraPanel = null | "U18_ONLY" | "HOL_ONLY";
 export type ConfirmDialogState = { open: boolean; title: string; message: string };
 

@@ -599,11 +599,15 @@ function renderGameSheetHtml(opts: {
   coaches: Coach[];
   clubName: string;
   locale: Lang;
+  locations: ThemeLocations;
   logoUrl?: string;
 }): string {
-  const { session: game, players, coaches, clubName, locale, logoUrl } = opts;
+  const { session: game, players, coaches, clubName, locale, locations, logoUrl } = opts;
   const teamStr = game.teams.join(" · ");
   const opponent = (game.info || "").replace("vs", "vs.").replace("@", "@");
+  const venue = String(game.location ?? "").trim();
+  const venueAddress = resolveLegendAddress(venue, locations).trim();
+  const venueLine = `${venue} | ${venueAddress || "-"}`;
 
   const playerById = new Map(players.map((p) => [p.id, p] as const));
   const assignedPlayers = (game.participants ?? [])
@@ -669,7 +673,7 @@ function renderGameSheetHtml(opts: {
       
       <div style="margin-bottom: 16px;">
         <strong>Spiel:</strong> ${escapeHtml(game.date)} · ${escapeHtml(game.day)} · ${escapeHtml(game.time)}<br/>
-        <strong>Ort:</strong> ${escapeHtml(game.location)}<br/>
+        <strong>Ort:</strong> ${escapeHtml(venueLine)}<br/>
         <strong>Gegner:</strong> ${escapeHtml(opponent)}
       </div>
 
@@ -748,7 +752,7 @@ export function buildPrintPages(opts: {
 
   const games = sessions.filter((s) => isGameSession(s));
   for (const g of games) {
-    const html = renderGameSheetHtml({ session: g, players, coaches, clubName, locale, logoUrl });
+    const html = renderGameSheetHtml({ session: g, players, coaches, clubName, locale, locations, logoUrl });
     const title = `Spielbogen: ${g.teams.join(" · ")} – ${g.info || ""}`;
     pages.push({ type: "game", html, title });
   }
@@ -780,7 +784,7 @@ export function buildPreviewPages(opts: {
 
   const games = sessions.filter((s) => isGameSession(s));
   for (const g of games) {
-    const html = renderGameSheetHtml({ session: g, players, coaches, clubName, locale, logoUrl });
+    const html = renderGameSheetHtml({ session: g, players, coaches, clubName, locale, locations, logoUrl });
     const title = `${locale === "de" ? "Spielbogen" : "Game sheet"}: ${g.teams.join(" · ")} – ${g.info || ""}`;
     pages.push({ type: "game", html, title });
   }

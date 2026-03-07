@@ -2,8 +2,9 @@ import { useRef, type ReactNode } from "react";
 import type { Coach, GroupId, Player, ThemeSettings } from "@/types";
 import { Button, Input, segBtn } from "@/components/ui";
 import { LeftLocationsView } from "@/components/locations";
+import { LeftGroupsView } from "./LeftGroupsView";
 
-type LeftTab = "players" | "coaches" | "locations";
+type LeftTab = "players" | "coaches" | "locations" | "groups";
 type ExtraGroup = "U18_ONLY" | "HOL_ONLY" | null;
 
 type Props = {
@@ -26,6 +27,12 @@ type Props = {
   sidebarGroups: Array<{ id: GroupId; label: string }>;
   playersByGroup: Map<GroupId, Player[]>;
   renderDraggablePlayer: (player: Player) => ReactNode;
+  groupEntries: Array<{ id: GroupId; label: string; isSystem: boolean; count: number }>;
+  onAddGroup: (name: string) => boolean;
+  onDeleteGroup: (groupId: GroupId) => void;
+  onAutoAssignGroups: (opts: { years: boolean; senior: boolean }) => void;
+  onSetGroupBg: (groupId: GroupId, color: string) => void;
+  onSetGroupFg: (groupId: GroupId, color: string | undefined) => void;
 
   coaches: Coach[];
   onAddCoach: () => void;
@@ -59,6 +66,12 @@ export function LeftSidebar({
   sidebarGroups,
   playersByGroup,
   renderDraggablePlayer,
+  groupEntries,
+  onAddGroup,
+  onDeleteGroup,
+  onAutoAssignGroups,
+  onSetGroupBg,
+  onSetGroupFg,
   coaches,
   onAddCoach,
   onUpdateCoach,
@@ -105,6 +118,13 @@ export function LeftSidebar({
             style={segBtn(leftTab === "locations")}
           >
             {t("locations")}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectTab("groups")}
+            style={segBtn(leftTab === "groups")}
+          >
+            {t("groupsTab")}
           </button>
         </div>
 
@@ -366,6 +386,20 @@ export function LeftSidebar({
           openLocationName={openLocationName}
           setOpenLocationName={setOpenLocationName}
           t={t}
+        />
+      )}
+
+      {leftTab === "groups" && (
+        <LeftGroupsView
+          t={t}
+          editMode={leftEditMode}
+          theme={theme}
+          groups={groupEntries}
+          onAddGroup={onAddGroup}
+          onDeleteGroup={onDeleteGroup}
+          onAutoAssign={onAutoAssignGroups}
+          onSetGroupBg={onSetGroupBg}
+          onSetGroupFg={onSetGroupFg}
         />
       )}
     </div>

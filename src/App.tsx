@@ -74,6 +74,7 @@ import {
 } from "./state/planDerived";
 import { normalizeMasterWeek, normalizeRoster } from "./state/normalizers";
 import {
+  birthYearOf,
   canonicalGroupId,
   getPlayerGroup,
   groupLabel,
@@ -110,7 +111,7 @@ import {
   from "./utils/session";
 import { buildPreviewPages, buildPrintPages } from "./utils/printExport";
 import { deleteCloudSnapshot } from "./utils/cloudSync";
-import { BASE_TEAM_OPTIONS, getLicenseTnaByType, getRequiredTaTypeForTeams, normalizeTeamCode } from "./utils/team";
+import { getLicenseTnaByType, getRequiredTaTypeForTeams, normalizeTeamCode } from "./utils/team";
 import { selectScheduleSessions } from "@/features/week-planning/selectors/sessionSelectors";
 import { matchesPlayerSearch } from "./utils/player";
 import rosterRaw from "./data/roster.json";
@@ -168,26 +169,30 @@ export default function App() {
   const activeYearGroups = YEAR_GROUPS.length > 0 ? YEAR_GROUPS : fallbackYearGroupsByFormula();
 
   const groupBg = useMemo(() => {
-    const yearFallbackKey = activeYearGroups[0] ?? "TBD";
-    const fallback = theme.groups[yearFallbackKey]?.bg ?? DEFAULT_THEME.groups[yearFallbackKey]?.bg ?? "#6b7280";
-    const next: Record<GroupId, string> = {
-      Herren: theme.groups["Herren"]?.bg ?? DEFAULT_THEME.groups["Herren"].bg,
-      TBD: theme.groups["TBD"]?.bg ?? DEFAULT_THEME.groups["TBD"].bg,
-    };
-    for (const year of activeYearGroups) {
-      next[year] = theme.groups[year]?.bg ?? fallback;
+    const next: Record<GroupId, string> = {};
+    for (const [gid, cfg] of Object.entries(theme.groups ?? {})) {
+      if (cfg?.bg) next[gid] = cfg.bg;
     }
+    const yearFallbackKey = activeYearGroups[0] ?? "TBD";
+    const fallback = next[yearFallbackKey] ?? DEFAULT_THEME.groups[yearFallbackKey]?.bg ?? "#6b7280";
+    for (const year of activeYearGroups) {
+      next[year] = next[year] ?? DEFAULT_THEME.groups[year]?.bg ?? fallback;
+    }
+    next.Herren = next.Herren ?? DEFAULT_THEME.groups.Herren.bg;
+    next.TBD = next.TBD ?? DEFAULT_THEME.groups.TBD.bg;
     return next;
   }, [activeYearGroups, theme.groups]);
 
   const groupText = useMemo(() => {
-    const next: Record<GroupId, string | undefined> = {
-      Herren: theme.groups["Herren"]?.fg,
-      TBD: theme.groups["TBD"]?.fg,
-    };
-    for (const year of activeYearGroups) {
-      next[year] = theme.groups[year]?.fg;
+    const next: Record<GroupId, string | undefined> = {};
+    for (const [gid, cfg] of Object.entries(theme.groups ?? {})) {
+      if (cfg?.fg) next[gid] = cfg.fg;
     }
+    for (const year of activeYearGroups) {
+      if (!(year in next)) next[year] = theme.groups[year]?.fg;
+    }
+    if (!("Herren" in next)) next.Herren = theme.groups.Herren?.fg;
+    if (!("TBD" in next)) next.TBD = theme.groups.TBD?.fg;
     return next;
   }, [activeYearGroups, theme.groups]);
 
@@ -522,28 +527,43 @@ export default function App() {
   /* ----------------------
      Sidebar grouping
      ---------------------- */
-  const sidebarGroups = useMemo(() => {
-    const dynamic = new Set<GroupId>();
+  const systemGroupIds = useMemo(() => new Set<GroupId>([...activeYearGroups, "Herren", "TBD"]), [activeYearGroups]);
+
+  const customGroupIds = useMemo(() => {
+    const ids = new Set<GroupId>();
+    const addIfCustom = (raw: string) => {
+      const groupId = canonicalGroupId(raw);
+      if (!groupId) return;
+      if (systemGroupIds.has(groupId)) return;
+      ids.add(groupId);
+    };
+
+    for (const gid of Object.keys(theme.groups ?? {})) {
+      addIfCustom(gid);
+    }
     for (const p of players) {
-      const explicit = canonicalGroupId(p.group);
-      if (explicit && !activeYearGroups.includes(explicit) && explicit !== "Herren" && explicit !== "TBD") {
-        dynamic.add(explicit);
-      }
-      for (const code of p.defaultTeams ?? []) {
-        const normalized = canonicalGroupId(normalizeTeamCode(String(code ?? "")));
-        if (!normalized) continue;
-        if (activeYearGroups.includes(normalized) || normalized === "Herren" || normalized === "TBD") continue;
-        dynamic.add(normalized);
+      addIfCustom(String(p.group ?? ""));
+      for (const teamCode of p.defaultTeams ?? []) {
+        addIfCustom(normalizeTeamCode(String(teamCode ?? "")));
       }
     }
-    const extra = Array.from(dynamic).sort((a, b) => a.localeCompare(b, "de"));
+    for (const session of plan.sessions ?? []) {
+      for (const teamCode of session.teams ?? []) {
+        addIfCustom(normalizeTeamCode(String(teamCode ?? "")));
+      }
+    }
+
+    return Array.from(ids).sort((a, b) => a.localeCompare(b, "de"));
+  }, [plan.sessions, players, systemGroupIds, theme.groups]);
+
+  const sidebarGroups = useMemo(() => {
     return [
       ...activeYearGroups.map((id) => ({ id: id as GroupId, label: id })),
       { id: "Herren" as GroupId, label: groupLabel("Herren") },
-      ...extra.map((id) => ({ id, label: groupLabel(id) })),
+      ...customGroupIds.map((id) => ({ id, label: groupLabel(id) })),
       { id: "TBD" as GroupId, label: "TBD" },
     ];
-  }, [activeYearGroups, players]);
+  }, [activeYearGroups, customGroupIds]);
 
   const playersByGroup = useMemo(() => {
     const map = new Map<GroupId, Player[]>();
@@ -561,6 +581,96 @@ export default function App() {
     }
     return map;
   }, [players, sidebarGroups]);
+
+  const groupEntries = useMemo(
+    () =>
+      sidebarGroups.map((g) => ({
+        id: g.id,
+        label: g.label,
+        isSystem: systemGroupIds.has(g.id),
+        count: (playersByGroup.get(g.id) ?? []).length,
+      })),
+    [playersByGroup, sidebarGroups, systemGroupIds]
+  );
+
+  function setGroupColor(groupId: GroupId, patch: { bg?: string; fg?: string | undefined }) {
+    setTheme((prev) => {
+      const current = prev.groups[groupId] ?? DEFAULT_THEME.groups[groupId] ?? { bg: "#6b7280", fg: undefined };
+      return {
+        ...prev,
+        groups: {
+          ...prev.groups,
+          [groupId]: {
+            ...current,
+            ...patch,
+          },
+        },
+      };
+    });
+  }
+
+  function addCustomGroup(rawName: string): boolean {
+    const groupId = canonicalGroupId(normalizeTeamCode(rawName));
+    if (!groupId) return false;
+    if (systemGroupIds.has(groupId)) return false;
+    setTheme((prev) => ({
+      ...prev,
+      groups: {
+        ...prev.groups,
+        [groupId]: prev.groups[groupId] ?? { bg: "#6b7280", fg: undefined },
+      },
+    }));
+    return true;
+  }
+
+  function deleteCustomGroup(groupId: GroupId) {
+    if (systemGroupIds.has(groupId)) return;
+
+    setTheme((prev) => {
+      const nextGroups = { ...prev.groups };
+      delete nextGroups[groupId];
+      return { ...prev, groups: nextGroups };
+    });
+
+    setPlayers((prev) =>
+      prev.map((p) => {
+        const cleanedTeams = (p.defaultTeams ?? []).filter(
+          (teamCode) => canonicalGroupId(normalizeTeamCode(String(teamCode ?? ""))) !== groupId
+        );
+        const cleanedGroup = canonicalGroupId(p.group) === groupId ? undefined : p.group;
+        return { ...p, group: cleanedGroup, defaultTeams: cleanedTeams };
+      })
+    );
+
+    setPlan((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) => ({
+        ...s,
+        teams: (s.teams ?? []).filter(
+          (teamCode) => canonicalGroupId(normalizeTeamCode(String(teamCode ?? ""))) !== groupId
+        ),
+      })),
+    }));
+    setOpenGroup((prev) => (prev === groupId ? null : prev));
+  }
+
+  function autoAssignPlayerGroups(opts: { years: boolean; senior: boolean }) {
+    setPlayers((prev) =>
+      prev.map((p) => {
+        if (p.id === "TBD") return p;
+        const year = birthYearOf(p);
+        const teams = (p.defaultTeams ?? []).map((x) => normalizeTeamCode(String(x ?? "")));
+        if (opts.years && typeof year === "number" && activeYearGroups.includes(String(year))) {
+          return { ...p, group: String(year), yearGroupDeselected: false };
+        }
+        if (opts.senior && (teams.includes("1RLH") || teams.includes("HOL"))) {
+          return { ...p, group: "Herren" };
+        }
+        return p;
+      })
+    );
+  }
+
   const u18OnlyPlayers = useMemo(() => {
     return players.filter(isU18Only).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
   }, [players]);
@@ -774,11 +884,11 @@ export default function App() {
   const allTeamOptions = useMemo(() => {
     const fromPlayers = players.flatMap((p) => p.defaultTeams ?? []);
     const fromPlan = plan.sessions.flatMap((s) => s.teams ?? []);
-    const options = [...BASE_TEAM_OPTIONS, ...fromPlayers, ...fromPlan, ...(formTeams ?? [])]
+    const options = [...customGroupIds, ...fromPlayers, ...fromPlan, ...(formTeams ?? [])]
       .map((team) => normalizeTeamCode(team))
       .filter(Boolean);
     return Array.from(new Set(options)).sort((a, b) => a.localeCompare(b, "de"));
-  }, [formTeams, plan.sessions, players]);
+  }, [customGroupIds, formTeams, plan.sessions, players]);
 
   function addTeamCodeFromDraft(applyTo: "event" | "player") {
     const teamCode = normalizeTeamCode(teamCodeDraft);
@@ -1181,6 +1291,12 @@ export default function App() {
               onToggleGroup={(gid) => setOpenGroup((prev) => (prev === gid ? null : gid))}
               sidebarGroups={sidebarGroups}
               playersByGroup={playersByGroup}
+              groupEntries={groupEntries}
+              onAddGroup={addCustomGroup}
+              onDeleteGroup={deleteCustomGroup}
+              onAutoAssignGroups={autoAssignPlayerGroups}
+              onSetGroupBg={(gid, color) => setGroupColor(gid, { bg: color })}
+              onSetGroupFg={(gid, color) => setGroupColor(gid, { fg: color })}
               renderDraggablePlayer={(p) => (
                 <DraggablePlayerRow
                   key={p.id}
