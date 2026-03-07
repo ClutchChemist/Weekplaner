@@ -78,8 +78,6 @@ import {
   canonicalGroupId,
   getPlayerGroup,
   groupLabel,
-  isHolOnly,
-  isU18Only,
   makeParticipantSorter,
   fallbackYearGroupsByFormula,
 } from "./state/playerGrouping";
@@ -212,7 +210,6 @@ export default function App() {
     setRightBottom,
     setRightSplitPct,
     setOpenGroup,
-    setOpenExtra,
     setLeftTab,
     setLeftEditMode,
     setOpenLocationName,
@@ -234,7 +231,6 @@ export default function App() {
     rightBottom,
     rightSplitPct,
     openGroup,
-    openExtra,
     leftTab,
     leftEditMode,
     openLocationName,
@@ -339,7 +335,11 @@ export default function App() {
     setRosterMeta(payload.rosterMeta);
     setPlayers((prev) => {
       const tbd = payload.players.find((player) => player.id === "TBD") ?? prev.find((player) => player.id === "TBD");
-      const withoutTbd = payload.players.filter((player) => player.id !== "TBD");
+      const withoutTbd = payload.players
+        .filter((player) => player.id !== "TBD")
+        .map((player) =>
+          canonicalGroupId(player.group) === "TBD" ? { ...player, group: undefined } : player
+        );
       return [...withoutTbd, makeTbdPlaceholder(tbd)];
     });
     setCoaches(payload.coaches);
@@ -429,7 +429,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlayers((prev) => {
       const tbd = prev.find((p) => p.id === "TBD");
-      const withoutTbd = prev.filter((p) => p.id !== "TBD");
+      const withoutTbd = prev
+        .filter((p) => p.id !== "TBD")
+        .map((p) => (canonicalGroupId(p.group) === "TBD" ? { ...p, group: undefined } : p));
       return [...withoutTbd, makeTbdPlaceholder(tbd)];
     });
   }, [makeTbdPlaceholder]);
@@ -571,6 +573,7 @@ export default function App() {
 
     for (const p of players) {
       const groupId = getPlayerGroup(p);
+      if (p.id !== "TBD" && groupId === "TBD") continue;
       if (!map.has(groupId)) map.set(groupId, []);
       map.get(groupId)?.push(p);
     }
@@ -670,14 +673,6 @@ export default function App() {
       })
     );
   }
-
-  const u18OnlyPlayers = useMemo(() => {
-    return players.filter(isU18Only).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }, [players]);
-
-  const holOnlyPlayers = useMemo(() => {
-    return players.filter(isHolOnly).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
-  }, [players]);
   /* ----------------------
     LEFT TABS: Players / Coaches / Locations
     ---------------------- */
@@ -1282,11 +1277,6 @@ export default function App() {
               onToggleEditMode={() => setLeftEditMode((v) => !v)}
               onOpenRoster={() => { setRosterSearch(""); setRosterOpen(true); }}
               onOpenResetData={() => setResetDataOpen(true)}
-              openExtra={openExtra}
-              onToggleU18Only={() => setOpenExtra((prev) => (prev === "U18_ONLY" ? null : "U18_ONLY"))}
-              onToggleHolOnly={() => setOpenExtra((prev) => (prev === "HOL_ONLY" ? null : "HOL_ONLY"))}
-              u18OnlyPlayers={u18OnlyPlayers}
-              holOnlyPlayers={holOnlyPlayers}
               openGroup={openGroup}
               onToggleGroup={(gid) => setOpenGroup((prev) => (prev === gid ? null : gid))}
               sidebarGroups={sidebarGroups}

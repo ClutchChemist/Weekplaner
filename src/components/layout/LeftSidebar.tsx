@@ -5,7 +5,6 @@ import { LeftLocationsView } from "@/components/locations";
 import { LeftGroupsView } from "./LeftGroupsView";
 
 type LeftTab = "players" | "coaches" | "locations" | "groups";
-type ExtraGroup = "U18_ONLY" | "HOL_ONLY" | null;
 
 type Props = {
   t: (key: string) => string;
@@ -16,11 +15,6 @@ type Props = {
 
   onOpenRoster: () => void;
   onOpenResetData: () => void;
-  openExtra: ExtraGroup;
-  onToggleU18Only: () => void;
-  onToggleHolOnly: () => void;
-  u18OnlyPlayers: Player[];
-  holOnlyPlayers: Player[];
 
   openGroup: GroupId | null;
   onToggleGroup: (groupId: GroupId) => void;
@@ -56,11 +50,6 @@ export function LeftSidebar({
   onToggleEditMode,
   onOpenRoster,
   onOpenResetData,
-  openExtra,
-  onToggleU18Only,
-  onToggleHolOnly,
-  u18OnlyPlayers,
-  holOnlyPlayers,
   openGroup,
   onToggleGroup,
   sidebarGroups,
@@ -168,76 +157,6 @@ export function LeftSidebar({
 
           <div style={{ marginTop: 8, color: "var(--ui-muted)", fontSize: 13, fontWeight: 700 }}>
             {t("playersPanelHint")}
-          </div>
-
-          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-            <div style={{ borderRadius: 14 }}>
-              <button
-                onClick={onToggleU18Only}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  border: `1px solid var(--ui-border)`,
-                  background: "var(--ui-card)",
-                  color: "var(--ui-text)",
-                  borderRadius: 14,
-                  padding: "12px 12px",
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  fontWeight: 900,
-                }}
-              >
-                <span>{t("groupU18Only")}</span>
-                <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-                  {u18OnlyPlayers.length} {t("players")}
-                </span>
-              </button>
-
-              {openExtra === "U18_ONLY" && (
-                <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                  {u18OnlyPlayers.map((p) => (
-                    <div key={p.id}>{renderDraggablePlayer(p)}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ borderRadius: 14 }}>
-              <button
-                onClick={onToggleHolOnly}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  border: `1px solid var(--ui-border)`,
-                  background: "var(--ui-card)",
-                  color: "var(--ui-text)",
-                  borderRadius: 14,
-                  padding: "12px 12px",
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                  fontWeight: 900,
-                }}
-              >
-                <span>{t("groupHolOnly")}</span>
-                <span style={{ color: "var(--ui-muted)", fontSize: 13 }}>
-                  {holOnlyPlayers.length} {t("players")}
-                </span>
-              </button>
-
-              {openExtra === "HOL_ONLY" && (
-                <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-                  {holOnlyPlayers.map((p) => (
-                    <div key={p.id}>{renderDraggablePlayer(p)}</div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
           <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
