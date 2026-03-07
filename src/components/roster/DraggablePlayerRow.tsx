@@ -43,7 +43,7 @@ export const DraggablePlayerRow = React.memo(function DraggablePlayerRow({
   };
 
   const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group];
+  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group] ?? groupBg.TBD ?? "#6b7280";
   const text = player.yearColor ? pickTextColor(bg) : (groupText?.[group] ?? pickTextColor(bg));
   const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.70)";
 

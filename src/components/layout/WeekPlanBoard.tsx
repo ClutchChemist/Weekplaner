@@ -90,7 +90,7 @@ function ParticipantCard({
   t: (k: string) => string;
 }) {
   const group = getPlayerGroup(player);
-  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group] ?? groupBg.TBD;
+  const bg = normalizeYearColor(player.yearColor) ?? groupBg[group] ?? groupBg.TBD ?? "#6b7280";
   const text = player.yearColor ? pickTextColor(bg) : (groupText?.[group] ?? pickTextColor(bg));
   const isTbd = player.id === "TBD";
   const taDobCheck = isTbd ? { ok: true } : dbbDobMatchesBirthDate(player);
