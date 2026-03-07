@@ -28,6 +28,7 @@ export type Player = {
   lizenzen?: Lizenz[];
   defaultTeams?: string[];
   group?: GroupId;
+  yearGroupDeselected?: boolean;
   primaryYouthTeam?: YouthTeam;
   primarySeniorTeam?: SeniorTeam;
   jerseyByTeam?: Record<string, number | null>;

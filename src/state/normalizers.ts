@@ -76,6 +76,7 @@ export function normalizeRoster(input: unknown): { season: string; ageGroups: un
       primarySeniorTeam,
 
       group: (r.group ? String(r.group) : undefined) as GroupId | undefined,
+      yearGroupDeselected: typeof r.yearGroupDeselected === "boolean" ? r.yearGroupDeselected : undefined,
 
       jerseyByTeam:
         r.jerseyByTeam && typeof r.jerseyByTeam === "object"

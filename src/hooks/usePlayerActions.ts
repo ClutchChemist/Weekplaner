@@ -225,6 +225,7 @@ export function usePlayerActions({
       lizenzen: [],
       isLocalPlayer: false,
       group: defaultGroup,
+      yearGroupDeselected: false,
     };
     setPlayers((prev) => [...prev, p]);
     setSelectedPlayerId(id);
@@ -352,6 +353,7 @@ export function usePlayerActions({
           defaultTeams: [],
           lizenzen: [],
           group: "TBD",
+          yearGroupDeselected: false,
         };
         created = upsertLicense(created, lizenzTyp, row.taNumber);
         next.push(created);
@@ -427,6 +429,7 @@ export function usePlayerActions({
           birthDate: p.birthDate ?? "",
           positions: p.positions ?? [],
           group: p.group ?? "",
+          yearGroupDeselected: !!p.yearGroupDeselected,
           lpCategory: p.lpCategory ?? "",
           jerseyByTeam: p.jerseyByTeam ?? {},
           historyLast6: p.historyLast6 ?? [],

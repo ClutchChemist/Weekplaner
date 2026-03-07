@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { GroupId, Player, Position } from "@/types";
-import { birthYearOf, getPlayerGroup } from "@/state/playerGrouping";
+import { birthYearOf, canonicalGroupId, getPlayerGroup, groupLabel } from "@/state/playerGrouping";
 import { dbbDobMatchesBirthDate, primaryTna } from "@/state/playerMeta";
 import { normalizeYearColor, pickTextColor } from "@/utils/color";
 import { downloadJson } from "@/utils/json";
@@ -407,6 +407,7 @@ export function RosterEditorModal({
                 return list.map((p) => {
                   const active = p.id === selectedPlayerId;
                   const gid = getPlayerGroup(p);
+                  const gidLabel = groupLabel(gid);
                   const bg = normalizeYearColor(p.yearColor) ?? groupBg[gid] ?? groupBg.TBD;
                   const text = p.yearColor ? pickTextColor(bg) : (groupText[gid] ?? pickTextColor(bg));
                   const subText = text === "#fff" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.72)";
@@ -432,7 +433,7 @@ export function RosterEditorModal({
                       <span style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {p.name}
                       </span>
-                      <span style={{ fontWeight: 900, color: subText }}>{gid}</span>
+                      <span style={{ fontWeight: 900, color: subText }}>{gidLabel}</span>
                     </button>
                   );
                 });
@@ -487,21 +488,56 @@ export function RosterEditorModal({
                     <div style={{ fontWeight: 900, marginBottom: 6 }}>{t("group")}</div>
                     {(() => {
                       const y = birthYearOf(selectedPlayer);
-                      const yearLocked = typeof y === "number" && activeYearGroups.includes(String(y));
+                      const autoYearGroup =
+                        typeof y === "number" && activeYearGroups.includes(String(y)) ? String(y) : null;
+                      const yearGroupIncluded = Boolean(autoYearGroup) && !selectedPlayer.yearGroupDeselected;
+                      const dynamicGroupIds = Array.from(
+                        new Set(
+                          [
+                            ...activeYearGroups,
+                            "Herren",
+                            ...allTeamOptions
+                              .map((team) => canonicalGroupId(team))
+                              .filter((id): id is GroupId => Boolean(id)),
+                          ]
+                        )
+                      ).filter((id) => id !== "TBD");
+                      const selectedGroupValue =
+                        canonicalGroupId(selectedPlayer.group) ||
+                        (yearGroupIncluded ? autoYearGroup ?? "" : canonicalGroupId(getPlayerGroup(selectedPlayer)));
                       return (
-                        <Select
-                          value={selectedPlayer.group ?? getPlayerGroup(selectedPlayer)}
-                          onChange={(v) => updatePlayer(selectedPlayer.id, { group: v as GroupId })}
-                          options={
-                            yearLocked
-                              ? [{ value: String(y), label: String(y) }]
-                              : [
-                                ...activeYearGroups.map((year) => ({ value: year, label: year })),
-                                { value: "Herren", label: "Herren" },
-                              ]
-                          }
-                          disabled={yearLocked}
-                        />
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {autoYearGroup && (
+                            <Button
+                              variant={yearGroupIncluded ? "solid" : "outline"}
+                              onClick={() =>
+                                updatePlayer(selectedPlayer.id, { yearGroupDeselected: yearGroupIncluded })
+                              }
+                              style={{ padding: "8px 10px", justifyContent: "flex-start" }}
+                            >
+                              {autoYearGroup} - {yearGroupIncluded ? t("yearGroupDeselect") : t("yearGroupReselect")}
+                            </Button>
+                          )}
+                          <Select
+                            value={selectedGroupValue}
+                            onChange={(v) =>
+                              updatePlayer(selectedPlayer.id, {
+                                group: v ? (v as GroupId) : undefined,
+                              })
+                            }
+                            options={[
+                              { value: "", label: t("selectPlaceholder") },
+                              ...dynamicGroupIds.map((id) => ({ value: id, label: groupLabel(id) })),
+                              { value: "TBD", label: "TBD" },
+                            ]}
+                            disabled={yearGroupIncluded}
+                          />
+                          {yearGroupIncluded && (
+                            <div style={{ color: "var(--ui-muted)", fontSize: 12, fontWeight: 700 }}>
+                              {t("yearGroupAutoHint")}
+                            </div>
+                          )}
+                        </div>
                       );
                     })()}
                   </div>
@@ -787,5 +823,6 @@ export function RosterEditorModal({
     </Modal>
   );
 }
+
 
 

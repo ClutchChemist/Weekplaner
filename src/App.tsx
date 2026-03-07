@@ -74,9 +74,9 @@ import {
 } from "./state/planDerived";
 import { normalizeMasterWeek, normalizeRoster } from "./state/normalizers";
 import {
+  canonicalGroupId,
   getPlayerGroup,
-  GROUPS,
-  isCorePlayer,
+  groupLabel,
   isHolOnly,
   isU18Only,
   makeParticipantSorter,
@@ -514,14 +514,37 @@ export default function App() {
   /* ----------------------
      Sidebar grouping
      ---------------------- */
+  const sidebarGroups = useMemo(() => {
+    const dynamic = new Set<GroupId>();
+    for (const p of players) {
+      const explicit = canonicalGroupId(p.group);
+      if (explicit && !activeYearGroups.includes(explicit) && explicit !== "Herren" && explicit !== "TBD") {
+        dynamic.add(explicit);
+      }
+      for (const code of p.defaultTeams ?? []) {
+        const normalized = canonicalGroupId(normalizeTeamCode(String(code ?? "")));
+        if (!normalized) continue;
+        if (activeYearGroups.includes(normalized) || normalized === "Herren" || normalized === "TBD") continue;
+        dynamic.add(normalized);
+      }
+    }
+    const extra = Array.from(dynamic).sort((a, b) => a.localeCompare(b, "de"));
+    return [
+      ...activeYearGroups.map((id) => ({ id: id as GroupId, label: id })),
+      { id: "Herren" as GroupId, label: groupLabel("Herren") },
+      ...extra.map((id) => ({ id, label: groupLabel(id) })),
+      { id: "TBD" as GroupId, label: "TBD" },
+    ];
+  }, [activeYearGroups, players]);
+
   const playersByGroup = useMemo(() => {
     const map = new Map<GroupId, Player[]>();
-    for (const g of GROUPS) map.set(g.id, []);
+    for (const g of sidebarGroups) map.set(g.id, []);
 
     for (const p of players) {
-      // nur Core (oder TBD) in die Jahrgang/Herren-Gruppen
-      if (!isCorePlayer(p)) continue;
-      map.get(getPlayerGroup(p))?.push(p);
+      const groupId = getPlayerGroup(p);
+      if (!map.has(groupId)) map.set(groupId, []);
+      map.get(groupId)?.push(p);
     }
 
     for (const [gid, arr] of map.entries()) {
@@ -529,7 +552,7 @@ export default function App() {
       map.set(gid, arr);
     }
     return map;
-  }, [players]);
+  }, [players, sidebarGroups]);
   const u18OnlyPlayers = useMemo(() => {
     return players.filter(isU18Only).slice().sort((a, b) => a.name.localeCompare(b.name, "de"));
   }, [players]);
@@ -1148,6 +1171,7 @@ export default function App() {
               holOnlyPlayers={holOnlyPlayers}
               openGroup={openGroup}
               onToggleGroup={(gid) => setOpenGroup((prev) => (prev === gid ? null : gid))}
+              sidebarGroups={sidebarGroups}
               playersByGroup={playersByGroup}
               renderDraggablePlayer={(p) => (
                 <DraggablePlayerRow

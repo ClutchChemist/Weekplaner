@@ -7,13 +7,25 @@ export const GROUPS: Array<{
   order: number;
 }> = [
     ...YEAR_GROUPS.map((year, idx) => ({ id: year, label: year, order: idx })),
-    { id: "Herren", label: "Herren", order: YEAR_GROUPS.length },
+    { id: "Herren", label: "1RLH", order: YEAR_GROUPS.length },
     { id: "TBD", label: "TBD", order: YEAR_GROUPS.length + 1 },
   ];
 
 const GROUP_ORDER = new Map<GroupId, number>(GROUPS.map((g) => [g.id, g.order]));
 
 export const PRINT_GROUP_ORDER: GroupId[] = [...YEAR_GROUPS, "Herren", "TBD"];
+
+export function canonicalGroupId(value?: string): GroupId | "" {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  if (upper === "HERREN" || upper === "1RLH") return "Herren";
+  return raw;
+}
+
+export function groupLabel(groupId: GroupId): string {
+  return groupId === "Herren" ? "1RLH" : groupId;
+}
 
 export function birthYearOf(p: Player): number | null {
   if (p.birthDate && p.birthDate.length >= 4) {
@@ -32,12 +44,19 @@ export function getPlayerGroup(p: Player): GroupId {
 
   if (y !== null) {
     const yStr = String(y);
-    if (YEAR_GROUPS.includes(yStr)) return yStr;
+    if (YEAR_GROUPS.includes(yStr) && !p.yearGroupDeselected) return yStr;
   }
 
-  if (p.group) return p.group;
+  const explicitGroup = canonicalGroupId(p.group);
+  if (explicitGroup) return explicitGroup;
 
   if (teams.includes("1RLH") || teams.includes("HOL")) return "Herren";
+
+  const fallbackTeamGroup = teams.find((team) => team && team !== "TBD");
+  if (fallbackTeamGroup) {
+    const normalized = canonicalGroupId(fallbackTeamGroup);
+    if (normalized) return normalized;
+  }
 
   return "TBD";
 }

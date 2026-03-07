@@ -1,6 +1,5 @@
 import { useRef, type ReactNode } from "react";
 import type { Coach, GroupId, Player, ThemeSettings } from "@/types";
-import { GROUPS } from "@/state/playerGrouping";
 import { Button, Input, segBtn } from "@/components/ui";
 import { LeftLocationsView } from "@/components/locations";
 
@@ -24,6 +23,7 @@ type Props = {
 
   openGroup: GroupId | null;
   onToggleGroup: (groupId: GroupId) => void;
+  sidebarGroups: Array<{ id: GroupId; label: string }>;
   playersByGroup: Map<GroupId, Player[]>;
   renderDraggablePlayer: (player: Player) => ReactNode;
 
@@ -56,6 +56,7 @@ export function LeftSidebar({
   holOnlyPlayers,
   openGroup,
   onToggleGroup,
+  sidebarGroups,
   playersByGroup,
   renderDraggablePlayer,
   coaches,
@@ -220,7 +221,7 @@ export function LeftSidebar({
           </div>
 
           <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-            {GROUPS.map((g) => {
+            {sidebarGroups.map((g) => {
               const arr = playersByGroup.get(g.id) ?? [];
               const isOpen = openGroup === g.id;
               const groupRightLabel = g.id === "TBD" ? t("groupTbdLong") : `${arr.length} ${t("players")}`;
